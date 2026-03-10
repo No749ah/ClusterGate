@@ -1,0 +1,57 @@
+# Dependencies
+node_modules/
+.npm
+
+# Environment files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build outputs
+dist/
+.next/
+out/
+build/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Prisma
+backend/src/prisma/migrations/**/migration.sql  # Keep migration.sql files
+
+# Docker
+*.dockerignore
+
+# Kubernetes secrets (never commit!)
+k8s/secrets.yaml
+helm/clustergate/values-production.yaml
+
+# Test coverage
+coverage/
+
+# TypeScript
+*.tsbuildinfo
+
+# Next.js
+.vercel
+
+# Misc
+.turbo
+.claude/

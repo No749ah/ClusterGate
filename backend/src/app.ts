@@ -1,0 +1,163 @@
+import express from 'express'
+import helmet from 'helmet'
+import cors from 'cors'
+import cookieParser from 'cookie-parser'
+import compression from 'compression'
+import { config } from './config'
+import { logger } from './lib/logger'
+import { prisma } from './lib/prisma'
+import { registry } from './lib/metrics'
+import { globalLimiter } from './middleware/rateLimiter'
+import { requestLogger } from './middleware/requestLogger'
+import { auditLogger } from './middleware/auditLogger'
+import { errorHandler, notFoundHandler } from './middleware/errorHandler'
+import { proxyHandler } from './proxy/proxyHandler'
+import { startCronJobs, stopCronJobs } from './cron/jobs'
+
+// Route handlers
+import authRouter from './routes/auth.router'
+import routesRouter from './routes/routes.router'
+import usersRouter from './routes/users.router'
+import logsRouter from './routes/logs.router'
+import healthRouter from './routes/health.router'
+
+const app = express()
+
+// ============================================================================
+// Security Middleware
+// ============================================================================
+
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Managed by frontend
+    crossOriginEmbedderPolicy: false,
+  })
+)
+
+app.use(
+  cors({
+    origin: config.allowedOrigins,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Webhook-Signature', 'X-Hub-Signature-256'],
+  })
+)
+
+app.set('trust proxy', 1) // Trust first proxy (for correct IP in k8s)
+
+// ============================================================================
+// Parsing & Compression
+// ============================================================================
+
+app.use(cookieParser())
+app.use(express.json({ limit: '50mb' }))
+app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+app.use(compression())
+
+// ============================================================================
+// Logging & Rate Limiting
+// ============================================================================
+
+app.use(requestLogger)
+app.use(globalLimiter)
+
+// ============================================================================
+// Metrics endpoint
+// ============================================================================
+
+app.get('/metrics', async (req, res) => {
+  // Optional: Protect metrics with a secret
+  if (config.METRICS_SECRET) {
+    const providedSecret = req.get('X-Metrics-Secret') || req.query.secret
+    if (providedSecret !== config.METRICS_SECRET) {
+      return res.status(401).json({ error: 'Unauthorized' })
+    }
+  }
+  res.set('Content-Type', registry.contentType)
+  res.send(await registry.metrics())
+})
+
+// ============================================================================
+// API Routes
+// ============================================================================
+
+app.use('/api/health', healthRouter)
+app.use('/api/auth', authRouter)
+app.use('/api/routes', auditLogger, routesRouter)
+app.use('/api/users', auditLogger, usersRouter)
+app.use('/api/logs', logsRouter)
+
+// ============================================================================
+// Proxy Handler (catch-all for non-API routes)
+// ============================================================================
+
+app.use(proxyHandler)
+
+// ============================================================================
+// Error Handling
+// ============================================================================
+
+app.use(notFoundHandler)
+app.use(errorHandler)
+
+// ============================================================================
+// Server Startup
+// ============================================================================
+
+async function start() {
+  try {
+    // Test database connection
+    await prisma.$connect()
+    logger.info('Database connected')
+
+    // Start HTTP server
+    const server = app.listen(config.PORT, () => {
+      logger.info(`ClusterGate backend started`, {
+        port: config.PORT,
+        env: config.NODE_ENV,
+        version: process.env.npm_package_version || '1.0.0',
+      })
+    })
+
+    // Start background jobs
+    startCronJobs()
+
+    // Graceful shutdown
+    const shutdown = async (signal: string) => {
+      logger.info(`Received ${signal}, starting graceful shutdown...`)
+
+      server.close(async () => {
+        logger.info('HTTP server closed')
+        stopCronJobs()
+        await prisma.$disconnect()
+        logger.info('Database disconnected')
+        process.exit(0)
+      })
+
+      // Force exit after 30 seconds
+      setTimeout(() => {
+        logger.error('Forced shutdown after timeout')
+        process.exit(1)
+      }, 30000)
+    }
+
+    process.on('SIGTERM', () => shutdown('SIGTERM'))
+    process.on('SIGINT', () => shutdown('SIGINT'))
+
+    process.on('unhandledRejection', (reason) => {
+      logger.error('Unhandled promise rejection', { reason })
+    })
+
+    process.on('uncaughtException', (err) => {
+      logger.error('Uncaught exception', { error: err.message, stack: err.stack })
+      process.exit(1)
+    })
+  } catch (err) {
+    logger.error('Failed to start server', { error: (err as Error).message })
+    process.exit(1)
+  }
+}
+
+start()
+
+export default app

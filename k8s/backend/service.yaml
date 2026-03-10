@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: clustergate-backend
+  namespace: clustergate
+  labels:
+    app: clustergate-backend
+    app.kubernetes.io/name: clustergate
+    app.kubernetes.io/component: backend
+spec:
+  type: ClusterIP
+  selector:
+    app: clustergate-backend
+  ports:
+    - port: 3001
+      targetPort: 3001
+      name: http

@@ -1,0 +1,30 @@
+---
+# ClusterRole for backend to read services (for proxy target resolution)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: clustergate-backend
+  labels:
+    app.kubernetes.io/name: clustergate
+rules:
+  - apiGroups: [""]
+    resources: ["services", "endpoints"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: clustergate-backend
+  labels:
+    app.kubernetes.io/name: clustergate
+subjects:
+  - kind: ServiceAccount
+    name: clustergate-backend
+    namespace: clustergate
+roleRef:
+  kind: ClusterRole
+  name: clustergate-backend
+  apiGroup: rbac.authorization.k8s.io

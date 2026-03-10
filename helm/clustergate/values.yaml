@@ -1,0 +1,131 @@
+# =============================================================================
+# ClusterGate Helm Values
+# =============================================================================
+
+global:
+  imageRegistry: ""
+  imagePullSecrets: []
+
+# -----------------------------------------------------------------------------
+# Backend
+# -----------------------------------------------------------------------------
+backend:
+  replicaCount: 2
+  image:
+    repository: your-registry/clustergate-backend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3001
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "200m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+  env:
+    NODE_ENV: production
+    PORT: "3001"
+    JWT_EXPIRES_IN: "7d"
+    PROXY_TIMEOUT: "30000"
+    LOG_LEVEL: info
+    METRICS_ENABLED: "true"
+    LOG_RETENTION_DAYS: "90"
+  secrets:
+    # Override these values with --set or use external secrets
+    jwtSecret: "CHANGE_ME"
+    metricsSecret: "CHANGE_ME"
+  logs:
+    storageSize: "2Gi"
+
+# -----------------------------------------------------------------------------
+# Frontend
+# -----------------------------------------------------------------------------
+frontend:
+  replicaCount: 2
+  image:
+    repository: your-registry/clustergate-frontend
+    tag: "latest"
+    pullPolicy: IfNotPresent
+  service:
+    type: ClusterIP
+    port: 3000
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "100m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+# -----------------------------------------------------------------------------
+# PostgreSQL
+# -----------------------------------------------------------------------------
+postgres:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  service:
+    port: 5432
+  persistence:
+    enabled: true
+    storageClass: ""  # Leave empty for default
+    size: "20Gi"
+    accessMode: ReadWriteOnce
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "1000m"
+  credentials:
+    username: clustergate
+    password: "CHANGE_ME"
+    database: clustergate
+
+# -----------------------------------------------------------------------------
+# Ingress
+# -----------------------------------------------------------------------------
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "50m"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+  host: clustergate.example.com
+  tls:
+    enabled: true
+    secretName: clustergate-tls
+
+# -----------------------------------------------------------------------------
+# Service Account & RBAC
+# -----------------------------------------------------------------------------
+serviceAccount:
+  create: true
+  name: clustergate-backend
+  annotations: {}
+
+rbac:
+  create: true
+
+# -----------------------------------------------------------------------------
+# Monitoring
+# -----------------------------------------------------------------------------
+monitoring:
+  serviceMonitor:
+    enabled: false  # Enable if using Prometheus Operator
+    interval: 30s
+    path: /metrics
+    namespace: monitoring

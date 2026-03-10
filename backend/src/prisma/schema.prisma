@@ -1,0 +1,240 @@
+// =============================================================================
+// ClusterGate - Prisma Schema
+// =============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum Role {
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum RouteStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum AuthType {
+  NONE
+  API_KEY
+  BASIC
+  BEARER
+}
+
+enum HealthStatus {
+  HEALTHY
+  UNHEALTHY
+  UNKNOWN
+}
+
+// =============================================================================
+// Models
+// =============================================================================
+
+model User {
+  id               String    @id @default(cuid())
+  email            String    @unique
+  passwordHash     String
+  name             String
+  role             Role      @default(VIEWER)
+  isActive         Boolean   @default(true)
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean   @default(false)
+  lastLoginAt      DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  // Relations
+  createdRoutes  Route[]        @relation("RouteCreatedBy")
+  updatedRoutes  Route[]        @relation("RouteUpdatedBy")
+  routeVersions  RouteVersion[]
+  auditLogs      AuditLog[]
+  notifications  Notification[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Route {
+  id           String      @id @default(cuid())
+  name         String
+  description  String?
+  domain       String
+  publicPath   String
+  targetUrl    String
+  methods      String[]    @default(["GET", "POST"])
+  isActive     Boolean     @default(false)
+  status       RouteStatus @default(DRAFT)
+  tags         String[]    @default([])
+  version      Int         @default(1)
+
+  // Proxy settings
+  timeout      Int         @default(30000)   // ms
+  retryCount   Int         @default(0)
+  retryDelay   Int         @default(1000)    // ms
+  stripPrefix  Boolean     @default(false)
+  requestBodyLimit String  @default("10mb")
+
+  // Header rules
+  addHeaders    Json        @default("{}")    // Record<string, string>
+  removeHeaders String[]    @default([])
+
+  // Path rewrite
+  rewriteRules  Json        @default("[]")   // Array<{from: string, to: string}>
+
+  // CORS
+  corsEnabled  Boolean      @default(false)
+  corsOrigins  String[]     @default([])
+
+  // Security
+  ipAllowlist  String[]     @default([])
+  requireAuth  Boolean      @default(false)
+  authType     AuthType     @default(NONE)
+  authValue    String?
+  webhookSecret String?
+
+  // Maintenance
+  maintenanceMode    Boolean @default(false)
+  maintenanceMessage String? @default("This service is temporarily unavailable.")
+
+  // Soft delete
+  deletedAt    DateTime?
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  // Relations
+  createdById  String?
+  createdBy    User?        @relation("RouteCreatedBy", fields: [createdById], references: [id])
+  updatedById  String?
+  updatedBy    User?        @relation("RouteUpdatedBy", fields: [updatedById], references: [id])
+
+  versions     RouteVersion[]
+  requestLogs  RequestLog[]
+  apiKeys      ApiKey[]
+  healthChecks HealthCheck[]
+  notifications Notification[]
+
+  @@unique([domain, publicPath])
+  @@index([domain])
+  @@index([status, isActive])
+  @@index([deletedAt])
+  @@map("routes")
+}
+
+model RouteVersion {
+  id        String   @id @default(cuid())
+  routeId   String
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  version   Int
+  snapshot  Json     // Full route snapshot
+  createdById String?
+  createdBy User?    @relation(fields: [createdById], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([routeId, version])
+  @@map("route_versions")
+}
+
+model RequestLog {
+  id              String   @id @default(cuid())
+  routeId         String?
+  route           Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  requestId       String   @default(cuid())
+  method          String
+  path            String
+  queryParams     Json     @default("{}")
+  requestHeaders  Json     @default("{}")
+  requestBody     String?
+  responseStatus  Int?
+  responseHeaders Json     @default("{}")
+  responseBody    String?
+  duration        Int?     // ms
+  targetUrl       String
+  error           String?
+  ip              String?
+  userAgent       String?
+  createdAt       DateTime @default(now())
+
+  @@index([routeId, createdAt])
+  @@index([createdAt])
+  @@index([responseStatus])
+  @@map("request_logs")
+}
+
+model ApiKey {
+  id         String    @id @default(cuid())
+  routeId    String
+  route      Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  name       String
+  keyHash    String    @unique
+  isActive   Boolean   @default(true)
+  lastUsedAt DateTime?
+  expiresAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([routeId])
+  @@index([keyHash])
+  @@map("api_keys")
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     String   // e.g. "route.create", "route.publish", "user.login"
+  resource   String   // e.g. "route", "user"
+  resourceId String?
+  details    Json     @default("{}")
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model HealthCheck {
+  id            String       @id @default(cuid())
+  routeId       String
+  route         Route        @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  status        HealthStatus @default(UNKNOWN)
+  lastCheckedAt DateTime     @default(now())
+  responseTime  Int?         // ms
+  error         String?
+  createdAt     DateTime     @default(now())
+
+  @@index([routeId, createdAt])
+  @@map("health_checks")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // "route.error", "health.down", "route.published"
+  title     String
+  message   String
+  isRead    Boolean  @default(false)
+  routeId   String?
+  route     Route?   @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+  @@map("notifications")
+}

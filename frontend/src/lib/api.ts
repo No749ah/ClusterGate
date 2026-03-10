@@ -1,0 +1,250 @@
+import {
+  Route,
+  RouteFormData,
+  RouteFilters,
+  LogFilters,
+  User,
+  RequestLog,
+  RouteVersion,
+  RouteStats,
+  TestResult,
+  HealthCheck,
+  ApiResponse,
+  PaginatedResponse,
+} from '@/types'
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+class ApiClient {
+  private baseUrl: string
+
+  constructor(baseUrl: string) {
+    this.baseUrl = baseUrl
+  }
+
+  private async request<T>(
+    path: string,
+    options: RequestInit = {}
+  ): Promise<T> {
+    const url = `${this.baseUrl}${path}`
+
+    const response = await fetch(url, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    })
+
+    if (response.status === 401) {
+      // Redirect to login
+      if (typeof window !== 'undefined') {
+        window.location.href = '/login'
+      }
+      throw new Error('Unauthorized')
+    }
+
+    const data = await response.json()
+
+    if (!response.ok) {
+      const error = new Error(data.error?.message || 'Request failed')
+      ;(error as any).code = data.error?.code
+      ;(error as any).details = data.error?.details
+      ;(error as any).status = response.status
+      throw error
+    }
+
+    return data
+  }
+
+  private async get<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: 'GET' })
+  }
+
+  private async post<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'POST',
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  }
+
+  private async put<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>(path, {
+      method: 'PUT',
+      body: body ? JSON.stringify(body) : undefined,
+    })
+  }
+
+  private async delete<T>(path: string): Promise<T> {
+    return this.request<T>(path, { method: 'DELETE' })
+  }
+
+  // ============================================================================
+  // Auth
+  // ============================================================================
+
+  auth = {
+    login: (email: string, password: string) =>
+      this.post<ApiResponse<{ user: User }>>('/api/auth/login', { email, password }),
+
+    logout: () =>
+      this.post<ApiResponse<null>>('/api/auth/logout'),
+
+    getMe: () =>
+      this.get<ApiResponse<User>>('/api/auth/me'),
+
+    changePassword: (currentPassword: string, newPassword: string) =>
+      this.post<ApiResponse<null>>('/api/auth/change-password', { currentPassword, newPassword }),
+  }
+
+  // ============================================================================
+  // Routes
+  // ============================================================================
+
+  routes = {
+    list: (filters: RouteFilters = {}) => {
+      const params = new URLSearchParams()
+      if (filters.search) params.set('search', filters.search)
+      if (filters.domain) params.set('domain', filters.domain)
+      if (filters.status) params.set('status', filters.status)
+      if (filters.isActive !== undefined) params.set('isActive', String(filters.isActive))
+      if (filters.tags?.length) params.set('tags', filters.tags.join(','))
+      if (filters.page) params.set('page', String(filters.page))
+      if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
+      if (filters.sortBy) params.set('sortBy', filters.sortBy)
+      if (filters.sortDir) params.set('sortDir', filters.sortDir)
+      const qs = params.toString()
+      return this.get<PaginatedResponse<Route>>(`/api/routes${qs ? `?${qs}` : ''}`)
+    },
+
+    getById: (id: string) =>
+      this.get<ApiResponse<Route>>(`/api/routes/${id}`),
+
+    create: (data: RouteFormData) =>
+      this.post<ApiResponse<Route>>('/api/routes', data),
+
+    update: (id: string, data: Partial<RouteFormData>) =>
+      this.put<ApiResponse<Route>>(`/api/routes/${id}`, data),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/routes/${id}`),
+
+    publish: (id: string) =>
+      this.post<ApiResponse<Route>>(`/api/routes/${id}/publish`),
+
+    deactivate: (id: string) =>
+      this.post<ApiResponse<Route>>(`/api/routes/${id}/deactivate`),
+
+    duplicate: (id: string) =>
+      this.post<ApiResponse<Route>>(`/api/routes/${id}/duplicate`),
+
+    test: (id: string, params: { method?: string; path?: string; headers?: Record<string, string>; body?: string }) =>
+      this.post<ApiResponse<TestResult>>(`/api/routes/${id}/test`, params),
+
+    health: (id: string) =>
+      this.get<ApiResponse<HealthCheck>>(`/api/routes/${id}/health`),
+
+    getVersions: (id: string) =>
+      this.get<ApiResponse<RouteVersion[]>>(`/api/routes/${id}/versions`),
+
+    restoreVersion: (id: string, versionId: string) =>
+      this.post<ApiResponse<Route>>(`/api/routes/${id}/versions/${versionId}/restore`),
+
+    getLogs: (id: string, filters: LogFilters = {}) => {
+      const params = new URLSearchParams()
+      if (filters.method) params.set('method', filters.method)
+      if (filters.statusType) params.set('statusType', filters.statusType)
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
+      if (filters.dateTo) params.set('dateTo', filters.dateTo)
+      if (filters.page) params.set('page', String(filters.page))
+      if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
+      const qs = params.toString()
+      return this.get<PaginatedResponse<RequestLog>>(`/api/routes/${id}/logs${qs ? `?${qs}` : ''}`)
+    },
+
+    getStats: (id: string) =>
+      this.get<ApiResponse<RouteStats>>(`/api/routes/${id}/stats`),
+
+    export: () =>
+      this.get<{ success: boolean; data: Partial<Route>[]; exportedAt: string }>('/api/routes/export'),
+
+    import: (routes: unknown[]) =>
+      this.post<ApiResponse<{ created: number; errors: string[] }>>('/api/routes/import', { routes }),
+  }
+
+  // ============================================================================
+  // Logs
+  // ============================================================================
+
+  logs = {
+    getAll: (filters: LogFilters = {}) => {
+      const params = new URLSearchParams()
+      if (filters.routeId) params.set('routeId', filters.routeId)
+      if (filters.method) params.set('method', filters.method)
+      if (filters.statusType) params.set('statusType', filters.statusType)
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
+      if (filters.dateTo) params.set('dateTo', filters.dateTo)
+      if (filters.page) params.set('page', String(filters.page))
+      if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
+      const qs = params.toString()
+      return this.get<PaginatedResponse<RequestLog>>(`/api/logs${qs ? `?${qs}` : ''}`)
+    },
+
+    getErrors: (routeId?: string, limit = 10) => {
+      const params = new URLSearchParams()
+      if (routeId) params.set('routeId', routeId)
+      params.set('limit', String(limit))
+      return this.get<ApiResponse<RequestLog[]>>(`/api/logs/errors?${params.toString()}`)
+    },
+
+    getDaily: (routeId?: string, days = 7) => {
+      const params = new URLSearchParams()
+      if (routeId) params.set('routeId', routeId)
+      params.set('days', String(days))
+      return this.get<ApiResponse<{ date: string; total: number; errors: number }[]>>(
+        `/api/logs/daily?${params.toString()}`
+      )
+    },
+
+    cleanup: () =>
+      this.delete<ApiResponse<null>>('/api/logs/cleanup'),
+  }
+
+  // ============================================================================
+  // Users
+  // ============================================================================
+
+  users = {
+    list: (page = 1, pageSize = 20) =>
+      this.get<PaginatedResponse<User>>(`/api/users?page=${page}&pageSize=${pageSize}`),
+
+    create: (data: { email: string; password: string; name: string; role: string }) =>
+      this.post<ApiResponse<User>>('/api/users', data),
+
+    update: (id: string, data: { name?: string; role?: string; isActive?: boolean }) =>
+      this.put<ApiResponse<User>>(`/api/users/${id}`, data),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/users/${id}`),
+
+    resetPassword: (id: string, newPassword: string) =>
+      this.post<ApiResponse<null>>(`/api/users/${id}/reset-password`, { newPassword }),
+  }
+
+  // ============================================================================
+  // Health
+  // ============================================================================
+
+  health = {
+    status: () =>
+      this.get<{
+        status: string
+        uptime: number
+        database: { status: string; latency: number }
+        memory: { heapUsed: number; heapTotal: number }
+      }>('/api/health/status'),
+  }
+}
+
+export const api = new ApiClient(API_URL)

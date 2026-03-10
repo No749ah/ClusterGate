@@ -1,0 +1,536 @@
+# ClusterGate
+
+**Kubernetes Routing Gateway Platform** — Expose internal Kubernetes services over public domains with a beautiful, secure management UI.
+
+```
+api.example.com/webhook/XYZ  →  http://n8n.default.svc.cluster.local/webhook/XYZ
+api.example.com/langflow      →  http://langflow.default.svc.cluster.local
+api.example.com/api/v1        →  http://myservice.production.svc.cluster.local/v1
+```
+
+---
+
+## Features
+
+- **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services
+- **Route Management** — Create, test, publish, version, and manage routes via UI
+- **Security** — JWT auth (7-day sessions), bcrypt, rate limiting, IP allowlists, webhook secrets, CORS
+- **Monitoring** — Request logs, error tracking, Prometheus metrics
+- **Health Checks** — Automated health checks for all proxy targets
+- **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui
+- **Kubernetes-native** — Kubernetes manifests + Helm chart included
+
+---
+
+## Tech Stack
+
+| Layer       | Technology                               |
+|-------------|------------------------------------------|
+| Frontend    | Next.js 14, TypeScript, Tailwind, shadcn |
+| Backend     | Node.js, TypeScript, Express.js, Prisma  |
+| Database    | PostgreSQL 16                            |
+| Auth        | JWT (httpOnly cookies, 7 days), bcrypt   |
+| Proxy       | axios-based transparent forwarder        |
+| Metrics     | Prometheus (prom-client)                 |
+| Logging     | Winston + daily rotate                   |
+| Infra       | Docker, Kubernetes, Helm                 |
+
+---
+
+## Quick Start (Local)
+
+### Prerequisites
+- Docker + Docker Compose
+- Node.js 20+
+- npm
+
+### 1. Clone & configure
+
+```bash
+git clone https://github.com/your-org/clustergate.git
+cd clustergate
+
+cp .env.example .env
+# Edit .env — at minimum set:
+#   JWT_SECRET (generate: openssl rand -base64 64)
+#   POSTGRES_PASSWORD
+```
+
+### 2. Start with Docker Compose
+
+```bash
+docker compose up -d
+
+# Wait for postgres to be healthy, then run migrations + seed:
+docker compose exec backend npm run db:migrate
+docker compose exec backend npm run db:seed
+```
+
+### 3. Open the UI
+
+- **Frontend**: http://localhost:3000
+- **Backend API**: http://localhost:3001
+- **API Health**: http://localhost:3001/api/health/ready
+
+### Default Login Credentials
+
+| Email                         | Password              | Role     |
+|-------------------------------|-----------------------|----------|
+| admin@clustergate.local       | Admin@ClusterGate1    | ADMIN    |
+| operator@clustergate.local    | Operator@1234         | OPERATOR |
+
+> **Change these immediately after first login!**
+
+---
+
+## Local Development (without Docker)
+
+### Backend
+
+```bash
+cd backend
+npm install
+cp ../.env.example .env.local   # set DATABASE_URL etc.
+
+# Run migrations
+npx prisma migrate dev
+npx prisma generate
+
+# Seed database
+npm run db:seed
+
+# Start dev server (hot reload)
+npm run dev
+```
+
+### Frontend
+
+```bash
+cd frontend
+npm install
+
+# Start dev server
+npm run dev
+```
+
+---
+
+## Architecture
+
+```
+Internet
+    │
+    ▼
+Ingress (nginx)
+    │
+    ├──► /api/*  ──────► clustergate-backend:3001
+    │                         │
+    │                         ├── Auth API
+    │                         ├── Route Management API
+    │                         ├── Logs API
+    │                         ├── Users API
+    │                         └── Proxy Engine
+    │                               │
+    │                               ▼
+    │                    Internal K8s Services
+    │                    (*.svc.cluster.local)
+    │
+    └──► /*  ────────────► clustergate-frontend:3000
+                               (Next.js UI)
+```
+
+### Proxy Flow
+
+```
+Public Request
+  api.example.com/webhook/xyz
+        │
+        ▼
+  Backend receives request
+        │
+        ▼
+  Match route by domain + path prefix
+        │
+        ├── Check: isActive, status=PUBLISHED
+        ├── Check: maintenance mode
+        ├── Check: IP allowlist
+        ├── Validate: webhook secret (if configured)
+        ├── Apply: header add/remove rules
+        ├── Apply: path rewrite rules
+        └── Forward to target URL
+              │
+              ▼
+        n8n.default.svc.cluster.local/webhook/xyz
+              │
+              ▼
+        Return response (status, headers, body)
+```
+
+---
+
+## Configuration
+
+### Environment Variables (Backend)
+
+| Variable              | Required | Default   | Description                          |
+|-----------------------|----------|-----------|--------------------------------------|
+| `DATABASE_URL`        | ✅       | —         | PostgreSQL connection string         |
+| `JWT_SECRET`          | ✅       | —         | JWT signing secret (min 32 chars)    |
+| `JWT_EXPIRES_IN`      | ❌       | `7d`      | JWT token lifetime                   |
+| `PORT`                | ❌       | `3001`    | Backend HTTP port                    |
+| `NODE_ENV`            | ❌       | `development` | Environment                     |
+| `ALLOWED_ORIGINS`     | ❌       | `http://localhost:3000` | CORS origins (comma-sep) |
+| `PROXY_TIMEOUT`       | ❌       | `30000`   | Proxy timeout in ms                  |
+| `LOG_LEVEL`           | ❌       | `info`    | Winston log level                    |
+| `METRICS_ENABLED`     | ❌       | `true`    | Enable Prometheus metrics            |
+| `METRICS_SECRET`      | ❌       | —         | Secret for /metrics endpoint         |
+| `LOG_RETENTION_DAYS`  | ❌       | `90`      | Days to keep request logs            |
+
+---
+
+## Route Configuration Reference
+
+### Basic Route
+
+```json
+{
+  "name": "n8n Webhooks",
+  "domain": "api.example.com",
+  "publicPath": "/webhook",
+  "targetUrl": "http://n8n.default.svc.cluster.local/webhook",
+  "methods": ["POST"],
+  "status": "PUBLISHED",
+  "isActive": true
+}
+```
+
+### Advanced Route with Headers & Auth
+
+```json
+{
+  "name": "Protected Internal API",
+  "domain": "api.example.com",
+  "publicPath": "/api/v1",
+  "targetUrl": "http://myservice.production.svc.cluster.local/v1",
+  "methods": ["GET", "POST", "PUT", "DELETE"],
+  "timeout": 15000,
+  "retryCount": 3,
+  "retryDelay": 1000,
+  "stripPrefix": false,
+  "addHeaders": {
+    "X-Forwarded-By": "ClusterGate",
+    "X-Internal-Auth": "my-internal-token"
+  },
+  "removeHeaders": ["X-User-Id"],
+  "requireAuth": true,
+  "authType": "BEARER",
+  "authValue": "my-api-token",
+  "ipAllowlist": ["10.0.0.0/8", "192.168.1.100"],
+  "corsEnabled": true,
+  "corsOrigins": ["https://app.example.com"],
+  "webhookSecret": "wh_secret_abc123",
+  "status": "PUBLISHED",
+  "isActive": true,
+  "tags": ["production", "v1"]
+}
+```
+
+### Path Rewrite
+
+```json
+{
+  "rewriteRules": [
+    {
+      "from": "^/incoming/(.*)",
+      "to": "/webhook/$1"
+    }
+  ]
+}
+```
+
+---
+
+## API Reference
+
+### Authentication
+
+```
+POST /api/auth/login
+POST /api/auth/logout
+GET  /api/auth/me
+POST /api/auth/change-password
+```
+
+### Routes
+
+```
+GET    /api/routes              List routes (with filters, pagination)
+POST   /api/routes              Create route
+GET    /api/routes/:id          Get route details
+PUT    /api/routes/:id          Update route
+DELETE /api/routes/:id          Delete route (soft)
+POST   /api/routes/:id/publish  Publish route
+POST   /api/routes/:id/deactivate  Deactivate route
+POST   /api/routes/:id/duplicate   Duplicate route
+POST   /api/routes/:id/test     Test route (sends test request)
+GET    /api/routes/:id/health   Check target health
+GET    /api/routes/:id/versions Version history
+POST   /api/routes/:id/versions/:vId/restore  Restore version
+GET    /api/routes/:id/logs     Request logs for route
+GET    /api/routes/:id/stats    Stats for route
+POST   /api/routes/import       Import routes JSON
+GET    /api/routes/export       Export routes JSON
+```
+
+### Logs
+
+```
+GET    /api/logs                All logs (filterable)
+GET    /api/logs/errors         Recent errors
+DELETE /api/logs/cleanup        Cleanup old logs (admin)
+```
+
+### Users
+
+```
+GET    /api/users               List users (admin)
+POST   /api/users               Create user (admin)
+PUT    /api/users/:id           Update user (admin)
+DELETE /api/users/:id           Delete user (admin)
+POST   /api/users/:id/reset-password  Reset password (admin)
+```
+
+### Health & Metrics
+
+```
+GET /api/health/live    Liveness probe (always 200)
+GET /api/health/ready   Readiness probe (checks DB)
+GET /api/health/status  System status
+GET /metrics            Prometheus metrics
+```
+
+---
+
+## Kubernetes Deployment
+
+### Using kubectl
+
+```bash
+# 1. Create namespace
+kubectl apply -f k8s/namespace.yaml
+
+# 2. Configure secrets (IMPORTANT: update values first!)
+vi k8s/secrets.yaml
+kubectl apply -f k8s/secrets.yaml
+
+# 3. Apply ConfigMap
+kubectl apply -f k8s/configmap.yaml
+
+# 4. Deploy PostgreSQL
+kubectl apply -f k8s/postgres/
+kubectl wait --for=condition=ready pod -l app=postgres -n clustergate --timeout=120s
+
+# 5. Run database migrations (one-time job)
+kubectl run migrate \
+  --image=your-registry/clustergate-backend:latest \
+  --namespace=clustergate \
+  --env="DATABASE_URL=$(kubectl get secret clustergate-secrets -n clustergate -o jsonpath='{.data.DATABASE_URL}' | base64 -d)" \
+  --command -- npm run db:migrate
+kubectl run seed \
+  --image=your-registry/clustergate-backend:latest \
+  --namespace=clustergate \
+  --env="DATABASE_URL=$(kubectl get secret clustergate-secrets -n clustergate -o jsonpath='{.data.DATABASE_URL}' | base64 -d)" \
+  --command -- npm run db:seed
+
+# 6. Deploy backend + frontend
+kubectl apply -f k8s/backend/
+kubectl apply -f k8s/frontend/
+
+# 7. Apply RBAC
+kubectl apply -f k8s/rbac.yaml
+
+# 8. Configure ingress (update host in ingress.yaml first)
+vi k8s/ingress/ingress.yaml
+kubectl apply -f k8s/ingress/
+
+# 9. Watch rollout
+kubectl rollout status deployment/clustergate-backend -n clustergate
+kubectl rollout status deployment/clustergate-frontend -n clustergate
+```
+
+### Using Helm
+
+```bash
+# Add to your cluster:
+helm upgrade --install clustergate ./helm/clustergate \
+  --namespace clustergate \
+  --create-namespace \
+  --set ingress.host=clustergate.example.com \
+  --set backend.secrets.jwtSecret=$(openssl rand -base64 64) \
+  --set backend.secrets.metricsSecret=$(openssl rand -base64 32) \
+  --set postgres.credentials.password=$(openssl rand -base64 32) \
+  --wait
+
+# Check status
+helm status clustergate -n clustergate
+```
+
+---
+
+## Security
+
+### Production Checklist
+
+- [ ] Change default admin password immediately after first login
+- [ ] Set a strong `JWT_SECRET` (min 64 chars, random)
+- [ ] Set a strong `POSTGRES_PASSWORD`
+- [ ] Enable TLS via cert-manager or bring your own certs
+- [ ] Apply NetworkPolicies (`k8s/ingress/networkpolicy.yaml`)
+- [ ] Apply RBAC (`k8s/rbac.yaml`)
+- [ ] Configure `ALLOWED_ORIGINS` to your exact frontend URL
+- [ ] Use Sealed Secrets or External Secrets Operator instead of plain k8s Secrets
+- [ ] Enable audit logging (enabled by default)
+- [ ] Set up monitoring alerts on error rate metrics
+- [ ] Review IP allowlists for sensitive routes
+- [ ] Enable webhook secrets for webhook routes
+
+### Secret Management Recommendations
+
+For production, use one of:
+- **Sealed Secrets** (`kubeseal`) — encrypt secrets into Git
+- **External Secrets Operator** — pull from Vault, AWS SSM, GCP Secret Manager
+- **Vault Agent Injector** — inject secrets as files
+
+---
+
+## Monitoring
+
+### Prometheus Metrics
+
+Available at `/metrics` (protect with `METRICS_SECRET` header or IP allowlist):
+
+| Metric                            | Type      | Description                    |
+|-----------------------------------|-----------|--------------------------------|
+| `http_requests_total`             | Counter   | HTTP requests by method/status |
+| `http_request_duration_seconds`   | Histogram | HTTP request duration          |
+| `proxy_requests_total`            | Counter   | Proxy requests by route/status |
+| `proxy_request_duration_seconds`  | Histogram | Proxy request duration         |
+| `active_routes_total`             | Gauge     | Active published routes        |
+
+### Grafana Dashboard
+
+Import the included Grafana dashboard from `monitoring/grafana-dashboard.json` (if available).
+
+---
+
+## Directory Structure
+
+```
+clustergate/
+├── backend/                    # Express.js backend
+│   ├── src/
+│   │   ├── app.ts              # Application entry point
+│   │   ├── config/             # Configuration
+│   │   ├── cron/               # Scheduled jobs
+│   │   ├── lib/                # Utilities (logger, jwt, metrics)
+│   │   ├── middleware/         # Express middleware
+│   │   ├── prisma/             # Schema, migrations, seed
+│   │   ├── proxy/              # Proxy handler
+│   │   ├── routes/             # API route handlers
+│   │   └── services/           # Business logic
+│   ├── Dockerfile
+│   ├── package.json
+│   └── tsconfig.json
+│
+├── frontend/                   # Next.js frontend
+│   ├── src/
+│   │   ├── app/                # Next.js App Router pages
+│   │   ├── components/         # React components
+│   │   │   ├── ui/             # shadcn/ui base components
+│   │   │   ├── layout/         # Sidebar, Header
+│   │   │   ├── routes/         # Route management UI
+│   │   │   ├── logs/           # Logs UI
+│   │   │   ├── dashboard/      # Dashboard widgets
+│   │   │   └── common/         # Shared components
+│   │   ├── hooks/              # React Query hooks
+│   │   ├── lib/                # API client, utilities
+│   │   └── types/              # TypeScript types
+│   ├── Dockerfile
+│   ├── package.json
+│   └── next.config.ts
+│
+├── k8s/                        # Kubernetes manifests
+│   ├── namespace.yaml
+│   ├── configmap.yaml
+│   ├── secrets.yaml
+│   ├── rbac.yaml
+│   ├── postgres/
+│   ├── backend/
+│   ├── frontend/
+│   └── ingress/
+│
+├── helm/                       # Helm chart
+│   └── clustergate/
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       └── templates/
+│
+├── docker-compose.yml          # Local development
+├── .env.example                # Environment template
+└── README.md
+```
+
+---
+
+## Development
+
+### Database Commands
+
+```bash
+cd backend
+
+# Create new migration
+npx prisma migrate dev --name your-migration-name
+
+# Apply migrations
+npm run db:migrate
+
+# Open Prisma Studio (DB browser)
+npm run db:studio
+
+# Regenerate Prisma client (after schema changes)
+npm run db:generate
+
+# Seed database
+npm run db:seed
+```
+
+### Building for Production
+
+```bash
+# Backend
+cd backend && npm run build
+
+# Frontend
+cd frontend && npm run build
+```
+
+### Building Docker Images
+
+```bash
+# Backend
+docker build -t your-registry/clustergate-backend:latest ./backend --target production
+
+# Frontend
+docker build -t your-registry/clustergate-frontend:latest ./frontend --target production
+
+# Push
+docker push your-registry/clustergate-backend:latest
+docker push your-registry/clustergate-frontend:latest
+```
+
+---
+
+## License
+
+MIT — See LICENSE file for details.

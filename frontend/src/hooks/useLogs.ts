@@ -1,0 +1,27 @@
+import { useQuery } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+import { LogFilters } from '@/types'
+
+export function useLogs(filters: LogFilters = {}) {
+  return useQuery({
+    queryKey: ['logs', filters],
+    queryFn: () => api.logs.getAll(filters),
+    staleTime: 15 * 1000,
+  })
+}
+
+export function useRecentErrors(routeId?: string) {
+  return useQuery({
+    queryKey: ['logs', 'errors', routeId],
+    queryFn: () => api.logs.getErrors(routeId, 10),
+    staleTime: 15 * 1000,
+  })
+}
+
+export function useDailyStats(routeId?: string, days = 7) {
+  return useQuery({
+    queryKey: ['logs', 'daily', routeId, days],
+    queryFn: () => api.logs.getDaily(routeId, days),
+    staleTime: 5 * 60 * 1000,
+  })
+}

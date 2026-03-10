@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: clustergate-config
+  namespace: clustergate
+  labels:
+    app.kubernetes.io/name: clustergate
+data:
+  NODE_ENV: "production"
+  PORT: "3001"
+  POSTGRES_DB: "clustergate"
+  JWT_EXPIRES_IN: "7d"
+  ALLOWED_ORIGINS: "https://clustergate.example.com"
+  PROXY_TIMEOUT: "30000"
+  LOG_LEVEL: "info"
+  METRICS_ENABLED: "true"
+  LOG_RETENTION_DAYS: "90"
+  NEXT_PUBLIC_API_URL: "https://clustergate.example.com/api-backend"
+  NEXT_PUBLIC_APP_NAME: "ClusterGate"
