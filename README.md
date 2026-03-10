@@ -1,6 +1,33 @@
-# ClusterGate
+<div align="center">
 
-**Kubernetes Routing Gateway Platform** — Expose internal Kubernetes services over public domains with a beautiful, secure management UI.
+<img src="docs/logo.svg" alt="ClusterGate Logo" width="480"/>
+
+<br/>
+
+**Kubernetes Routing Gateway Platform**
+
+Expose internal Kubernetes services over public domains with a beautiful, secure management UI.
+
+<br/>
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
+[![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm%20%2B%20kubectl-326CE5?logo=kubernetes&logoColor=white)](k8s/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org)
+
+<br/>
+
+[![Get Started](https://img.shields.io/badge/🚀%20Get%20Started-Quick%20Start-22c55e?style=for-the-badge)](#quick-start-local)
+[![View Docs](https://img.shields.io/badge/📖%20View%20Docs-API%20Reference-3b82f6?style=for-the-badge)](#api-reference)
+[![Report Bug](https://img.shields.io/badge/🐛%20Report%20Bug-Issues-ef4444?style=for-the-badge)](https://github.com/No749ah/ClusterGate/issues/new?template=bug_report.md)
+[![Request Feature](https://img.shields.io/badge/✨%20Request%20Feature-Issues-a855f7?style=for-the-badge)](https://github.com/No749ah/ClusterGate/issues/new?template=feature_request.md)
+
+</div>
+
+---
 
 ```
 api.example.com/webhook/XYZ  →  http://n8n.default.svc.cluster.local/webhook/XYZ
@@ -10,19 +37,19 @@ api.example.com/api/v1        →  http://myservice.production.svc.cluster.local
 
 ---
 
-## Features
+## ✨ Features
 
-- **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services
-- **Route Management** — Create, test, publish, version, and manage routes via UI
-- **Security** — JWT auth (7-day sessions), bcrypt, rate limiting, IP allowlists, webhook secrets, CORS
-- **Monitoring** — Request logs, error tracking, Prometheus metrics
-- **Health Checks** — Automated health checks for all proxy targets
-- **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui
-- **Kubernetes-native** — Kubernetes manifests + Helm chart included
+- 🔀 **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services
+- 🗂️ **Route Management** — Create, test, publish, version, and manage routes via UI
+- 🔒 **Security** — JWT auth (7-day sessions), bcrypt, rate limiting, IP allowlists, webhook secrets, CORS
+- 📊 **Monitoring** — Request logs, error tracking, Prometheus metrics
+- 💓 **Health Checks** — Automated health checks for all proxy targets
+- 🌙 **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui
+- ☸️ **Kubernetes-native** — Kubernetes manifests + Helm chart included
 
 ---
 
-## Tech Stack
+## 🛠️ Tech Stack
 
 | Layer       | Technology                               |
 |-------------|------------------------------------------|
@@ -37,7 +64,7 @@ api.example.com/api/v1        →  http://myservice.production.svc.cluster.local
 
 ---
 
-## Quick Start (Local)
+## 🚀 Quick Start (Local)
 
 ### Prerequisites
 - Docker + Docker Compose
@@ -47,8 +74,8 @@ api.example.com/api/v1        →  http://myservice.production.svc.cluster.local
 ### 1. Clone & configure
 
 ```bash
-git clone https://github.com/your-org/clustergate.git
-cd clustergate
+git clone https://github.com/No749ah/ClusterGate.git
+cd ClusterGate
 
 cp .env.example .env
 # Edit .env — at minimum set:
@@ -68,9 +95,11 @@ docker compose exec backend npm run db:seed
 
 ### 3. Open the UI
 
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:3001
-- **API Health**: http://localhost:3001/api/health/ready
+| Service      | URL                                    |
+|--------------|----------------------------------------|
+| 🖥️ Frontend  | http://localhost:3000                  |
+| ⚙️ Backend   | http://localhost:3001                  |
+| 💓 Health    | http://localhost:3001/api/health/ready |
 
 ### Default Login Credentials
 
@@ -79,11 +108,11 @@ docker compose exec backend npm run db:seed
 | admin@clustergate.local       | Admin@ClusterGate1    | ADMIN    |
 | operator@clustergate.local    | Operator@1234         | OPERATOR |
 
-> **Change these immediately after first login!**
+> ⚠️ **Change these immediately after first login!**
 
 ---
 
-## Local Development (without Docker)
+## 💻 Local Development (without Docker)
 
 ### Backend
 
@@ -115,7 +144,7 @@ npm run dev
 
 ---
 
-## Architecture
+## 🏗️ Architecture
 
 ```
 Internet
@@ -168,7 +197,7 @@ Public Request
 
 ---
 
-## Configuration
+## ⚙️ Configuration
 
 ### Environment Variables (Backend)
 
@@ -188,7 +217,7 @@ Public Request
 
 ---
 
-## Route Configuration Reference
+## 🗺️ Route Configuration Reference
 
 ### Basic Route
 
@@ -250,7 +279,7 @@ Public Request
 
 ---
 
-## API Reference
+## 📡 API Reference
 
 ### Authentication
 
@@ -311,7 +340,7 @@ GET /metrics            Prometheus metrics
 
 ---
 
-## Kubernetes Deployment
+## ☸️ Kubernetes Deployment
 
 ### Using kubectl
 
@@ -377,7 +406,7 @@ helm status clustergate -n clustergate
 
 ---
 
-## Security
+## 🔐 Security
 
 ### Production Checklist
 
@@ -403,7 +432,7 @@ For production, use one of:
 
 ---
 
-## Monitoring
+## 📈 Monitoring
 
 ### Prometheus Metrics
 
@@ -423,7 +452,7 @@ Import the included Grafana dashboard from `monitoring/grafana-dashboard.json` (
 
 ---
 
-## Directory Structure
+## 📁 Directory Structure
 
 ```
 clustergate/
@@ -475,14 +504,18 @@ clustergate/
 │       ├── values.yaml
 │       └── templates/
 │
+├── docs/                       # Documentation assets
+│   └── logo.svg
+│
 ├── docker-compose.yml          # Local development
 ├── .env.example                # Environment template
+├── LICENSE                     # MIT License
 └── README.md
 ```
 
 ---
 
-## Development
+## 🧑‍💻 Development
 
 ### Database Commands
 
@@ -531,6 +564,17 @@ docker push your-registry/clustergate-frontend:latest
 
 ---
 
-## License
+## 🤝 Contributing
 
-MIT — See LICENSE file for details.
+Contributions are welcome! Please feel free to open an issue or submit a pull request.
+
+[![Open Issues](https://img.shields.io/github/issues/No749ah/ClusterGate?color=ef4444)](https://github.com/No749ah/ClusterGate/issues)
+[![Open PRs](https://img.shields.io/github/issues-pr/No749ah/ClusterGate?color=3b82f6)](https://github.com/No749ah/ClusterGate/pulls)
+
+---
+
+## 📄 License
+
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
