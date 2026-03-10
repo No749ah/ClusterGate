@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.svg" alt="ClusterGate Logo" width="480"/>
+<img src="frontend/public/favicon.svg" alt="ClusterGate Logo" width="96"/>
 
 <br/>
 
@@ -503,9 +503,6 @@ clustergate/
 │       ├── Chart.yaml
 │       ├── values.yaml
 │       └── templates/
-│
-├── docs/                       # Documentation assets
-│   └── logo.svg
 │
 ├── docker-compose.yml          # Local development
 ├── .env.example                # Environment template
