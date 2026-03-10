@@ -17,7 +17,6 @@ import { RouteFormData } from '@/types'
 const routeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
-  domain: z.string().min(1, 'Domain is required').regex(/^[a-zA-Z0-9][a-zA-Z0-9-_.]*\.[a-zA-Z]{2,}$/, 'Invalid domain format'),
   publicPath: z.string().min(1, 'Public path is required').startsWith('/', 'Must start with /'),
   targetUrl: z.string().url('Must be a valid URL (include http:// or https://)'),
   methods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])).min(1, 'Select at least one method'),
@@ -62,7 +61,6 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
     defaultValues: {
       name: defaultValues?.name ?? '',
       description: defaultValues?.description ?? '',
-      domain: defaultValues?.domain ?? '',
       publicPath: defaultValues?.publicPath ?? '/',
       targetUrl: defaultValues?.targetUrl ?? '',
       methods: defaultValues?.methods ?? ['GET', 'POST'],
@@ -136,7 +134,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
 
   const handleNext = async () => {
     const stepFields: (keyof RouteFormValues)[][] = [
-      ['name', 'domain', 'publicPath', 'targetUrl', 'methods'],
+      ['name', 'publicPath', 'targetUrl', 'methods'],
       ['timeout', 'retryCount', 'retryDelay'],
       [],
       [],
@@ -220,14 +218,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             <Field label="Description" error={errors.description?.message}>
               <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
             </Field>
-            <div className="grid grid-cols-2 gap-4">
-              <Field label="Domain" error={errors.domain?.message} required hint="e.g. api.example.com">
-                <input {...register('domain')} placeholder="api.example.com" className={fieldClass(errors.domain)} />
-              </Field>
-              <Field label="Public Path" error={errors.publicPath?.message} required hint="e.g. /webhook/xyz">
-                <input {...register('publicPath')} placeholder="/webhook/xyz" className={fieldClass(errors.publicPath)} />
-              </Field>
-            </div>
+            <Field label="Public Path" error={errors.publicPath?.message} required hint="e.g. /webhook/xyz">
+              <input {...register('publicPath')} placeholder="/webhook/xyz" className={fieldClass(errors.publicPath)} />
+            </Field>
             <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal Kubernetes service URL">
               <input
                 {...register('targetUrl')}

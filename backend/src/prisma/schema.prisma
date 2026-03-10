@@ -72,7 +72,6 @@ model Route {
   id           String      @id @default(cuid())
   name         String
   description  String?
-  domain       String
   publicPath   String
   targetUrl    String
   methods      String[]    @default(["GET", "POST"])
@@ -128,8 +127,7 @@ model Route {
   healthChecks HealthCheck[]
   notifications Notification[]
 
-  @@unique([domain, publicPath])
-  @@index([domain])
+  @@unique([publicPath])
   @@index([status, isActive])
   @@index([deletedAt])
   @@map("routes")

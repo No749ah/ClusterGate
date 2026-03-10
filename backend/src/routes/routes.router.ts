@@ -15,7 +15,6 @@ const router = Router()
 const routeBodySchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
-  domain: z.string().min(1, 'Domain is required'),
   publicPath: z.string().min(1, 'Public path is required').startsWith('/', 'Must start with /'),
   targetUrl: z.string().url('Target URL must be a valid URL'),
   methods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])).min(1),
@@ -44,12 +43,11 @@ const routeBodySchema = z.object({
 // GET /api/routes
 router.get('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR, Role.VIEWER]), async (req, res, next) => {
   try {
-    const { page = '1', pageSize = '20', search, domain, status, isActive, tags, sortBy, sortDir } = req.query
+    const { page = '1', pageSize = '20', search, status, isActive, tags, sortBy, sortDir } = req.query
 
     const result = await routeService.getRoutes(
       {
         search: search as string,
-        domain: domain as string,
         status: status as any,
         isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
         tags: tags ? String(tags).split(',') : undefined,
@@ -173,7 +171,7 @@ router.post('/:id/test', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), a
     const mockReq = {
       method: method.toUpperCase(),
       path,
-      hostname: route.domain,
+      hostname: 'localhost',
       ip: req.ip,
       protocol: 'https',
       query: {},

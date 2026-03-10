@@ -5,7 +5,6 @@ import { activeRoutesTotal } from '../lib/metrics'
 
 export interface RouteFilters {
   search?: string
-  domain?: string
   status?: RouteStatus
   isActive?: boolean
   tags?: string[]
@@ -39,12 +38,10 @@ export async function getRoutes(
       OR: [
         { name: { contains: filters.search, mode: 'insensitive' } },
         { description: { contains: filters.search, mode: 'insensitive' } },
-        { domain: { contains: filters.search, mode: 'insensitive' } },
         { publicPath: { contains: filters.search, mode: 'insensitive' } },
         { targetUrl: { contains: filters.search, mode: 'insensitive' } },
       ],
     }),
-    ...(filters.domain && { domain: filters.domain }),
     ...(filters.status !== undefined && { status: filters.status }),
     ...(filters.isActive !== undefined && { isActive: filters.isActive }),
     ...(filters.tags && filters.tags.length > 0 && {
@@ -52,7 +49,7 @@ export async function getRoutes(
     }),
   }
 
-  const validSortFields = ['name', 'domain', 'createdAt', 'updatedAt', 'status']
+  const validSortFields = ['name', 'createdAt', 'updatedAt', 'status']
   const orderByField = validSortFields.includes(sortBy) ? sortBy : 'createdAt'
 
   const [data, total] = await prisma.$transaction([
@@ -100,12 +97,6 @@ export async function getRouteById(id: string) {
 }
 
 export async function createRoute(data: Prisma.RouteCreateInput, userId: string) {
-  // Validate domain format
-  const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-_.]*\.[a-zA-Z]{2,}$/
-  if (!domainRegex.test(data.domain as string)) {
-    throw AppError.badRequest('Invalid domain format')
-  }
-
   // Validate target URL
   try {
     new URL(data.targetUrl as string)
@@ -224,7 +215,7 @@ export async function duplicateRoute(id: string, userId: string) {
   let attempts = 0
   while (attempts < 10) {
     const exists = await prisma.route.findFirst({
-      where: { domain: routeData.domain, publicPath, deletedAt: null },
+      where: { publicPath, deletedAt: null },
     })
     if (!exists) break
     attempts++
@@ -282,7 +273,6 @@ export async function exportRoutes() {
     select: {
       name: true,
       description: true,
-      domain: true,
       publicPath: true,
       targetUrl: true,
       methods: true,

@@ -74,7 +74,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
               <p className="text-sm text-muted-foreground mt-1">{route.description}</p>
             )}
             <div className="flex items-center gap-2 mt-2 font-mono text-sm">
-              <span className="text-muted-foreground">{route.domain}{route.publicPath}</span>
+              <span className="text-muted-foreground">{route.publicPath}</span>
               <span className="text-muted-foreground">→</span>
               <span className="text-primary">{route.targetUrl}</span>
             </div>
@@ -148,7 +148,6 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
             <Card>
               <CardHeader><CardTitle className="text-sm">Routing</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <InfoRow label="Domain" value={route.domain} mono />
                 <InfoRow label="Public Path" value={route.publicPath} mono />
                 <InfoRow label="Target URL" value={route.targetUrl} mono />
                 <InfoRow label="Methods" value={

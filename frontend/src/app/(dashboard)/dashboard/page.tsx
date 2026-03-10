@@ -125,7 +125,7 @@ export default function DashboardPage() {
                       {route.name}
                     </p>
                     <p className="text-xs text-muted-foreground truncate">
-                      {route.domain}{route.publicPath}
+                      {route.publicPath}
                     </p>
                   </div>
                   <RouteStatusBadge status={route.status} isActive={route.isActive} />

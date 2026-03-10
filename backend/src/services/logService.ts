@@ -44,7 +44,7 @@ export async function getRouteLogs(filters: LogFilters, pagination = { page: 1, 
       take: pageSize,
       orderBy: { createdAt: 'desc' },
       include: {
-        route: { select: { id: true, name: true, domain: true } },
+        route: { select: { id: true, name: true } },
       },
     }),
     prisma.requestLog.count({ where }),

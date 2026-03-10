@@ -5,13 +5,11 @@ import { proxyRequest } from '../services/proxyService'
 
 export async function proxyHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const host = req.hostname
     const path = req.path
 
-    // Find matching route by domain + path prefix
+    // Find matching route by path prefix
     const routes = await prisma.route.findMany({
       where: {
-        domain: host,
         isActive: true,
         deletedAt: null,
         status: 'PUBLISHED',
@@ -33,7 +31,7 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
         success: false,
         error: {
           code: 'ROUTE_NOT_FOUND',
-          message: `No route configured for ${host}${path}`,
+          message: `No route configured for ${path}`,
         },
       })
     }

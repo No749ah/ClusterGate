@@ -106,7 +106,6 @@ class ApiClient {
     list: (filters: RouteFilters = {}) => {
       const params = new URLSearchParams()
       if (filters.search) params.set('search', filters.search)
-      if (filters.domain) params.set('domain', filters.domain)
       if (filters.status) params.set('status', filters.status)
       if (filters.isActive !== undefined) params.set('isActive', String(filters.isActive))
       if (filters.tags?.length) params.set('tags', filters.tags.join(','))

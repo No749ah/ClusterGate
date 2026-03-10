@@ -47,7 +47,6 @@ async function main() {
     {
       name: 'n8n Webhooks',
       description: 'Forward webhooks to the n8n automation platform',
-      domain: 'api.example.com',
       publicPath: '/webhook',
       targetUrl: 'http://n8n.default.svc.cluster.local:5678/webhook',
       methods: ['POST', 'GET'],
@@ -64,7 +63,6 @@ async function main() {
     {
       name: 'LangFlow API',
       description: 'LangFlow AI workflow builder API',
-      domain: 'api.example.com',
       publicPath: '/langflow',
       targetUrl: 'http://langflow.default.svc.cluster.local:7860',
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
@@ -82,7 +80,6 @@ async function main() {
     {
       name: 'Internal Production API v1',
       description: 'Main internal microservice API - production namespace',
-      domain: 'api.example.com',
       publicPath: '/api/v1',
       targetUrl: 'http://myservice.production.svc.cluster.local:8080/v1',
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
@@ -102,7 +99,7 @@ async function main() {
 
   for (const routeData of routes) {
     const existing = await prisma.route.findFirst({
-      where: { domain: routeData.domain, publicPath: routeData.publicPath, deletedAt: null },
+      where: { publicPath: routeData.publicPath, deletedAt: null },
     })
 
     if (!existing) {
@@ -120,7 +117,7 @@ async function main() {
         },
       })
 
-      console.log(`✅ Created route: ${route.name} (${route.domain}${route.publicPath})`)
+      console.log(`✅ Created route: ${route.name} (${route.publicPath})`)
     } else {
       console.log(`⏭️  Route already exists: ${routeData.name}`)
     }

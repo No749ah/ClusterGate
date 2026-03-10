@@ -268,7 +268,7 @@ function RouteRow({
             {route.name}
           </Link>
           <p className="text-xs text-muted-foreground font-mono mt-0.5">
-            {route.domain}{route.publicPath}
+            {route.publicPath}
           </p>
           {route.tags.length > 0 && (
             <div className="flex gap-1 mt-1 flex-wrap">

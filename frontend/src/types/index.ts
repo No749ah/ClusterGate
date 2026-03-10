@@ -29,7 +29,6 @@ export interface Route {
   id: string
   name: string
   description: string | null
-  domain: string
   publicPath: string
   targetUrl: string
   methods: HttpMethod[]
@@ -90,7 +89,7 @@ export interface RouteVersion {
 export interface RequestLog {
   id: string
   routeId: string | null
-  route: { id: string; name: string; domain: string } | null
+  route: { id: string; name: string } | null
   requestId: string
   method: string
   path: string
@@ -169,7 +168,6 @@ export interface ApiError {
 export interface RouteFormData {
   name: string
   description?: string
-  domain: string
   publicPath: string
   targetUrl: string
   methods: HttpMethod[]
@@ -196,7 +194,6 @@ export interface RouteFormData {
 // Filter types
 export interface RouteFilters {
   search?: string
-  domain?: string
   status?: RouteStatus
   isActive?: boolean
   tags?: string[]
