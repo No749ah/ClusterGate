@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS base
 WORKDIR /app
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl openssl
 COPY package*.json ./
 RUN npm ci --ignore-scripts
 
@@ -34,7 +34,7 @@ RUN npm run build
 # ---------------------------------------------------------------------------
 FROM node:20-alpine AS production
 WORKDIR /app
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl openssl
 
 # Create non-root user
 RUN addgroup -g 1001 -S nodejs && \
