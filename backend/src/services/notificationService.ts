@@ -69,6 +69,21 @@ export async function createNotification(data: {
 }
 
 export async function notifyRouteError(routeId: string, routeName: string, error: string) {
+  // Throttle: only create if no recent unread error notification for this route
+  try {
+    const existing = await prisma.notification.findFirst({
+      where: {
+        type: 'route.error',
+        routeId,
+        isRead: false,
+        createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) }, // within last 5 min
+      },
+    })
+    if (existing) return
+  } catch {
+    // ignore check errors
+  }
+
   await createNotification({
     type: 'route.error',
     title: `Route Error: ${routeName}`,
@@ -78,6 +93,21 @@ export async function notifyRouteError(routeId: string, routeName: string, error
 }
 
 export async function notifyHealthDown(routeId: string, routeName: string, error?: string) {
+  // Throttle: only create notification if no unread health.down notification exists for this route
+  try {
+    const existing = await prisma.notification.findFirst({
+      where: {
+        type: 'health.down',
+        routeId,
+        isRead: false,
+        createdAt: { gte: new Date(Date.now() - 30 * 60 * 1000) }, // within last 30 min
+      },
+    })
+    if (existing) return // already notified recently
+  } catch {
+    // ignore check errors
+  }
+
   await createNotification({
     type: 'health.down',
     title: `Health Check Failed: ${routeName}`,

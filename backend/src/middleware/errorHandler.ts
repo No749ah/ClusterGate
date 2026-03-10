@@ -64,15 +64,17 @@ export function errorHandler(
   // Prisma errors
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     switch (err.code) {
-      case 'P2002':
+      case 'P2002': {
+        const fields = (err.meta?.target as string[])?.join(', ') || 'unknown'
         return res.status(409).json({
           success: false,
           error: {
             code: 'CONFLICT',
-            message: 'A record with these values already exists',
+            message: `A record with this ${fields} already exists`,
             details: { fields: err.meta?.target },
           },
         })
+      }
       case 'P2025':
         return res.status(404).json({
           success: false,

@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <defs>
+    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="50%" stop-color="#8b5cf6"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="gate" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#818cf8"/>
+      <stop offset="100%" stop-color="#c4b5fd"/>
+    </linearGradient>
+  </defs>
+  <!-- Outer ring - the "cluster" -->
+  <circle cx="256" cy="256" r="230" stroke="url(#glow)" stroke-width="18" fill="none" opacity="0.25"/>
+  <circle cx="256" cy="256" r="230" stroke="url(#glow)" stroke-width="6" fill="none" opacity="0.6"/>
+  <!-- Gate shape - hexagonal shield -->
+  <path d="M256 60 L430 160 L430 352 L256 452 L82 352 L82 160 Z" stroke="url(#glow)" stroke-width="10" fill="none" opacity="0.35"/>
+  <path d="M256 90 L408 178 L408 334 L256 422 L104 334 L104 178 Z" stroke="url(#gate)" stroke-width="4" fill="none" opacity="0.5"/>
+  <!-- Central node -->
+  <circle cx="256" cy="256" r="44" fill="url(#glow)"/>
+  <circle cx="256" cy="256" r="28" fill="#1e1b4b" opacity="0.6"/>
+  <circle cx="256" cy="256" r="14" fill="url(#gate)"/>
+  <!-- Connection lines from center to outer nodes -->
+  <line x1="256" y1="212" x2="256" y2="108" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
+  <line x1="256" y1="300" x2="256" y2="404" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
+  <line x1="212" y1="256" x2="120" y2="200" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
+  <line x1="300" y1="256" x2="392" y2="200" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
+  <line x1="212" y1="256" x2="120" y2="312" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
+  <line x1="300" y1="256" x2="392" y2="312" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
+  <!-- Outer nodes - the cluster endpoints -->
+  <circle cx="256" cy="98" r="20" fill="url(#glow)" opacity="0.9"/>
+  <circle cx="256" cy="414" r="20" fill="url(#glow)" opacity="0.9"/>
+  <circle cx="112" cy="194" r="20" fill="url(#glow)" opacity="0.9"/>
+  <circle cx="400" cy="194" r="20" fill="url(#glow)" opacity="0.9"/>
+  <circle cx="112" cy="318" r="20" fill="url(#glow)" opacity="0.9"/>
+  <circle cx="400" cy="318" r="20" fill="url(#glow)" opacity="0.9"/>
+  <!-- Small inner dots on outer nodes -->
+  <circle cx="256" cy="98" r="7" fill="#c4b5fd"/>
+  <circle cx="256" cy="414" r="7" fill="#c4b5fd"/>
+  <circle cx="112" cy="194" r="7" fill="#c4b5fd"/>
+  <circle cx="400" cy="194" r="7" fill="#c4b5fd"/>
+  <circle cx="112" cy="318" r="7" fill="#c4b5fd"/>
+  <circle cx="400" cy="318" r="7" fill="#c4b5fd"/>
+  <!-- Arrow indicators on two lines (gateway arrows) -->
+  <polygon points="256,130 248,146 264,146" fill="url(#gate)" opacity="0.8"/>
+  <polygon points="256,382 248,366 264,366" fill="url(#gate)" opacity="0.8"/>
+  <polygon points="148,206 156,220 142,216" fill="url(#gate)" opacity="0.8"/>
+  <polygon points="364,206 356,220 370,216" fill="url(#gate)" opacity="0.8"/>
+</svg>

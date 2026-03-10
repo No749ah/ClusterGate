@@ -8,10 +8,10 @@ import {
   ScrollText,
   Users,
   Settings,
-  Network,
   ChevronRight,
   Shield,
 } from 'lucide-react'
+import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -64,9 +64,7 @@ export function Sidebar() {
     <aside className="fixed left-0 top-0 z-40 h-screen w-64 flex flex-col bg-sidebar border-r border-sidebar-border">
       {/* Logo */}
       <div className="flex items-center gap-3 px-4 py-5 border-b border-sidebar-border">
-        <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-primary/20 border border-primary/30">
-          <Network className="w-5 h-5 text-primary" />
-        </div>
+        <Logo size={36} />
         <div>
           <h1 className="text-sm font-semibold text-sidebar-foreground">ClusterGate</h1>
           <p className="text-xs text-muted-foreground">Routing Gateway</p>

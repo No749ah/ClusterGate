@@ -5,7 +5,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Network, Loader2, Lock, Mail } from 'lucide-react'
+import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react'
+import { LogoLarge } from '@/components/common/Logo'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 
@@ -47,8 +48,8 @@ export default function LoginPage() {
       <div className="w-full max-w-md relative z-10">
         {/* Logo & Header */}
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
-            <Network className="w-8 h-8 text-primary" />
+          <div className="inline-flex items-center justify-center mb-4">
+            <LogoLarge size={80} />
           </div>
           <h1 className="text-3xl font-bold tracking-tight text-foreground">ClusterGate</h1>
           <p className="mt-2 text-muted-foreground text-sm">

@@ -35,6 +35,8 @@ export default function RootLayout({
       <head>
         <title>ClusterGate — Kubernetes Routing Gateway</title>
         <meta name="description" content="Manage and expose internal Kubernetes services over public domains" />
+        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/logo.svg" />
       </head>
       <body className={inter.className}>
         <QueryClientProvider client={queryClient}>

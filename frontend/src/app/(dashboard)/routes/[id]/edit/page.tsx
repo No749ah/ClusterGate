@@ -59,7 +59,7 @@ export default function EditRoutePage({ params }: { params: { id: string } }) {
         </CardHeader>
         <CardContent>
           <RouteForm
-            defaultValues={route}
+            defaultValues={{ ...route, description: route.description ?? undefined, authValue: route.authValue ?? undefined, webhookSecret: route.webhookSecret ?? undefined, maintenanceMessage: route.maintenanceMessage ?? undefined }}
             onSubmit={handleSubmit}
             isSubmitting={updateRoute.isPending}
             submitLabel="Save Changes"
