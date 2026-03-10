@@ -1,0 +1,175 @@
+name: Build & Publish Docker Images
+
+on:
+  push:
+    branches:
+      - master
+    tags:
+      - 'v*.*'
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ghcr.io/${{ github.repository_owner }}/clustergate-backend
+  FRONTEND_IMAGE: ghcr.io/${{ github.repository_owner }}/clustergate-frontend
+
+jobs:
+  build-backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.BACKEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+          platforms: linux/amd64,linux/arm64
+
+  build-frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix=sha-,format=short
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          target: production
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          platforms: linux/amd64,linux/arm64
+
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-backend, build-frontend]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+      packages: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract tag name
+        id: tag
+        run: echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.TAG }}
+          name: ClusterGate ${{ steps.tag.outputs.TAG }}
+          body: |
+            ## ClusterGate ${{ steps.tag.outputs.TAG }}
+
+            Kubernetes Routing Gateway Platform — expose internal Kubernetes services over public domains.
+
+            ### Docker Images
+
+            ```bash
+            # Backend
+            docker pull ghcr.io/${{ github.repository_owner }}/clustergate-backend:${{ steps.tag.outputs.TAG }}
+
+            # Frontend
+            docker pull ghcr.io/${{ github.repository_owner }}/clustergate-frontend:${{ steps.tag.outputs.TAG }}
+            ```
+
+            ### Quick Start
+
+            ```bash
+            git clone https://github.com/${{ github.repository }}.git
+            cd ClusterGate
+            cp .env.example .env
+            # Edit .env — set JWT_SECRET and POSTGRES_PASSWORD
+            docker compose up -d
+            docker compose exec backend npm run db:migrate
+            docker compose exec backend npm run db:seed
+            ```
+
+            Frontend: http://localhost:3000
+            Backend API: http://localhost:3001
+
+            **Default login:** `admin@clustergate.local` / `Admin@ClusterGate1`
+            > Change credentials immediately after first login!
+
+            ### Kubernetes Deploy
+
+            ```bash
+            helm upgrade --install clustergate ./helm/clustergate \
+              --namespace clustergate \
+              --create-namespace \
+              --set ingress.host=clustergate.example.com \
+              --set backend.secrets.jwtSecret=$(openssl rand -base64 64) \
+              --set postgres.credentials.password=$(openssl rand -base64 32) \
+              --wait
+            ```
+          draft: false
+          prerelease: false
+          generate_release_notes: false
