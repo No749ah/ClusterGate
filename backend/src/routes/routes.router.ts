@@ -67,6 +67,36 @@ router.get('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR, Role.VIEWER]
   }
 })
 
+// GET /api/routes/check-path?path=/xyz — check if a public path is available
+router.get('/check-path', authenticate, async (req, res, next) => {
+  try {
+    const path = req.query.path as string
+    const excludeId = req.query.excludeId as string | undefined
+    if (!path) {
+      return res.json({ success: true, data: { available: true } })
+    }
+
+    const existing = await prisma.route.findFirst({
+      where: {
+        publicPath: path,
+        deletedAt: null,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+      select: { id: true, name: true },
+    })
+
+    res.json({
+      success: true,
+      data: {
+        available: !existing,
+        existingRoute: existing ? { id: existing.id, name: existing.name } : null,
+      },
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
 // GET /api/routes/export
 router.get('/export', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (_req, res, next) => {
   try {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Plus,
@@ -37,6 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { formatRelativeTime } from '@/lib/utils'
 import { Route, RouteStatus } from '@/types'
 
@@ -70,6 +71,7 @@ export default function RoutesPage() {
     pageSize: 20,
   })
 
+  const confirm = useConfirm()
   const publish = usePublishRoute()
   const deactivate = useDeactivateRoute()
   const duplicate = useDuplicateRoute()
@@ -197,10 +199,14 @@ export default function RoutesPage() {
                     onPublish={() => publish.mutate(route.id)}
                     onDeactivate={() => deactivate.mutate(route.id)}
                     onDuplicate={() => duplicate.mutate(route.id)}
-                    onDelete={() => {
-                      if (confirm(`Delete route "${route.name}"? This cannot be undone.`)) {
-                        deleteRoute.mutate(route.id)
-                      }
+                    onDelete={async () => {
+                      const ok = await confirm({
+                        title: 'Delete Route',
+                        description: `Are you sure you want to delete "${route.name}"? This action cannot be undone.`,
+                        confirmLabel: 'Delete',
+                        variant: 'destructive',
+                      })
+                      if (ok) deleteRoute.mutate(route.id)
                     }}
                     isLoading={publish.isPending || deactivate.isPending}
                   />

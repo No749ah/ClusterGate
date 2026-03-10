@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check } from 'lucide-react'
+import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, Shuffle, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -12,6 +12,7 @@ import { Switch } from '@/components/ui/switch'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
+import { api } from '@/lib/api'
 import { RouteFormData } from '@/types'
 
 const routeSchema = z.object({
@@ -46,23 +47,34 @@ type RouteFormValues = z.infer<typeof routeSchema>
 const STEPS = ['Basic Info', 'Advanced', 'Headers', 'Security', 'Maintenance']
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
+function generateRandomPath(): string {
+  const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+  let id = ''
+  for (let i = 0; i < 8; i++) id += chars[Math.floor(Math.random() * chars.length)]
+  return `/r/${id}`
+}
+
 interface RouteFormProps {
   defaultValues?: Partial<RouteFormData>
   onSubmit: (data: RouteFormData) => Promise<void>
   isSubmitting?: boolean
   submitLabel?: string
+  editRouteId?: string
 }
 
-export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel = 'Save Route' }: RouteFormProps) {
+export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel = 'Save Route', editRouteId }: RouteFormProps) {
   const [step, setStep] = useState(0)
   const [tagInput, setTagInput] = useState('')
+  const [pathStatus, setPathStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
+  const [pathConflict, setPathConflict] = useState<string | null>(null)
+  const isNew = !defaultValues?.publicPath
 
   const form = useForm<RouteFormValues>({
     resolver: zodResolver(routeSchema),
     defaultValues: {
       name: defaultValues?.name ?? '',
       description: defaultValues?.description ?? '',
-      publicPath: defaultValues?.publicPath ?? '/',
+      publicPath: defaultValues?.publicPath ?? generateRandomPath(),
       targetUrl: defaultValues?.targetUrl ?? '',
       methods: defaultValues?.methods ?? ['GET', 'POST'],
       tags: defaultValues?.tags ?? [],
@@ -112,6 +124,40 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const corsEnabled = watch('corsEnabled')
   const maintenanceMode = watch('maintenanceMode')
   const authType = watch('authType')
+  const publicPath = watch('publicPath')
+  const [wildcardEnabled, setWildcardEnabled] = useState(
+    defaultValues?.publicPath?.endsWith('/*') ?? false
+  )
+
+  // Debounced path availability check
+  const checkPath = useCallback(async (path: string) => {
+    if (!path || path === '/') {
+      setPathStatus('idle')
+      return
+    }
+    setPathStatus('checking')
+    try {
+      const res = await api.routes.checkPath(path, editRouteId)
+      if (res.data.available) {
+        setPathStatus('available')
+        setPathConflict(null)
+      } else {
+        setPathStatus('taken')
+        setPathConflict(res.data.existingRoute?.name ?? 'another route')
+      }
+    } catch {
+      setPathStatus('idle')
+    }
+  }, [editRouteId])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (publicPath && publicPath.length > 1) {
+        checkPath(publicPath)
+      }
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [publicPath, checkPath])
 
   const toggleMethod = (method: typeof HTTP_METHODS[number]) => {
     const current = methods ?? []
@@ -220,8 +266,59 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             <Field label="Description" error={errors.description?.message}>
               <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
             </Field>
-            <Field label="Public Path" error={errors.publicPath?.message} required hint="e.g. /webhook/xyz">
-              <input {...register('publicPath')} placeholder="/webhook/xyz" className={fieldClass(errors.publicPath)} />
+            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /api/v1/*)' : 'e.g. /webhook/xyz'}>
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <input {...register('publicPath')} placeholder="/webhook/xyz" className={fieldClass(errors.publicPath)} />
+                    {pathStatus === 'checking' && (
+                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+                    )}
+                    {pathStatus === 'available' && (
+                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-green-500" />
+                    )}
+                    {pathStatus === 'taken' && (
+                      <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-destructive" />
+                    )}
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Generate random path"
+                    onClick={() => {
+                      const newPath = generateRandomPath()
+                      setValue('publicPath', wildcardEnabled ? newPath + '/*' : newPath)
+                    }}
+                  >
+                    <Shuffle className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+                {pathStatus === 'taken' && (
+                  <p className="text-xs text-destructive">
+                    This path is already used by &quot;{pathConflict}&quot;
+                  </p>
+                )}
+                <div className="flex items-center justify-between p-2 rounded-md border border-border/50 bg-muted/30">
+                  <div>
+                    <p className="text-xs font-medium">Wildcard routing</p>
+                    <p className="text-xs text-muted-foreground">Match all sub-paths (adds /* suffix)</p>
+                  </div>
+                  <Switch
+                    checked={wildcardEnabled}
+                    onCheckedChange={(v) => {
+                      setWildcardEnabled(v)
+                      const current = form.getValues('publicPath')
+                      if (v && !current.endsWith('/*')) {
+                        const base = current.replace(/\/+$/, '')
+                        setValue('publicPath', base + '/*')
+                      } else if (!v && current.endsWith('/*')) {
+                        setValue('publicPath', current.slice(0, -2))
+                      }
+                    }}
+                  />
+                </div>
+              </div>
             </Field>
             <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal Kubernetes service URL">
               <input

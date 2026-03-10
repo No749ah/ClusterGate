@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useRoute, useRouteStats, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth } from '@/hooks/useRoutes'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
@@ -25,6 +26,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
   const { data: logsData } = useLogs({ routeId: id, pageSize: 20 })
   const { data: versionsData } = useRouteVersions(id)
 
+  const confirm = useConfirm()
   const publish = usePublishRoute()
   const deactivate = useDeactivateRoute()
   const duplicate = useDuplicateRoute()
@@ -299,10 +301,13 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => {
-                            if (confirm(`Restore to version ${v.version}?`)) {
-                              restoreVersion.mutate(v.id)
-                            }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Restore Version',
+                              description: `Restore route configuration to version ${v.version}? The current configuration will be saved as a new version.`,
+                              confirmLabel: 'Restore',
+                            })
+                            if (ok) restoreVersion.mutate(v.id)
                           }}
                         >
                           Restore

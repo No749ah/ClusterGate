@@ -42,8 +42,8 @@ class ApiClient {
     })
 
     if (response.status === 401) {
-      // Redirect to login
-      if (typeof window !== 'undefined') {
+      // Redirect to login, but not if already on login/setup pages
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
         window.location.href = '/login'
       }
       throw new Error('Unauthorized')
@@ -100,6 +100,12 @@ class ApiClient {
 
     changePassword: (currentPassword: string, newPassword: string) =>
       this.post<ApiResponse<null>>('/api/auth/change-password', { currentPassword, newPassword }),
+
+    setupStatus: () =>
+      this.get<ApiResponse<{ isSetupComplete: boolean }>>('/api/auth/setup-status'),
+
+    setup: (data: { email: string; password: string; name: string }) =>
+      this.post<ApiResponse<{ user: User }>>('/api/auth/setup', data),
   }
 
   // ============================================================================
@@ -174,6 +180,14 @@ class ApiClient {
 
     import: (routes: unknown[]) =>
       this.post<ApiResponse<{ created: number; errors: string[] }>>('/api/routes/import', { routes }),
+
+    checkPath: (path: string, excludeId?: string) => {
+      const params = new URLSearchParams({ path })
+      if (excludeId) params.set('excludeId', excludeId)
+      return this.get<ApiResponse<{ available: boolean; existingRoute: { id: string; name: string } | null }>>(
+        `/api/routes/check-path?${params.toString()}`
+      )
+    },
   }
 
   // ============================================================================

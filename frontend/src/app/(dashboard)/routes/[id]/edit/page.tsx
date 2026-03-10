@@ -63,6 +63,7 @@ export default function EditRoutePage({ params }: { params: { id: string } }) {
             onSubmit={handleSubmit}
             isSubmitting={updateRoute.isPending}
             submitLabel="Save Changes"
+            editRouteId={id}
           />
         </CardContent>
       </Card>

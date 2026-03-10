@@ -5,6 +5,7 @@ import { ThemeProvider } from 'next-themes'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { Toaster } from 'sonner'
+import { ConfirmDialogProvider } from '@/components/ui/confirm-dialog'
 import { useState } from 'react'
 import './globals.css'
 
@@ -46,7 +47,9 @@ export default function RootLayout({
             enableSystem={false}
             disableTransitionOnChange
           >
-            {children}
+            <ConfirmDialogProvider>
+              {children}
+            </ConfirmDialogProvider>
             <Toaster richColors position="top-right" closeButton />
             {process.env.NODE_ENV === 'development' && (
               <ReactQueryDevtools initialIsOpen={false} />

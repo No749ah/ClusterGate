@@ -22,8 +22,12 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
 
     // Find best matching route (longest prefix match)
     const route = routes.find((r) => {
-      if (r.publicPath === '/' || r.publicPath === '') return true
-      return path === r.publicPath || path.startsWith(r.publicPath + '/') || path.startsWith(r.publicPath)
+      // Normalize: strip trailing /* for wildcard routes
+      const routePath = r.publicPath.endsWith('/*')
+        ? r.publicPath.slice(0, -2)
+        : r.publicPath
+      if (routePath === '/' || routePath === '') return true
+      return path === routePath || path.startsWith(routePath + '/') || path.startsWith(routePath)
     })
 
     if (!route) {

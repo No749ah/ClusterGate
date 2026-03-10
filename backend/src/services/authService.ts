@@ -100,3 +100,42 @@ export function validatePassword(password: string): { valid: boolean; errors: st
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, BCRYPT_ROUNDS)
 }
+
+export async function isSetupComplete(): Promise<boolean> {
+  const count = await prisma.user.count()
+  return count > 0
+}
+
+export async function setupInitialAdmin(data: {
+  email: string
+  password: string
+  name: string
+}): Promise<LoginResult> {
+  // Only allow if no users exist
+  const existing = await prisma.user.count()
+  if (existing > 0) {
+    throw AppError.forbidden('Setup has already been completed')
+  }
+
+  const validation = validatePassword(data.password)
+  if (!validation.valid) {
+    throw AppError.badRequest('Password does not meet requirements', validation.errors)
+  }
+
+  const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS)
+
+  const user = await prisma.user.create({
+    data: {
+      email: data.email.toLowerCase().trim(),
+      passwordHash,
+      name: data.name,
+      role: 'ADMIN',
+      isActive: true,
+    },
+  })
+
+  const token = signToken({ userId: user.id, email: user.email, role: user.role })
+  const { passwordHash: _, ...safeUser } = user
+
+  return { user: safeUser, token }
+}

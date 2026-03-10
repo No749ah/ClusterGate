@@ -1,12 +1,13 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react'
 import { LogoLarge } from '@/components/common/Logo'
+import { SetupWizard } from '@/components/auth/SetupWizard'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 
@@ -20,6 +21,17 @@ type LoginForm = z.infer<typeof loginSchema>
 export default function LoginPage() {
   const router = useRouter()
   const [showPassword, setShowPassword] = useState(false)
+  const [showSetup, setShowSetup] = useState(false)
+
+  useEffect(() => {
+    api.auth.setupStatus().then((res) => {
+      if (!res.data.isSetupComplete) {
+        setShowSetup(true)
+      }
+    }).catch(() => {
+      // ignore — backend might be unreachable
+    })
+  }, [])
 
   const {
     register,
@@ -42,6 +54,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
+      <SetupWizard open={showSetup} />
       {/* Background gradient */}
       <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-background to-background pointer-events-none" />
 

@@ -50,8 +50,11 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
 
   // Build target path — strip publicPath prefix, keep only the suffix
   let targetPath = req.path
-  if (route.publicPath !== '/' && targetPath.startsWith(route.publicPath)) {
-    targetPath = targetPath.slice(route.publicPath.length) || '/'
+  const basePath = route.publicPath.endsWith('/*')
+    ? route.publicPath.slice(0, -2)
+    : route.publicPath
+  if (basePath !== '/' && targetPath.startsWith(basePath)) {
+    targetPath = targetPath.slice(basePath.length) || '/'
   }
 
   // Apply path rewrite rules (on the suffix)

@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Edit, Trash2, KeyRound, Shield, Eye, UserCheck } from 'lucide-react'
+import { Plus, Edit, Trash2, KeyRound } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -40,6 +41,8 @@ export default function UsersPage() {
   const [editUser, setEditUser] = useState<User | null>(null)
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null)
   const [newPassword, setNewPassword] = useState('')
+
+  const confirm = useConfirm()
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
@@ -171,10 +174,14 @@ export default function UsersPage() {
                           variant="ghost"
                           size="icon-sm"
                           className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            if (confirm(`Remove user ${user.name}?`)) {
-                              deleteMutation.mutate(user.id)
-                            }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Remove User',
+                              description: `Are you sure you want to remove "${user.name}"? This will deactivate their account.`,
+                              confirmLabel: 'Remove',
+                              variant: 'destructive',
+                            })
+                            if (ok) deleteMutation.mutate(user.id)
                           }}
                           title="Delete user"
                         >

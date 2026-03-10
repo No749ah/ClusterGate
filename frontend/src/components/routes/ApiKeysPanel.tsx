@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { Plus, Trash2, Copy, Check, Key, Ban, Loader2 } from 'lucide-react'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from '@/hooks/useApiKeys'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -22,6 +23,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
   const revokeKey = useRevokeApiKey(routeId)
   const deleteKey = useDeleteApiKey(routeId)
 
+  const confirm = useConfirm()
   const [createOpen, setCreateOpen] = useState(false)
   const [keyName, setKeyName] = useState('')
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
@@ -119,10 +121,14 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                     variant="ghost"
                     size="icon-sm"
                     title="Revoke key"
-                    onClick={() => {
-                      if (confirm(`Revoke API key "${key.name}"?`)) {
-                        revokeKey.mutate(key.id)
-                      }
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: 'Revoke API Key',
+                        description: `Revoke "${key.name}"? It will no longer authenticate requests.`,
+                        confirmLabel: 'Revoke',
+                        variant: 'destructive',
+                      })
+                      if (ok) revokeKey.mutate(key.id)
                     }}
                   >
                     <Ban className="w-3.5 h-3.5 text-yellow-500" />
@@ -133,10 +139,14 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                   size="icon-sm"
                   className="text-destructive hover:text-destructive"
                   title="Delete key"
-                  onClick={() => {
-                    if (confirm(`Permanently delete API key "${key.name}"?`)) {
-                      deleteKey.mutate(key.id)
-                    }
+                  onClick={async () => {
+                    const ok = await confirm({
+                      title: 'Delete API Key',
+                      description: `Permanently delete "${key.name}"? This action cannot be undone.`,
+                      confirmLabel: 'Delete',
+                      variant: 'destructive',
+                    })
+                    if (ok) deleteKey.mutate(key.id)
                   }}
                 >
                   <Trash2 className="w-3.5 h-3.5" />

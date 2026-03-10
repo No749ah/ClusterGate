@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { login, getCurrentUser, changePassword } from '../services/authService'
+import { login, getCurrentUser, changePassword, isSetupComplete, setupInitialAdmin } from '../services/authService'
 import { authenticate } from '../middleware/authenticate'
 import { authLimiter } from '../middleware/rateLimiter'
 import { config } from '../config'
@@ -14,6 +14,39 @@ const COOKIE_OPTIONS = {
   maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   path: '/',
 }
+
+// GET /api/auth/setup-status — public, no auth required
+router.get('/setup-status', async (_req: Request, res: Response, next: NextFunction) => {
+  try {
+    const setupDone = await isSetupComplete()
+    res.json({ success: true, data: { isSetupComplete: setupDone } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/setup — create first admin, only works when 0 users exist
+router.post('/setup', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      email: z.string().email('Invalid email address'),
+      password: z.string().min(8, 'Password must be at least 8 characters'),
+      name: z.string().min(1, 'Name is required'),
+    })
+
+    const data = schema.parse(req.body)
+    const result = await setupInitialAdmin(data)
+
+    res.cookie('token', result.token, COOKIE_OPTIONS)
+
+    res.json({
+      success: true,
+      data: { user: result.user },
+    })
+  } catch (err) {
+    next(err)
+  }
+})
 
 // POST /api/auth/login
 router.post('/login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
