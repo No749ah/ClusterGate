@@ -25,6 +25,7 @@ const routeSchema = z.object({
   retryCount: z.coerce.number().int().min(0).max(5).default(0),
   retryDelay: z.coerce.number().int().min(100).max(10000).default(1000),
   stripPrefix: z.boolean().default(false),
+  sslVerify: z.boolean().default(true),
   requestBodyLimit: z.string().default('10mb'),
   addHeaders: z.array(z.object({ key: z.string(), value: z.string() })).default([]),
   removeHeaders: z.string().default(''),
@@ -69,6 +70,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       retryCount: defaultValues?.retryCount ?? 0,
       retryDelay: defaultValues?.retryDelay ?? 1000,
       stripPrefix: defaultValues?.stripPrefix ?? false,
+      sslVerify: defaultValues?.sslVerify ?? true,
       requestBodyLimit: defaultValues?.requestBodyLimit ?? '10mb',
       addHeaders: Object.entries(defaultValues?.addHeaders ?? {}).map(([key, value]) => ({ key, value })),
       removeHeaders: defaultValues?.removeHeaders?.join(', ') ?? '',
@@ -306,11 +308,21 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
               <div>
                 <p className="text-sm font-medium">Strip Prefix</p>
-                <p className="text-xs text-muted-foreground">Remove the public path prefix before forwarding</p>
+                <p className="text-xs text-muted-foreground">Forward to targetUrl root only, no path appended</p>
               </div>
               <Switch
                 checked={watch('stripPrefix')}
                 onCheckedChange={(v) => setValue('stripPrefix', v)}
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+              <div>
+                <p className="text-sm font-medium">Verify SSL Certificate</p>
+                <p className="text-xs text-muted-foreground">Disable for self-signed or internal certificates</p>
+              </div>
+              <Switch
+                checked={watch('sslVerify')}
+                onCheckedChange={(v) => setValue('sslVerify', v)}
               />
             </div>
           </div>

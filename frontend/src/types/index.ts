@@ -42,6 +42,7 @@ export interface Route {
   retryCount: number
   retryDelay: number
   stripPrefix: boolean
+  sslVerify: boolean
   requestBodyLimit: string
 
   // Header rules
@@ -176,6 +177,7 @@ export interface RouteFormData {
   retryCount: number
   retryDelay: number
   stripPrefix: boolean
+  sslVerify: boolean
   requestBodyLimit: string
   addHeaders: Record<string, string>
   removeHeaders: string[]

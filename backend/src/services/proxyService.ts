@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios'
+import https from 'https'
 import { Request, Response } from 'express'
 import { createHmac } from 'crypto'
 import { Route } from '@prisma/client'
@@ -46,10 +47,13 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     }
   }
 
-  // Build target URL
+  // Build target path — strip publicPath prefix, keep only the suffix
   let targetPath = req.path
+  if (route.publicPath !== '/' && targetPath.startsWith(route.publicPath)) {
+    targetPath = targetPath.slice(route.publicPath.length) || '/'
+  }
 
-  // Apply path rewrite rules
+  // Apply path rewrite rules (on the suffix)
   const rewriteRules = (route.rewriteRules as unknown as Array<{ from: string; to: string }>) || []
   for (const rule of rewriteRules) {
     const regex = new RegExp(rule.from)
@@ -59,9 +63,9 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     }
   }
 
-  // Strip prefix if configured
-  if (route.stripPrefix && targetPath.startsWith(route.publicPath)) {
-    targetPath = targetPath.slice(route.publicPath.length) || '/'
+  // stripPrefix: forward to targetUrl root only (no path appended)
+  if (route.stripPrefix) {
+    targetPath = '/'
   }
 
   // Build full target URL
@@ -120,6 +124,7 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     validateStatus: () => true, // Don't throw on any HTTP status
     maxRedirects: 5,
     decompress: true,
+    httpsAgent: new https.Agent({ rejectUnauthorized: (route as any).sslVerify !== false }),
   }
 
   let responseStatus: number | undefined

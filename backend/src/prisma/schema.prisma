@@ -85,6 +85,7 @@ model Route {
   retryCount   Int         @default(0)
   retryDelay   Int         @default(1000)    // ms
   stripPrefix  Boolean     @default(false)
+  sslVerify    Boolean     @default(true)
   requestBodyLimit String  @default("10mb")
 
   // Header rules

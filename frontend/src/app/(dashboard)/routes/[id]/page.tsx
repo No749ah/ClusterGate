@@ -158,6 +158,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
                   </div>
                 } />
                 <InfoRow label="Strip Prefix" value={route.stripPrefix ? 'Yes' : 'No'} />
+                <InfoRow label="SSL Verify" value={route.sslVerify !== false ? 'Enabled' : 'Disabled'} />
               </CardContent>
             </Card>
 

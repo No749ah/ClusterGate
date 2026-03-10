@@ -23,6 +23,7 @@ const routeBodySchema = z.object({
   retryCount: z.number().int().min(0).max(5).default(0),
   retryDelay: z.number().int().min(100).max(10000).default(1000),
   stripPrefix: z.boolean().default(false),
+  sslVerify: z.boolean().default(true),
   requestBodyLimit: z.string().default('10mb'),
   addHeaders: z.record(z.string()).default({}),
   removeHeaders: z.array(z.string()).default([]),
