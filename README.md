@@ -507,6 +507,9 @@ clustergate/
 ├── docker-compose.yml          # Local development
 ├── .env.example                # Environment template
 ├── LICENSE                     # MIT License
+├── CODE_OF_CONDUCT.md          # Community standards
+├── CONTRIBUTING.md             # Contribution guidelines
+├── SECURITY.md                 # Security policy
 └── README.md
 ```
 
@@ -563,10 +566,22 @@ docker push your-registry/clustergate-frontend:latest
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please feel free to open an issue or submit a pull request.
+Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) before opening an issue or pull request.
 
 [![Open Issues](https://img.shields.io/github/issues/No749ah/ClusterGate?color=ef4444)](https://github.com/No749ah/ClusterGate/issues)
 [![Open PRs](https://img.shields.io/github/issues-pr/No749ah/ClusterGate?color=3b82f6)](https://github.com/No749ah/ClusterGate/pulls)
+
+---
+
+## 🛡️ Security
+
+Found a vulnerability? Please **do not** open a public issue. Follow the [Security Policy](SECURITY.md) to report it privately.
+
+---
+
+## 💬 Code of Conduct
+
+This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold it.
 
 ---
 
