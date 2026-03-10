@@ -1,6 +1,5 @@
 'use client'
 
-import { use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
@@ -11,8 +10,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Skeleton } from '@/components/ui/skeleton'
 import { RouteFormData } from '@/types'
 
-export default function EditRoutePage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
+export default function EditRoutePage({ params }: { params: { id: string } }) {
+  const { id } = params
   const router = useRouter()
   const { data: routeData, isLoading } = useRoute(id)
   const updateRoute = useUpdateRoute(id)

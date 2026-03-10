@@ -20,6 +20,9 @@ import routesRouter from './routes/routes.router'
 import usersRouter from './routes/users.router'
 import logsRouter from './routes/logs.router'
 import healthRouter from './routes/health.router'
+import auditRouter from './routes/audit.router'
+import apikeysRouter from './routes/apikeys.router'
+import notificationsRouter from './routes/notifications.router'
 
 const app = express()
 
@@ -86,6 +89,9 @@ app.use('/api/auth', authRouter)
 app.use('/api/routes', auditLogger, routesRouter)
 app.use('/api/users', auditLogger, usersRouter)
 app.use('/api/logs', logsRouter)
+app.use('/api/audit', auditRouter)
+app.use('/api/routes', apikeysRouter)
+app.use('/api/notifications', notificationsRouter)
 
 // ============================================================================
 // Proxy Handler (catch-all for non-API routes)

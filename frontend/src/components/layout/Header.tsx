@@ -3,6 +3,7 @@
 import { useTheme } from 'next-themes'
 import { Moon, Sun, LogOut, User, Settings, KeyRound } from 'lucide-react'
 import { useAuth, useLogout } from '@/hooks/useAuth'
+import { NotificationBell } from '@/components/layout/NotificationBell'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -34,6 +35,9 @@ export function Header({ title }: HeaderProps) {
 
       {/* Actions */}
       <div className="flex items-center gap-2">
+        {/* Notifications */}
+        <NotificationBell />
+
         {/* Theme toggle */}
         <Button
           variant="ghost"

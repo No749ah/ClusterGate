@@ -10,10 +10,10 @@ export function useLogs(filters: LogFilters = {}) {
   })
 }
 
-export function useRecentErrors(routeId?: string) {
+export function useRecentErrors(routeId?: string, limit = 10) {
   return useQuery({
-    queryKey: ['logs', 'errors', routeId],
-    queryFn: () => api.logs.getErrors(routeId, 10),
+    queryKey: ['logs', 'errors', routeId, limit],
+    queryFn: () => api.logs.getErrors(routeId, limit),
     staleTime: 15 * 1000,
   })
 }

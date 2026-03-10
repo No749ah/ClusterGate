@@ -48,12 +48,12 @@ export function auditLogger(req: Request, res: Response, next: NextFunction) {
               action: deriveAction(req.method, req.path),
               resource: req.path.replace(/^\/api\//, '').split('/')[0] || 'unknown',
               resourceId: extractResourceId(req.path),
-              details: {
+              details: JSON.parse(JSON.stringify({
                 method: req.method,
                 path: req.path,
                 body: sanitizeBody(req.body),
                 statusCode: res.statusCode,
-              },
+              })),
               ip: req.ip || req.socket.remoteAddress,
               userAgent: req.get('user-agent'),
             },

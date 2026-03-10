@@ -3,12 +3,16 @@ import {
   RouteFormData,
   RouteFilters,
   LogFilters,
+  AuditLogFilters,
   User,
   RequestLog,
   RouteVersion,
   RouteStats,
   TestResult,
   HealthCheck,
+  AuditLog,
+  ApiKey,
+  Notification,
   ApiResponse,
   PaginatedResponse,
 } from '@/types'
@@ -243,6 +247,62 @@ class ApiClient {
         database: { status: string; latency: number }
         memory: { heapUsed: number; heapTotal: number }
       }>('/api/health/status'),
+  }
+
+  // ============================================================================
+  // Audit Logs
+  // ============================================================================
+
+  audit = {
+    list: (filters: AuditLogFilters = {}) => {
+      const params = new URLSearchParams()
+      if (filters.userId) params.set('userId', filters.userId)
+      if (filters.action) params.set('action', filters.action)
+      if (filters.resource) params.set('resource', filters.resource)
+      if (filters.resourceId) params.set('resourceId', filters.resourceId)
+      if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
+      if (filters.dateTo) params.set('dateTo', filters.dateTo)
+      if (filters.page) params.set('page', String(filters.page))
+      if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
+      const qs = params.toString()
+      return this.get<PaginatedResponse<AuditLog>>(`/api/audit${qs ? `?${qs}` : ''}`)
+    },
+  }
+
+  // ============================================================================
+  // API Keys
+  // ============================================================================
+
+  apiKeys = {
+    list: (routeId: string) =>
+      this.get<ApiResponse<ApiKey[]>>(`/api/routes/${routeId}/api-keys`),
+
+    create: (routeId: string, data: { name: string; expiresAt?: string }) =>
+      this.post<ApiResponse<ApiKey & { key: string }>>(`/api/routes/${routeId}/api-keys`, data),
+
+    revoke: (routeId: string, keyId: string) =>
+      this.post<ApiResponse<null>>(`/api/routes/${routeId}/api-keys/${keyId}/revoke`),
+
+    delete: (routeId: string, keyId: string) =>
+      this.delete<ApiResponse<null>>(`/api/routes/${routeId}/api-keys/${keyId}`),
+  }
+
+  // ============================================================================
+  // Notifications
+  // ============================================================================
+
+  notifications = {
+    list: (unreadOnly = false) =>
+      this.get<ApiResponse<Notification[]>>(`/api/notifications${unreadOnly ? '?unreadOnly=true' : ''}`),
+
+    unreadCount: () =>
+      this.get<ApiResponse<{ count: number }>>('/api/notifications/count'),
+
+    markAsRead: (id: string) =>
+      this.post<ApiResponse<null>>(`/api/notifications/${id}/read`),
+
+    markAllAsRead: () =>
+      this.post<ApiResponse<null>>('/api/notifications/read-all'),
   }
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Eye, EyeOff, Download, Loader2, User, Lock, Info } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -42,6 +42,7 @@ export default function SettingsPage() {
   const [showCurrent, setShowCurrent] = useState(false)
   const [showNew, setShowNew] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
 
   const {
     register,
@@ -206,6 +207,46 @@ export default function SettingsPage() {
               <Button variant="outline" size="sm" onClick={handleExport} disabled={isExporting}>
                 {isExporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Download className="w-4 h-4 mr-2" />}
                 Export
+              </Button>
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+              <div>
+                <p className="text-sm font-medium">Import Routes</p>
+                <p className="text-xs text-muted-foreground">
+                  Upload a JSON file to import routes
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isImporting}
+                onClick={() => {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = '.json'
+                  input.onchange = async (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (!file) return
+                    setIsImporting(true)
+                    try {
+                      const text = await file.text()
+                      const parsed = JSON.parse(text)
+                      const routes = parsed.data ?? parsed.routes ?? parsed
+                      if (!Array.isArray(routes)) throw new Error('Invalid format')
+                      const result = await api.routes.import(routes)
+                      toast.success(`Imported ${result.data.created} routes${result.data.errors.length > 0 ? ` (${result.data.errors.length} errors)` : ''}`)
+                    } catch (err: any) {
+                      toast.error(err.message || 'Failed to import routes')
+                    } finally {
+                      setIsImporting(false)
+                    }
+                  }
+                  input.click()
+                }}
+              >
+                {isImporting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <Upload className="w-4 h-4 mr-2" />}
+                Import
               </Button>
             </div>
           </CardContent>

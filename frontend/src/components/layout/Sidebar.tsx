@@ -10,6 +10,7 @@ import {
   Settings,
   Network,
   ChevronRight,
+  Shield,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -35,6 +36,12 @@ const navItems = [
     href: '/users',
     icon: Users,
     label: 'Users',
+    adminOnly: true,
+  },
+  {
+    href: '/audit',
+    icon: Shield,
+    label: 'Audit Log',
     adminOnly: true,
   },
   {

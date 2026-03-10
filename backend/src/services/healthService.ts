@@ -3,6 +3,7 @@ import { Route, HealthStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { healthCheckStatus } from '../lib/metrics'
+import { notifyHealthDown } from './notificationService'
 
 export async function checkRouteHealth(route: Route): Promise<{
   status: HealthStatus
@@ -52,6 +53,9 @@ export async function checkRouteHealth(route: Route): Promise<{
     })
 
     healthCheckStatus.set({ route_id: route.id, route_name: route.name }, 0)
+
+    // Notify admins about health failure
+    notifyHealthDown(route.id, route.name, error)
 
     return { status: HealthStatus.UNHEALTHY, responseTime, error }
   }

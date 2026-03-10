@@ -96,7 +96,7 @@ export async function getRouteById(id: string) {
   return route
 }
 
-export async function createRoute(data: Prisma.RouteCreateInput, userId: string) {
+export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId: string) {
   // Validate target URL
   try {
     new URL(data.targetUrl as string)
@@ -131,7 +131,7 @@ export async function createRoute(data: Prisma.RouteCreateInput, userId: string)
   return route
 }
 
-export async function updateRoute(id: string, data: Partial<Prisma.RouteUpdateInput>, userId: string) {
+export async function updateRoute(id: string, data: Partial<Prisma.RouteUncheckedUpdateInput>, userId: string) {
   const existing = await prisma.route.findUnique({ where: { id, deletedAt: null } })
   if (!existing) throw AppError.notFound('Route')
 
@@ -225,6 +225,8 @@ export async function duplicateRoute(id: string, userId: string) {
   return prisma.route.create({
     data: {
       ...routeData,
+      addHeaders: routeData.addHeaders ?? undefined,
+      rewriteRules: routeData.rewriteRules ?? undefined,
       name: `${routeData.name} (Copy)`,
       publicPath,
       status: RouteStatus.DRAFT,
@@ -232,7 +234,7 @@ export async function duplicateRoute(id: string, userId: string) {
       version: 1,
       createdById: userId,
       updatedById: userId,
-    },
+    } as Prisma.RouteUncheckedCreateInput,
   })
 }
 
@@ -264,7 +266,7 @@ export async function restoreRouteVersion(routeId: string, versionId: string, us
     ...restoreData
   } = snapshot
 
-  return updateRoute(routeId, restoreData as Prisma.RouteUpdateInput, userId)
+  return updateRoute(routeId, restoreData as Prisma.RouteUncheckedUpdateInput, userId)
 }
 
 export async function exportRoutes() {
@@ -307,7 +309,7 @@ export async function importRoutes(
 
   for (const routeData of routesData) {
     try {
-      await createRoute(routeData as Prisma.RouteCreateInput, userId)
+      await createRoute(routeData as Prisma.RouteUncheckedCreateInput, userId)
       created++
     } catch (err) {
       errors.push((err as Error).message)

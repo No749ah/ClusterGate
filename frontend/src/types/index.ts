@@ -223,3 +223,41 @@ export interface TestResult {
   body?: string
   error?: string
 }
+
+// Audit log
+export interface AuditLog {
+  id: string
+  userId: string | null
+  user: { id: string; name: string; email: string } | null
+  action: string
+  resource: string
+  resourceId: string | null
+  details: Record<string, unknown>
+  ip: string | null
+  userAgent: string | null
+  createdAt: string
+}
+
+export interface AuditLogFilters {
+  userId?: string
+  action?: string
+  resource?: string
+  resourceId?: string
+  dateFrom?: string
+  dateTo?: string
+  page?: number
+  pageSize?: number
+}
+
+// Notification
+export interface Notification {
+  id: string
+  userId: string | null
+  type: string
+  title: string
+  message: string
+  isRead: boolean
+  routeId: string | null
+  route: { id: string; name: string } | null
+  createdAt: string
+}

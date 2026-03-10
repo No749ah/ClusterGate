@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   XCircle,
   Copy,
+  Check,
   Trash2,
   Edit,
   Eye,
@@ -240,6 +241,34 @@ export default function RoutesPage() {
   )
 }
 
+const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+function CopyUrlButton({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false)
+  const url = `${PROXY_BASE}${path}`
+
+  const handleCopy = (e: React.MouseEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    navigator.clipboard.writeText(url)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <button
+      onClick={handleCopy}
+      title={`Copy: ${url}`}
+      className="ml-1 inline-flex items-center opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-foreground"
+    >
+      {copied
+        ? <Check className="w-3 h-3 text-green-500" />
+        : <Copy className="w-3 h-3" />
+      }
+    </button>
+  )
+}
+
 function RouteRow({
   route,
   onPublish,
@@ -258,7 +287,7 @@ function RouteRow({
   const health = route.healthChecks?.[0]
 
   return (
-    <tr className="hover:bg-muted/20 transition-colors">
+    <tr className="hover:bg-muted/20 transition-colors group">
       <td className="px-4 py-3">
         <div>
           <Link
@@ -267,8 +296,9 @@ function RouteRow({
           >
             {route.name}
           </Link>
-          <p className="text-xs text-muted-foreground font-mono mt-0.5">
+          <p className="text-xs text-muted-foreground font-mono mt-0.5 flex items-center gap-0.5">
             {route.publicPath}
+            <CopyUrlButton path={route.publicPath} />
           </p>
           {route.tags.length > 0 && (
             <div className="flex gap-1 mt-1 flex-wrap">

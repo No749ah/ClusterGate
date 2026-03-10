@@ -7,6 +7,7 @@ import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { AppError } from '../lib/errors'
 import { proxyRequestsTotal, proxyRequestDuration } from '../lib/metrics'
+import { notifyRouteError } from './notificationService'
 import { v4 as uuid } from 'uuid'
 
 // Headers to never forward to target
@@ -193,7 +194,7 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
       requestId,
       method: req.method,
       path: req.path,
-      queryParams: req.query as Record<string, unknown>,
+      queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
       requestBody: requestBody?.slice(0, 5000),
       responseStatus,
@@ -205,7 +206,7 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
       userAgent: req.get('user-agent'),
     })
 
-    res.status(responseStatus).send(responseBuffer)
+    res.status(responseStatus || 502).send(responseBuffer)
   } catch (err) {
     duration = Date.now() - start
     error = (err as Error).message
@@ -216,6 +217,9 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
       error: error,
       duration,
     })
+
+    // Notify admins about proxy error
+    notifyRouteError(route.id, route.name, error || 'Unknown error')
 
     proxyRequestsTotal.inc({
       route_id: route.id,
@@ -228,7 +232,7 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
       requestId,
       method: req.method,
       path: req.path,
-      queryParams: req.query as Record<string, unknown>,
+      queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
       requestBody: requestBody?.slice(0, 5000),
       responseStatus,
@@ -294,11 +298,11 @@ async function logRequest(data: {
   requestId: string
   method: string
   path: string
-  queryParams: Record<string, unknown>
+  queryParams: Record<string, string>
   requestHeaders: Record<string, string>
   requestBody?: string
   responseStatus?: number
-  responseHeaders: Record<string, unknown>
+  responseHeaders: Record<string, string>
   responseBody?: string
   duration?: number
   targetUrl: string

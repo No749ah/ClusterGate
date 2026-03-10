@@ -1,11 +1,12 @@
 'use client'
 
-import { use } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw } from 'lucide-react'
 import { useRoute, useRouteStats, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth } from '@/hooks/useRoutes'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
+import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
 import { HealthIndicator } from '@/components/routes/HealthIndicator'
 import { Button } from '@/components/ui/button'
@@ -15,8 +16,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { formatRelativeTime, formatDate, formatDuration, getStatusColor } from '@/lib/utils'
 
-export default function RouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
+const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+export default function RouteDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params
   const { data: routeData, isLoading } = useRoute(id)
   const { data: statsData } = useRouteStats(id)
   const { data: logsData } = useLogs({ routeId: id, pageSize: 20 })
@@ -74,7 +77,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
               <p className="text-sm text-muted-foreground mt-1">{route.description}</p>
             )}
             <div className="flex items-center gap-2 mt-2 font-mono text-sm">
-              <span className="text-muted-foreground">{route.publicPath}</span>
+              <CopyUrlButton path={route.publicPath} />
               <span className="text-muted-foreground">→</span>
               <span className="text-primary">{route.targetUrl}</span>
             </div>
@@ -140,6 +143,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="test">Test</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="api-keys">API Keys</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
@@ -264,6 +268,17 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           </Card>
         </TabsContent>
 
+        <TabsContent value="api-keys" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>API Keys</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ApiKeysPanel routeId={id} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         <TabsContent value="history" className="mt-4">
           <Card>
             <CardHeader><CardTitle>Version History</CardTitle></CardHeader>
@@ -305,6 +320,26 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
         </TabsContent>
       </Tabs>
     </div>
+  )
+}
+
+function CopyUrlButton({ path }: { path: string }) {
+  const [copied, setCopied] = useState(false)
+  const url = `${PROXY_BASE}${path}`
+
+  return (
+    <button
+      onClick={() => {
+        navigator.clipboard.writeText(url)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1500)
+      }}
+      title={`Copy: ${url}`}
+      className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+    >
+      {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+      <span>{url}</span>
+    </button>
   )
 }
 
