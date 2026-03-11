@@ -5,12 +5,71 @@ import { authenticate } from '../middleware/authenticate'
 
 const router = Router()
 
-// GET /api/health/live — Kubernetes liveness probe (public, no sensitive data)
+/**
+ * @openapi
+ * /api/health/live:
+ *   get:
+ *     tags: [Health]
+ *     summary: Liveness probe
+ *     description: Kubernetes liveness probe. Returns 200 if the process is alive.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Process is alive
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ok
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 router.get('/live', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// GET /api/health/ready — Kubernetes readiness probe (public, no sensitive data)
+/**
+ * @openapi
+ * /api/health/ready:
+ *   get:
+ *     tags: [Health]
+ *     summary: Readiness probe
+ *     description: Kubernetes readiness probe. Returns 200 if the database is reachable, 503 otherwise.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Service is ready
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: ready
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       503:
+ *         description: Service is not ready (database unreachable)
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   example: not_ready
+ *                 error:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ */
 router.get('/ready', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`
@@ -24,7 +83,59 @@ router.get('/ready', async (_req, res) => {
   }
 })
 
-// GET /api/health/status — Full system status (requires auth — exposes infra info)
+/**
+ * @openapi
+ * /api/health/status:
+ *   get:
+ *     tags: [Health]
+ *     summary: Full system status
+ *     description: Returns detailed system health including database latency, memory usage, and version info. Requires authentication.
+ *     responses:
+ *       200:
+ *         description: System status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 status:
+ *                   type: string
+ *                   enum: [healthy, degraded]
+ *                 version:
+ *                   type: string
+ *                 uptime:
+ *                   type: integer
+ *                   description: Uptime in seconds
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 database:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [ok, error]
+ *                     latency:
+ *                       type: integer
+ *                       description: Database latency in ms
+ *                 memory:
+ *                   type: object
+ *                   properties:
+ *                     heapUsed:
+ *                       type: integer
+ *                       description: Heap used in MB
+ *                     heapTotal:
+ *                       type: integer
+ *                       description: Total heap in MB
+ *                     rss:
+ *                       type: integer
+ *                       description: RSS in MB
+ *                     external:
+ *                       type: integer
+ *                       description: External memory in MB
+ *       401:
+ *         description: Not authenticated
+ */
 router.get('/status', authenticate, async (_req, res) => {
   const memoryUsage = process.memoryUsage()
   let dbStatus = 'ok'

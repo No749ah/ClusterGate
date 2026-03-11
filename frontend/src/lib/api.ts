@@ -542,6 +542,27 @@ class ApiClient {
     markAllAsRead: () =>
       this.post<ApiResponse<null>>('/api/notifications/read-all'),
   }
+
+  // ============================================================================
+  // Backups
+  // ============================================================================
+
+  backups = {
+    list: () =>
+      this.get<ApiResponse<{ filename: string; size: number; createdAt: string }[]>>('/api/backups'),
+
+    create: () =>
+      this.post<ApiResponse<{ filename: string; size: number; createdAt: string }>>('/api/backups'),
+
+    restore: (filename: string) =>
+      this.post<ApiResponse<null>>(`/api/backups/${encodeURIComponent(filename)}/restore`),
+
+    delete: (filename: string) =>
+      this.delete<ApiResponse<null>>(`/api/backups/${encodeURIComponent(filename)}`),
+
+    downloadUrl: (filename: string) =>
+      `${this.baseUrl}/api/backups/${encodeURIComponent(filename)}/download`,
+  }
 }
 
 export const api = new ApiClient(API_URL)

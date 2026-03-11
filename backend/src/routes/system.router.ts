@@ -15,8 +15,32 @@ router.use(authenticate)
 router.use(authorize(['ADMIN']))
 
 /**
- * GET /api/system/version
- * Returns the current running version.
+ * @openapi
+ * /api/system/version:
+ *   get:
+ *     tags: [System]
+ *     summary: Get current version
+ *     description: Returns the current running version of ClusterGate. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Version info
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     version:
+ *                       type: string
+ *                       example: "1.2.0"
+ *       401:
+ *         description: Not authenticated
+ *       403:
+ *         description: Insufficient permissions
  */
 router.get('/version', (_req, res) => {
   res.json({
@@ -28,8 +52,35 @@ router.get('/version', (_req, res) => {
 })
 
 /**
- * GET /api/system/update-status
- * Return cached update check result (lightweight, no external API call).
+ * @openapi
+ * /api/system/update-status:
+ *   get:
+ *     tags: [System]
+ *     summary: Get cached update status
+ *     description: Returns the cached result of the last update check. No external API call is made. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Cached update status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     hasUpdate:
+ *                       type: boolean
+ *                     currentVersion:
+ *                       type: string
+ *                     latestVersion:
+ *                       type: string
+ *                     checkedAt:
+ *                       type: string
+ *                       format: date-time
  */
 router.get('/update-status', (_req, res) => {
   const cached = getCachedUpdateStatus()
@@ -37,8 +88,31 @@ router.get('/update-status', (_req, res) => {
 })
 
 /**
- * GET /api/system/update-check
- * Check GHCR for newer images (forces a fresh check).
+ * @openapi
+ * /api/system/update-check:
+ *   get:
+ *     tags: [System]
+ *     summary: Check for updates
+ *     description: Checks GHCR for newer container images (forces a fresh check). Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Update check result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     hasUpdate:
+ *                       type: boolean
+ *                     currentVersion:
+ *                       type: string
+ *                     latestVersion:
+ *                       type: string
  */
 router.get('/update-check', async (_req, res, next) => {
   try {
@@ -50,8 +124,19 @@ router.get('/update-check', async (_req, res, next) => {
 })
 
 /**
- * POST /api/system/update
- * Trigger update with SSE progress stream.
+ * @openapi
+ * /api/system/update:
+ *   post:
+ *     tags: [System]
+ *     summary: Trigger update
+ *     description: Triggers an update with SSE progress stream. Response is a Server-Sent Events stream. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: SSE stream of update progress events
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
  */
 router.post('/update', async (_req, res) => {
   res.setHeader('Content-Type', 'text/event-stream')
@@ -77,8 +162,43 @@ router.post('/update', async (_req, res) => {
 })
 
 /**
- * GET /api/system/config
- * Get current runtime configuration (admin only).
+ * @openapi
+ * /api/system/config:
+ *   get:
+ *     tags: [System]
+ *     summary: Get runtime configuration
+ *     description: Returns current runtime configuration values. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Runtime config
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     logRetentionDays:
+ *                       type: integer
+ *                     proxyTimeout:
+ *                       type: integer
+ *                     rateLimitWindowMs:
+ *                       type: integer
+ *                     rateLimitMax:
+ *                       type: integer
+ *                     authRateLimitMax:
+ *                       type: integer
+ *                     metricsEnabled:
+ *                       type: boolean
+ *                     logLevel:
+ *                       type: string
+ *                     jwtExpiresIn:
+ *                       type: string
+ *                     nodeEnv:
+ *                       type: string
  */
 router.get('/config', (_req, res) => {
   res.json({
@@ -98,8 +218,72 @@ router.get('/config', (_req, res) => {
 })
 
 /**
- * GET /api/system/stats
- * Get database and system statistics.
+ * @openapi
+ * /api/system/stats:
+ *   get:
+ *     tags: [System]
+ *     summary: Get system statistics
+ *     description: Returns database counts, system info, memory usage, and DB size. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: System statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     counts:
+ *                       type: object
+ *                       properties:
+ *                         users:
+ *                           type: integer
+ *                         routes:
+ *                           type: integer
+ *                         activeRoutes:
+ *                           type: integer
+ *                         requestLogs:
+ *                           type: integer
+ *                         auditLogs:
+ *                           type: integer
+ *                         apiKeys:
+ *                           type: integer
+ *                         healthChecks:
+ *                           type: integer
+ *                     database:
+ *                       type: object
+ *                       properties:
+ *                         size:
+ *                           type: string
+ *                           nullable: true
+ *                         oldestLog:
+ *                           type: string
+ *                           format: date-time
+ *                           nullable: true
+ *                     system:
+ *                       type: object
+ *                       properties:
+ *                         uptime:
+ *                           type: integer
+ *                         version:
+ *                           type: string
+ *                         nodeVersion:
+ *                           type: string
+ *                         platform:
+ *                           type: string
+ *                         memory:
+ *                           type: object
+ *                           properties:
+ *                             heapUsed:
+ *                               type: integer
+ *                             heapTotal:
+ *                               type: integer
+ *                             rss:
+ *                               type: integer
  */
 router.get('/stats', async (_req, res, next) => {
   try {
@@ -174,8 +358,27 @@ router.get('/stats', async (_req, res, next) => {
 })
 
 /**
- * POST /api/system/health-check
- * Trigger health checks for all active routes immediately.
+ * @openapi
+ * /api/system/health-check:
+ *   post:
+ *     tags: [System]
+ *     summary: Trigger health checks
+ *     description: Runs health checks for all active routes immediately. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Health checks completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     message:
+ *                       type: string
  */
 router.post('/health-check', async (_req, res, next) => {
   try {
@@ -187,8 +390,38 @@ router.post('/health-check', async (_req, res, next) => {
 })
 
 /**
- * POST /api/system/cleanup-logs
- * Manually trigger log cleanup with optional custom retention days.
+ * @openapi
+ * /api/system/cleanup-logs:
+ *   post:
+ *     tags: [System]
+ *     summary: Clean up request logs
+ *     description: Manually triggers log cleanup with optional custom retention period. Requires ADMIN role.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               days:
+ *                 type: integer
+ *                 description: Retention period in days (defaults to configured value)
+ *     responses:
+ *       200:
+ *         description: Cleanup result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deleted:
+ *                       type: integer
+ *                     retentionDays:
+ *                       type: integer
  */
 router.post('/cleanup-logs', async (req, res, next) => {
   try {
@@ -201,8 +434,39 @@ router.post('/cleanup-logs', async (req, res, next) => {
 })
 
 /**
- * POST /api/system/cleanup-health-checks
- * Clean old health check records.
+ * @openapi
+ * /api/system/cleanup-health-checks:
+ *   post:
+ *     tags: [System]
+ *     summary: Clean up health check records
+ *     description: Deletes old health check records. Requires ADMIN role.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               days:
+ *                 type: integer
+ *                 default: 30
+ *                 description: Retention period in days
+ *     responses:
+ *       200:
+ *         description: Cleanup result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deleted:
+ *                       type: integer
+ *                     retentionDays:
+ *                       type: integer
  */
 router.post('/cleanup-health-checks', async (req, res, next) => {
   try {
@@ -219,8 +483,39 @@ router.post('/cleanup-health-checks', async (req, res, next) => {
 })
 
 /**
- * POST /api/system/cleanup-audit-logs
- * Clean old audit log records.
+ * @openapi
+ * /api/system/cleanup-audit-logs:
+ *   post:
+ *     tags: [System]
+ *     summary: Clean up audit logs
+ *     description: Deletes old audit log records. Requires ADMIN role.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               days:
+ *                 type: integer
+ *                 default: 365
+ *                 description: Retention period in days
+ *     responses:
+ *       200:
+ *         description: Cleanup result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     deleted:
+ *                       type: integer
+ *                     retentionDays:
+ *                       type: integer
  */
 router.post('/cleanup-audit-logs', async (req, res, next) => {
   try {
@@ -237,8 +532,31 @@ router.post('/cleanup-audit-logs', async (req, res, next) => {
 })
 
 /**
- * GET /api/system/audit-export
- * Export audit logs as JSON.
+ * @openapi
+ * /api/system/audit-export:
+ *   get:
+ *     tags: [System]
+ *     summary: Export audit logs
+ *     description: Exports up to 10,000 audit logs as a JSON file download. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: JSON file with audit logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 exportedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 count:
+ *                   type: integer
  */
 router.get('/audit-export', async (req, res, next) => {
   try {
@@ -255,11 +573,29 @@ router.get('/audit-export', async (req, res, next) => {
 })
 
 /**
- * POST /api/system/force-logout-all
- * Invalidate all user sessions by updating a global logout timestamp.
- * NOTE: This approach is simple — it bumps each user's updatedAt which
- * the JWT validation can check against. For full session invalidation,
- * we'd need a session store.
+ * @openapi
+ * /api/system/force-logout-all:
+ *   post:
+ *     tags: [System]
+ *     summary: Force logout all users
+ *     description: Invalidates all user sessions except the requesting admin's. Other users will need to re-authenticate. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Logout result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     affectedUsers:
+ *                       type: integer
+ *                     message:
+ *                       type: string
  */
 router.post('/force-logout-all', async (req, res, next) => {
   try {

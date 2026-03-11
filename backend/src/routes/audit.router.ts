@@ -6,7 +6,96 @@ import { safePageSize } from '../lib/security'
 
 const router = Router()
 
-// GET /api/audit - List audit logs (admin only)
+/**
+ * @openapi
+ * /api/audit:
+ *   get:
+ *     tags: [Audit]
+ *     summary: List audit logs
+ *     description: Returns paginated audit logs with optional filtering. Requires ADMIN role.
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: action
+ *         schema:
+ *           type: string
+ *         description: Filter by action type (e.g., auth.login, route.create)
+ *       - in: query
+ *         name: resource
+ *         schema:
+ *           type: string
+ *         description: Filter by resource type (e.g., auth, route, user)
+ *       - in: query
+ *         name: resourceId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *     responses:
+ *       200:
+ *         description: Paginated audit logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       userId:
+ *                         type: string
+ *                         nullable: true
+ *                       action:
+ *                         type: string
+ *                       resource:
+ *                         type: string
+ *                       resourceId:
+ *                         type: string
+ *                         nullable: true
+ *                       details:
+ *                         type: object
+ *                       ip:
+ *                         type: string
+ *                       userAgent:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 meta:
+ *                   $ref: '#/components/schemas/PaginationMeta'
+ *       400:
+ *         description: Invalid date parameters
+ *       403:
+ *         description: Insufficient permissions
+ */
 router.get('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     const {

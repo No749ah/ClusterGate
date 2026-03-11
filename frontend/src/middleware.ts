@@ -12,7 +12,8 @@ export function middleware(request: NextRequest) {
       pathname.startsWith('/users') ||
       pathname.startsWith('/settings') ||
       pathname.startsWith('/audit') ||
-      pathname.startsWith('/analytics')) {
+      pathname.startsWith('/analytics') ||
+      pathname.startsWith('/backups')) {
     if (!token) {
       const loginUrl = new URL('/login', request.url)
       loginUrl.searchParams.set('redirect', pathname)

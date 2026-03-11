@@ -21,7 +21,31 @@ const COOKIE_OPTIONS = {
   path: '/',
 }
 
-// GET /api/auth/setup-status — public, no auth required
+/**
+ * @openapi
+ * /api/auth/setup-status:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Check setup status
+ *     description: Returns whether the initial admin setup has been completed. Public endpoint.
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Setup status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                   example: true
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     isSetupComplete:
+ *                       type: boolean
+ */
 router.get('/setup-status', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const setupDone = await isSetupComplete()
@@ -31,7 +55,53 @@ router.get('/setup-status', async (_req: Request, res: Response, next: NextFunct
   }
 })
 
-// POST /api/auth/setup — create first admin, only works when 0 users exist
+/**
+ * @openapi
+ * /api/auth/setup:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Initial admin setup
+ *     description: Creates the first admin account. Only works when zero users exist in the database.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password, name]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *               name:
+ *                 type: string
+ *                 minLength: 1
+ *     responses:
+ *       200:
+ *         description: Admin account created, session cookie set
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Validation error or setup already completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/setup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
@@ -63,7 +133,45 @@ router.post('/setup', authLimiter, async (req: Request, res: Response, next: Nex
   }
 })
 
-// GET /api/auth/invite/:token — validate invite token (public)
+/**
+ * @openapi
+ * /api/auth/invite/{token}:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Validate invite token
+ *     description: Validates an invitation token and returns invite details. Public endpoint.
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: token
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Invitation token
+ *     responses:
+ *       200:
+ *         description: Invite details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     email:
+ *                       type: string
+ *                     role:
+ *                       type: string
+ *       404:
+ *         description: Invalid or expired token
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.get('/invite/:token', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const invite = await validateInvite(req.params.token)
@@ -73,7 +181,50 @@ router.get('/invite/:token', async (req: Request, res: Response, next: NextFunct
   }
 })
 
-// POST /api/auth/accept-invite — accept invite and create account (public)
+/**
+ * @openapi
+ * /api/auth/accept-invite:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Accept invitation
+ *     description: Accepts an invitation and creates a new user account. Public endpoint.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token, name, password]
+ *             properties:
+ *               token:
+ *                 type: string
+ *               name:
+ *                 type: string
+ *                 minLength: 1
+ *               password:
+ *                 type: string
+ *                 minLength: 8
+ *     responses:
+ *       200:
+ *         description: Account created, session cookie set
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       400:
+ *         description: Validation error
+ *       404:
+ *         description: Invalid or expired invitation token
+ */
 router.post('/accept-invite', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
@@ -103,7 +254,55 @@ router.post('/accept-invite', authLimiter, async (req: Request, res: Response, n
   }
 })
 
-// POST /api/auth/login
+/**
+ * @openapi
+ * /api/auth/login:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Login
+ *     description: Authenticates a user with email and password. If 2FA is enabled, returns a temporary token for the 2FA verification step instead of a session cookie.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [email, password]
+ *             properties:
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               password:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Login successful or 2FA required
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *                     requiresTwoFactor:
+ *                       type: boolean
+ *                       description: Present and true when 2FA verification is needed
+ *                     tempToken:
+ *                       type: string
+ *                       description: Short-lived token for 2FA verification step
+ *       401:
+ *         description: Invalid credentials
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/login', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
@@ -168,7 +367,50 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
   }
 })
 
-// POST /api/auth/2fa/verify — verify 2FA code during login
+/**
+ * @openapi
+ * /api/auth/2fa/verify:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Verify 2FA code during login
+ *     description: Completes the login flow by verifying a TOTP code. Requires the temporary token received from the login endpoint.
+ *     security: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [tempToken, code]
+ *             properties:
+ *               tempToken:
+ *                 type: string
+ *                 description: Temporary token from login response
+ *               code:
+ *                 type: string
+ *                 description: TOTP verification code
+ *     responses:
+ *       200:
+ *         description: 2FA verified, session cookie set
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     user:
+ *                       $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Invalid or expired token/code
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ */
 router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
@@ -246,7 +488,35 @@ router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next
   }
 })
 
-// POST /api/auth/2fa/setup — initiate 2FA setup (authenticated)
+/**
+ * @openapi
+ * /api/auth/2fa/setup:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Initiate 2FA setup
+ *     description: Generates a TOTP secret and QR code URI for setting up two-factor authentication.
+ *     responses:
+ *       200:
+ *         description: 2FA setup data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     uri:
+ *                       type: string
+ *                       description: otpauth:// URI for QR code
+ *                     secret:
+ *                       type: string
+ *                       description: Base32-encoded secret
+ *       401:
+ *         description: Not authenticated
+ */
 router.post('/2fa/setup', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const result = await generateSetup(req.user!.userId)
@@ -269,7 +539,45 @@ router.post('/2fa/setup', authenticate, async (req: Request, res: Response, next
   }
 })
 
-// POST /api/auth/2fa/enable — verify token and enable 2FA (authenticated)
+/**
+ * @openapi
+ * /api/auth/2fa/enable:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Enable 2FA
+ *     description: Verifies a TOTP token and enables two-factor authentication. Returns recovery codes.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [token]
+ *             properties:
+ *               token:
+ *                 type: string
+ *                 minLength: 6
+ *                 description: TOTP verification code
+ *     responses:
+ *       200:
+ *         description: 2FA enabled, recovery codes returned
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     recoveryCodes:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       401:
+ *         description: Not authenticated or invalid code
+ */
 router.post('/2fa/enable', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
@@ -297,7 +605,39 @@ router.post('/2fa/enable', authenticate, async (req: Request, res: Response, nex
   }
 })
 
-// POST /api/auth/2fa/disable — disable 2FA (authenticated, requires password)
+/**
+ * @openapi
+ * /api/auth/2fa/disable:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Disable 2FA
+ *     description: Disables two-factor authentication. Requires the user's password for confirmation.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [password]
+ *             properties:
+ *               password:
+ *                 type: string
+ *                 description: Current account password for confirmation
+ *     responses:
+ *       200:
+ *         description: 2FA disabled
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Not authenticated or incorrect password
+ */
 router.post('/2fa/disable', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
@@ -325,7 +665,28 @@ router.post('/2fa/disable', authenticate, async (req: Request, res: Response, ne
   }
 })
 
-// POST /api/auth/logout
+/**
+ * @openapi
+ * /api/auth/logout:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Logout
+ *     description: Clears the session cookie and logs the user out.
+ *     responses:
+ *       200:
+ *         description: Logged out
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       401:
+ *         description: Not authenticated
+ */
 router.post('/logout', authenticate, (req: Request, res: Response) => {
   createAuditLog({
     userId: req.user!.userId,
@@ -340,7 +701,28 @@ router.post('/logout', authenticate, (req: Request, res: Response) => {
   res.json({ success: true, message: 'Logged out successfully' })
 })
 
-// GET /api/auth/me
+/**
+ * @openapi
+ * /api/auth/me:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Get current user
+ *     description: Returns the profile of the currently authenticated user.
+ *     responses:
+ *       200:
+ *         description: Current user data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   $ref: '#/components/schemas/User'
+ *       401:
+ *         description: Not authenticated
+ */
 router.get('/me', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const user = await getCurrentUser(req.user!.userId)
@@ -350,7 +732,43 @@ router.get('/me', authenticate, async (req: Request, res: Response, next: NextFu
   }
 })
 
-// POST /api/auth/change-password
+/**
+ * @openapi
+ * /api/auth/change-password:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Change password
+ *     description: Changes the current user's password. Clears the session cookie, requiring re-login.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [currentPassword, newPassword]
+ *             properties:
+ *               currentPassword:
+ *                 type: string
+ *               newPassword:
+ *                 type: string
+ *                 minLength: 8
+ *     responses:
+ *       200:
+ *         description: Password changed, session cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Validation error
+ *       401:
+ *         description: Not authenticated or incorrect current password
+ */
 router.post('/change-password', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({

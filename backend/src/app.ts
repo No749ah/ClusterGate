@@ -3,6 +3,8 @@ import helmet from 'helmet'
 import cors from 'cors'
 import cookieParser from 'cookie-parser'
 import compression from 'compression'
+import swaggerUi from 'swagger-ui-express'
+import { swaggerSpec } from './lib/swagger'
 import { config } from './config'
 import { logger } from './lib/logger'
 import { getVersion } from './lib/version'
@@ -26,6 +28,7 @@ import apikeysRouter from './routes/apikeys.router'
 import notificationsRouter from './routes/notifications.router'
 import systemRouter from './routes/system.router'
 import analyticsRouter from './routes/analytics.router'
+import backupRouter from './routes/backup.router'
 
 const app = express()
 
@@ -89,6 +92,18 @@ app.get('/metrics', async (req, res) => {
 })
 
 // ============================================================================
+// Swagger / OpenAPI Docs
+// ============================================================================
+
+app.get('/api/docs.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/json')
+  res.send(swaggerSpec)
+})
+app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+  customSiteTitle: 'ClusterGate API Docs',
+}))
+
+// ============================================================================
 // API Routes
 // ============================================================================
 
@@ -102,6 +117,7 @@ app.use('/api/routes', auditLogger, apikeysRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/system', systemRouter)
 app.use('/api/analytics', analyticsRouter)
+app.use('/api/backups', auditLogger, backupRouter)
 
 // ============================================================================
 // Proxy Handler — all proxy routes live under /r/ prefix

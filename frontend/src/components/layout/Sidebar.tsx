@@ -15,6 +15,7 @@ import {
   PanelLeftOpen,
   LogOut,
   BarChart3,
+  HardDrive,
 } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
@@ -54,6 +55,12 @@ const navItems = [
     href: '/audit',
     icon: Shield,
     label: 'Audit Log',
+    adminOnly: true,
+  },
+  {
+    href: '/backups',
+    icon: HardDrive,
+    label: 'Backups',
     adminOnly: true,
   },
   {

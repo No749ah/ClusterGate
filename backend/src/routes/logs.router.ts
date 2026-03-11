@@ -7,7 +7,87 @@ import { safePageSize } from '../lib/security'
 
 const router = Router()
 
-// GET /api/logs
+/**
+ * @openapi
+ * /api/logs:
+ *   get:
+ *     tags: [Logs]
+ *     summary: List request logs
+ *     description: Returns paginated request logs with optional filtering by route, method, status, and date range.
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: pageSize
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *       - in: query
+ *         name: routeId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: method
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: statusType
+ *         schema:
+ *           type: string
+ *           enum: [success, error]
+ *       - in: query
+ *         name: dateFrom
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *       - in: query
+ *         name: dateTo
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *     responses:
+ *       200:
+ *         description: Paginated request logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: string
+ *                       routeId:
+ *                         type: string
+ *                       method:
+ *                         type: string
+ *                       path:
+ *                         type: string
+ *                       statusCode:
+ *                         type: integer
+ *                       responseTime:
+ *                         type: integer
+ *                       ip:
+ *                         type: string
+ *                       createdAt:
+ *                         type: string
+ *                         format: date-time
+ *                 meta:
+ *                   $ref: '#/components/schemas/PaginationMeta'
+ *       400:
+ *         description: Invalid date parameters
+ *       401:
+ *         description: Not authenticated
+ */
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { page = '1', pageSize = '50', routeId, method, statusType, dateFrom, dateTo } = req.query
@@ -39,7 +119,40 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 })
 
-// GET /api/logs/errors
+/**
+ * @openapi
+ * /api/logs/errors:
+ *   get:
+ *     tags: [Logs]
+ *     summary: Get recent errors
+ *     description: Returns recent error log entries, optionally filtered by route.
+ *     parameters:
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *           maximum: 100
+ *       - in: query
+ *         name: routeId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *     responses:
+ *       200:
+ *         description: Recent error logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ */
 router.get('/errors', authenticate, async (req, res, next) => {
   try {
     const { limit = '10', routeId } = req.query
@@ -53,7 +166,46 @@ router.get('/errors', authenticate, async (req, res, next) => {
   }
 })
 
-// GET /api/logs/daily
+/**
+ * @openapi
+ * /api/logs/daily:
+ *   get:
+ *     tags: [Logs]
+ *     summary: Get daily request counts
+ *     description: Returns daily aggregated request counts for charting.
+ *     parameters:
+ *       - in: query
+ *         name: routeId
+ *         schema:
+ *           type: string
+ *           format: uuid
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           default: 7
+ *           minimum: 1
+ *           maximum: 365
+ *     responses:
+ *       200:
+ *         description: Daily request counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       date:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ */
 router.get('/daily', authenticate, async (req, res, next) => {
   try {
     const { routeId, days = '7' } = req.query
@@ -68,7 +220,29 @@ router.get('/daily', authenticate, async (req, res, next) => {
   }
 })
 
-// DELETE /api/logs/cleanup
+/**
+ * @openapi
+ * /api/logs/cleanup:
+ *   delete:
+ *     tags: [Logs]
+ *     summary: Clean old logs
+ *     description: Deletes request logs older than the configured retention period. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Cleanup result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                   example: Deleted 150 old log entries
+ *       403:
+ *         description: Insufficient permissions
+ */
 router.delete('/cleanup', authenticate, authorize([Role.ADMIN]), async (_req, res, next) => {
   try {
     const count = await logService.cleanOldLogs(config.LOG_RETENTION_DAYS)
