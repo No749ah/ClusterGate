@@ -33,15 +33,27 @@ function LoginContent() {
   const queryClient = useQueryClient()
   const [showPassword, setShowPassword] = useState(false)
   const [showSetup, setShowSetup] = useState(false)
+  const [checkingSetup, setCheckingSetup] = useState(true)
 
   useEffect(() => {
-    api.auth.setupStatus().then((res) => {
-      if (!res.data.isSetupComplete) {
-        setShowSetup(true)
-      }
-    }).catch(() => {
-      // ignore — backend might be unreachable
-    })
+    let retries = 0
+    const checkSetup = () => {
+      api.auth.setupStatus().then((res) => {
+        if (!res.data.isSetupComplete) {
+          setShowSetup(true)
+        }
+        setCheckingSetup(false)
+      }).catch(() => {
+        // Retry up to 3 times (backend might still be starting)
+        if (retries < 3) {
+          retries++
+          setTimeout(checkSetup, 1500)
+        } else {
+          setCheckingSetup(false)
+        }
+      })
+    }
+    checkSetup()
   }, [])
 
   const {
@@ -62,6 +74,14 @@ function LoginContent() {
     } catch (err: any) {
       toast.error(err.message || 'Login failed. Please check your credentials.')
     }
+  }
+
+  if (checkingSetup) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-6 h-6 animate-spin text-primary" />
+      </div>
+    )
   }
 
   return (
@@ -166,7 +186,7 @@ function LoginContent() {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          ClusterGate v1.0.0 — Kubernetes Routing Gateway Platform
+          ClusterGate v1.0.1 — Kubernetes Routing Gateway Platform
         </p>
       </div>
     </div>
