@@ -186,7 +186,7 @@ function LoginContent() {
 
         {/* Footer */}
         <p className="text-center text-xs text-muted-foreground mt-6">
-          ClusterGate v1.0.5 — Kubernetes Routing Gateway Platform
+          ClusterGate v1.0.6 — Kubernetes Routing Gateway Platform
         </p>
       </div>
     </div>

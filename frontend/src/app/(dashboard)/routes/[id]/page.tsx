@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { RequestLog, RouteVersion } from '@/types'
 import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard } from '@/lib/utils'
 
-const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || ''
+// Removed PROXY_BASE - using window.location.origin instead
 
 export default function RouteDetailPage({ params }: { params: { id: string } }) {
   const { id } = params
@@ -363,7 +363,8 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
 
 function CopyUrlButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
-  const url = `${PROXY_BASE}${path}`
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const url = `${origin}${path}`
 
   const truncateUrl = (u: string, maxLen = 50) => {
     if (u.length <= maxLen) return u

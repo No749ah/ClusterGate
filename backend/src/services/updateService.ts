@@ -1,10 +1,22 @@
 import axios from 'axios'
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { logger } from '../lib/logger'
 
 const GHCR_OWNER = 'no749ah'
 const BACKEND_IMAGE = `ghcr.io/${GHCR_OWNER}/clustergate-backend`
 const FRONTEND_IMAGE = `ghcr.io/${GHCR_OWNER}/clustergate-frontend`
-const CURRENT_VERSION = process.env.npm_package_version || '1.0.0'
+
+function getVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'))
+    return pkg.version || '1.0.0'
+  } catch {
+    return process.env.npm_package_version || '1.0.0'
+  }
+}
+
+const CURRENT_VERSION = getVersion()
 
 // Docker socket path (mounted from host)
 const DOCKER_SOCKET = '/var/run/docker.sock'

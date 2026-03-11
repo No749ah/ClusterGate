@@ -247,11 +247,10 @@ export default function RoutesPage() {
   )
 }
 
-const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || ''
-
 function CopyUrlButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
-  const url = `${PROXY_BASE}${path}`
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const url = `${origin}${path}`
 
   const handleCopy = (e: React.MouseEvent) => {
     e.preventDefault()

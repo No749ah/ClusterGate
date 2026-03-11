@@ -7,7 +7,8 @@ export function useRoutes(filters: RouteFilters = {}) {
   return useQuery({
     queryKey: ['routes', filters],
     queryFn: () => api.routes.list(filters),
-    staleTime: 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
     placeholderData: keepPreviousData,
   })
 }
@@ -17,7 +18,8 @@ export function useRoute(id: string) {
     queryKey: ['routes', id],
     queryFn: () => api.routes.getById(id),
     enabled: !!id,
-    staleTime: 60 * 1000,
+    staleTime: 15 * 1000,
+    refetchInterval: 15 * 1000,
   })
 }
 
@@ -127,8 +129,7 @@ export function useRouteHealth(id: string) {
   return useMutation({
     mutationFn: () => api.routes.health(id),
     onSuccess: () => {
-      // Refetch route to update the health indicator
-      queryClient.invalidateQueries({ queryKey: ['route', id] })
+      queryClient.invalidateQueries({ queryKey: ['routes', id] })
     },
     onError: (err: any) => {
       toast.error(err.message || 'Health check failed')
@@ -141,7 +142,7 @@ export function useRouteVersions(id: string) {
     queryKey: ['routes', id, 'versions'],
     queryFn: () => api.routes.getVersions(id),
     enabled: !!id,
-    staleTime: 60 * 1000,
+    staleTime: 30 * 1000,
   })
 }
 
@@ -164,7 +165,8 @@ export function useRouteUptime(id: string) {
   return useQuery({
     queryKey: ['route-uptime', id],
     queryFn: () => api.routes.getUptime(id),
-    staleTime: 5 * 60 * 1000,
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
   })
 }
 
@@ -173,7 +175,7 @@ export function useRouteStats(id: string) {
     queryKey: ['routes', id, 'stats'],
     queryFn: () => api.routes.getStats(id),
     enabled: !!id,
-    staleTime: 60 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 30 * 1000,
+    refetchInterval: 30 * 1000,
   })
 }

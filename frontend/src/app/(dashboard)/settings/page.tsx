@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -45,6 +45,7 @@ export default function SettingsPage() {
   const [isImporting, setIsImporting] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [currentVersion, setCurrentVersion] = useState('...')
   const [updateInfo, setUpdateInfo] = useState<{
     currentVersion: string
     backend: { latestTag: string | null; updateAvailable: boolean }
@@ -52,6 +53,12 @@ export default function SettingsPage() {
     updateAvailable: boolean
     checkedAt: string
   } | null>(null)
+
+  useEffect(() => {
+    api.system.version().then((res) => {
+      setCurrentVersion(res.data.version)
+    }).catch(() => {})
+  }, [])
 
   const {
     register,
@@ -309,7 +316,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-muted-foreground">Version</p>
-              <p className="font-medium">v{updateInfo?.currentVersion || '1.0.0'}</p>
+              <p className="font-medium">v{updateInfo?.currentVersion || currentVersion}</p>
             </div>
             <div>
               <p className="text-muted-foreground">API</p>
