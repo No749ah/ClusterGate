@@ -87,7 +87,7 @@ export async function getOverview(routeId?: string, days = 7): Promise<OverviewR
       PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY duration) AS p50,
       PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration) AS p95,
       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration) AS p99
-    FROM "RequestLog"
+    FROM "request_logs"
     WHERE "createdAt" >= ${since}
       ${routeFilter}
       AND duration IS NOT NULL
@@ -138,7 +138,7 @@ export async function getLatencyTrend(
       PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration) AS p95,
       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration) AS p99,
       COUNT(*)::bigint AS count
-    FROM "RequestLog"
+    FROM "request_logs"
     WHERE "createdAt" >= ${since}
       ${routeFilter}
       AND duration IS NOT NULL
@@ -173,7 +173,7 @@ export async function getErrorRateTrend(routeId?: string, days = 7): Promise<Err
       date_trunc('hour', "createdAt") AS bucket,
       COUNT(*)::bigint AS total,
       COUNT(*) FILTER (WHERE "responseStatus" >= 400 OR error IS NOT NULL)::bigint AS errors
-    FROM "RequestLog"
+    FROM "request_logs"
     WHERE "createdAt" >= ${since}
       ${routeFilter}
     GROUP BY bucket
@@ -210,7 +210,7 @@ export async function getTrafficHeatmap(routeId?: string, days = 28): Promise<He
       EXTRACT(DOW FROM "createdAt")::int AS dow,
       EXTRACT(HOUR FROM "createdAt")::int AS hour,
       COUNT(*)::bigint AS count
-    FROM "RequestLog"
+    FROM "request_logs"
     WHERE "createdAt" >= ${since}
       ${routeFilter}
     GROUP BY dow, hour
@@ -257,8 +257,8 @@ export async function getSlowestRoutes(limit = 10): Promise<SlowestRoute[]> {
       AVG(l.duration)::float AS avg_duration,
       PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY l.duration) AS p95_duration,
       COUNT(l.id)::bigint AS request_count
-    FROM "RequestLog" l
-    JOIN "Route" r ON r.id = l."routeId"
+    FROM "request_logs" l
+    JOIN "routes" r ON r.id = l."routeId"
     WHERE l."createdAt" >= ${since}
       AND l.duration IS NOT NULL
       AND r."deletedAt" IS NULL
@@ -299,7 +299,7 @@ export async function getStatusDistribution(routeId?: string, days = 7): Promise
         ELSE 'unknown'
       END AS bucket,
       COUNT(*)::bigint AS count
-    FROM "RequestLog"
+    FROM "request_logs"
     WHERE "createdAt" >= ${since}
       ${routeFilter}
       AND "responseStatus" IS NOT NULL
