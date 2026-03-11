@@ -8,7 +8,7 @@ import * as logService from '../services/logService'
 import { proxyRequest } from '../services/proxyService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
-import { stripSensitiveRouteFields, safePageSize } from '../lib/security'
+import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync } from '../lib/security'
 
 const router = Router()
 
@@ -200,6 +200,16 @@ router.post('/:id/duplicate', authenticate, authorize([Role.ADMIN, Role.OPERATOR
 router.post('/:id/test', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const route = await routeService.getRouteById(req.params.id)
+
+    // SSRF protection — block test requests to private/internal URLs
+    try {
+      validateTargetUrlSync(route.targetUrl)
+    } catch (err) {
+      return res.json({
+        success: true,
+        data: { status: 403, duration: 0, error: `SSRF blocked: ${(err as Error).message}`, headers: {} },
+      })
+    }
 
     const { method = 'GET', path = route.publicPath, headers = {}, body } = req.body
 

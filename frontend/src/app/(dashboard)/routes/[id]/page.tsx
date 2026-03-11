@@ -15,7 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatRelativeTime, formatDate, formatDuration, getStatusColor } from '@/lib/utils'
+import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard } from '@/lib/utils'
 
 const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -344,7 +344,7 @@ function CopyUrlButton({ path }: { path: string }) {
   return (
     <button
       onClick={() => {
-        navigator.clipboard.writeText(url)
+        copyToClipboard(url)
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
       }}

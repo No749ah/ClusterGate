@@ -96,6 +96,14 @@ export async function updateUser(
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user) throw AppError.notFound('User')
 
+  // Prevent demoting or deactivating the last active admin
+  if (user.role === Role.ADMIN && (data.role !== undefined && data.role !== Role.ADMIN || data.isActive === false)) {
+    const adminCount = await prisma.user.count({ where: { role: Role.ADMIN, isActive: true } })
+    if (adminCount <= 1) {
+      throw AppError.badRequest('Cannot demote or deactivate the last admin. Promote another user first.')
+    }
+  }
+
   return prisma.user.update({
     where: { id },
     data,
@@ -117,6 +125,14 @@ export async function deleteUser(id: string, requestingUserId: string) {
 
   const user = await prisma.user.findUnique({ where: { id } })
   if (!user) throw AppError.notFound('User')
+
+  // Prevent deleting the last active admin
+  if (user.role === Role.ADMIN && user.isActive) {
+    const adminCount = await prisma.user.count({ where: { role: Role.ADMIN, isActive: true } })
+    if (adminCount <= 1) {
+      throw AppError.badRequest('Cannot delete the last admin. Promote another user first.')
+    }
+  }
 
   // Soft delete
   await prisma.user.update({

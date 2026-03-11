@@ -17,7 +17,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
 } from '@/components/ui/dialog'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatRelativeTime, formatDate } from '@/lib/utils'
+import { formatRelativeTime, formatDate, copyToClipboard } from '@/lib/utils'
 import { User, Role } from '@/types'
 
 const ROLE_CONFIG: Record<Role, { label: string; variant: 'purple' | 'info' | 'secondary' }> = {
@@ -113,7 +113,7 @@ export default function UsersPage() {
 
   const handleCopyLink = () => {
     if (inviteLink) {
-      navigator.clipboard.writeText(inviteLink)
+      copyToClipboard(inviteLink)
       setCopiedLink(true)
       toast.success('Link copied to clipboard')
       setTimeout(() => setCopiedLink(false), 2000)

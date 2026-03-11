@@ -28,6 +28,8 @@ export function formatRelativeTime(date: string | Date | null | undefined): stri
   const now = new Date()
   const diff = now.getTime() - d.getTime()
 
+  // Handle future dates gracefully
+  if (diff < 0) return 'just now'
   if (diff < 60000) return 'just now'
   if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
   if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
@@ -64,8 +66,19 @@ export function isValidUrl(url: string): boolean {
   }
 }
 
-export function copyToClipboard(text: string): Promise<void> {
-  return navigator.clipboard.writeText(text)
+export async function copyToClipboard(text: string): Promise<void> {
+  if (navigator.clipboard?.writeText) {
+    return navigator.clipboard.writeText(text)
+  }
+  // Fallback for non-HTTPS contexts
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  document.execCommand('copy')
+  document.body.removeChild(textarea)
 }
 
 export function parseJsonSafe(str: string): unknown {

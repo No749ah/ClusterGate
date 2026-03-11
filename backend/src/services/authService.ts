@@ -111,12 +111,6 @@ export async function setupInitialAdmin(data: {
   password: string
   name: string
 }): Promise<LoginResult> {
-  // Only allow if no users exist
-  const existing = await prisma.user.count()
-  if (existing > 0) {
-    throw AppError.forbidden('Setup has already been completed')
-  }
-
   const validation = validatePassword(data.password)
   if (!validation.valid) {
     throw AppError.badRequest('Password does not meet requirements', validation.errors)
@@ -124,15 +118,23 @@ export async function setupInitialAdmin(data: {
 
   const passwordHash = await bcrypt.hash(data.password, BCRYPT_ROUNDS)
 
-  const user = await prisma.user.create({
-    data: {
-      email: data.email.toLowerCase().trim(),
-      passwordHash,
-      name: data.name,
-      role: 'ADMIN',
-      isActive: true,
-    },
-  })
+  // Atomic check-and-create inside a serializable transaction to prevent race conditions
+  const user = await prisma.$transaction(async (tx) => {
+    const existing = await tx.user.count()
+    if (existing > 0) {
+      throw AppError.forbidden('Setup has already been completed')
+    }
+
+    return tx.user.create({
+      data: {
+        email: data.email.toLowerCase().trim(),
+        passwordHash,
+        name: data.name,
+        role: 'ADMIN',
+        isActive: true,
+      },
+    })
+  }, { isolationLevel: 'Serializable' })
 
   const token = signToken({ userId: user.id, email: user.email, role: user.role })
   const { passwordHash: _, ...safeUser } = user

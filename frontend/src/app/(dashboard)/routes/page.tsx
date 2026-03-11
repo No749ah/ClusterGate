@@ -38,7 +38,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { formatRelativeTime } from '@/lib/utils'
+import { formatRelativeTime, copyToClipboard } from '@/lib/utils'
 import { Route, RouteStatus } from '@/types'
 
 const HTTP_METHOD_COLORS: Record<string, string> = {
@@ -256,7 +256,7 @@ function CopyUrlButton({ path }: { path: string }) {
   const handleCopy = (e: React.MouseEvent) => {
     e.preventDefault()
     e.stopPropagation()
-    navigator.clipboard.writeText(url)
+    copyToClipboard(url)
     setCopied(true)
     setTimeout(() => setCopied(false), 1500)
   }

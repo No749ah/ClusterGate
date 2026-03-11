@@ -72,18 +72,6 @@ export async function validateInvite(token: string) {
 }
 
 export async function acceptInvite(token: string, data: { name: string; password: string }) {
-  const invite = await prisma.inviteToken.findUnique({ where: { token } })
-
-  if (!invite) throw AppError.notFound('Invite')
-  if (invite.usedAt) throw AppError.badRequest('This invite has already been used')
-  if (invite.expiresAt < new Date()) throw AppError.badRequest('This invite has expired')
-
-  // Check if user with this email was created in the meantime
-  const existingUser = await prisma.user.findUnique({ where: { email: invite.email } })
-  if (existingUser) {
-    throw AppError.conflict('An account with this email already exists')
-  }
-
   const validation = validatePassword(data.password)
   if (!validation.valid) {
     throw AppError.badRequest('Password does not meet requirements', validation.errors)
@@ -91,8 +79,27 @@ export async function acceptInvite(token: string, data: { name: string; password
 
   const passwordHash = await hashPassword(data.password)
 
-  const [user] = await prisma.$transaction([
-    prisma.user.create({
+  // Atomic check-and-create inside a serializable transaction to prevent race conditions
+  const user = await prisma.$transaction(async (tx) => {
+    const invite = await tx.inviteToken.findUnique({ where: { token } })
+
+    if (!invite) throw AppError.notFound('Invite')
+    if (invite.usedAt) throw AppError.badRequest('This invite has already been used')
+    if (invite.expiresAt < new Date()) throw AppError.badRequest('This invite has expired')
+
+    // Check if user with this email was created in the meantime
+    const existingUser = await tx.user.findUnique({ where: { email: invite.email } })
+    if (existingUser) {
+      throw AppError.conflict('An account with this email already exists')
+    }
+
+    // Mark invite as used first (prevents concurrent accepts)
+    await tx.inviteToken.update({
+      where: { id: invite.id },
+      data: { usedAt: new Date() },
+    })
+
+    return tx.user.create({
       data: {
         email: invite.email,
         passwordHash,
@@ -100,12 +107,8 @@ export async function acceptInvite(token: string, data: { name: string; password
         role: invite.role,
         isActive: true,
       },
-    }),
-    prisma.inviteToken.update({
-      where: { id: invite.id },
-      data: { usedAt: new Date() },
-    }),
-  ])
+    })
+  }, { isolationLevel: 'Serializable' })
 
   const jwtToken = signToken({ userId: user.id, email: user.email, role: user.role })
   const { passwordHash: _, ...safeUser } = user
@@ -114,13 +117,19 @@ export async function acceptInvite(token: string, data: { name: string; password
 }
 
 export async function getPendingInvites() {
-  return prisma.inviteToken.findMany({
+  const invites = await prisma.inviteToken.findMany({
     where: { usedAt: null, expiresAt: { gt: new Date() } },
     orderBy: { createdAt: 'desc' },
-    include: {
+    select: {
+      id: true,
+      email: true,
+      role: true,
+      expiresAt: true,
+      createdAt: true,
       createdBy: { select: { id: true, name: true } },
     },
   })
+  return invites
 }
 
 export async function revokeInvite(id: string) {

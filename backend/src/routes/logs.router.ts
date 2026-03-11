@@ -12,13 +12,23 @@ router.get('/', authenticate, async (req, res, next) => {
   try {
     const { page = '1', pageSize = '50', routeId, method, statusType, dateFrom, dateTo } = req.query
 
+    // Validate date params
+    const parsedDateFrom = dateFrom ? new Date(String(dateFrom)) : undefined
+    const parsedDateTo = dateTo ? new Date(String(dateTo)) : undefined
+    if (parsedDateFrom && isNaN(parsedDateFrom.getTime())) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid dateFrom' } })
+    }
+    if (parsedDateTo && isNaN(parsedDateTo.getTime())) {
+      return res.status(400).json({ success: false, error: { code: 'VALIDATION_ERROR', message: 'Invalid dateTo' } })
+    }
+
     const result = await logService.getRouteLogs(
       {
         routeId: routeId as string,
         method: method as string,
         statusType: statusType as 'success' | 'error',
-        dateFrom: dateFrom ? new Date(String(dateFrom)) : undefined,
-        dateTo: dateTo ? new Date(String(dateTo)) : undefined,
+        dateFrom: parsedDateFrom,
+        dateTo: parsedDateTo,
       },
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )
@@ -47,9 +57,10 @@ router.get('/errors', authenticate, async (req, res, next) => {
 router.get('/daily', authenticate, async (req, res, next) => {
   try {
     const { routeId, days = '7' } = req.query
+    const parsedDays = Math.min(Math.max(parseInt(String(days)) || 7, 1), 365)
     const daily = await logService.getDailyRequestCounts(
       routeId as string,
-      parseInt(String(days))
+      parsedDays
     )
     res.json({ success: true, data: daily })
   } catch (err) {

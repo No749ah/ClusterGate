@@ -20,9 +20,18 @@ const BLOCKED_HOSTNAMES = new Set([
  * Check if an IP address is in a private/reserved range (RFC 1918, loopback, link-local, etc.)
  */
 function isPrivateIp(ip: string): boolean {
+  // Block IPv6 loopback and mapped addresses
+  const lower = ip.toLowerCase()
+  if (lower === '::1' || lower === '::' || lower === '0:0:0:0:0:0:0:1') return true
+  if (lower.startsWith('::ffff:')) {
+    // IPv4-mapped IPv6 — extract and check the IPv4 part
+    return isPrivateIp(lower.slice(7))
+  }
+  if (lower.startsWith('fe80:') || lower.startsWith('fc00:') || lower.startsWith('fd')) return true
+
   const parts = ip.split('.').map(Number)
   if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
-    // Not a valid IPv4 — block by default (could be IPv6 loopback etc.)
+    // Not a valid IPv4 — block by default
     return true
   }
 

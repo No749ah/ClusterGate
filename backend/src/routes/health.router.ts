@@ -1,14 +1,15 @@
 import { Router } from 'express'
 import { prisma } from '../lib/prisma'
+import { authenticate } from '../middleware/authenticate'
 
 const router = Router()
 
-// GET /api/health/live — Kubernetes liveness probe
+// GET /api/health/live — Kubernetes liveness probe (public, no sensitive data)
 router.get('/live', (_req, res) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() })
 })
 
-// GET /api/health/ready — Kubernetes readiness probe
+// GET /api/health/ready — Kubernetes readiness probe (public, no sensitive data)
 router.get('/ready', async (_req, res) => {
   try {
     await prisma.$queryRaw`SELECT 1`
@@ -22,8 +23,8 @@ router.get('/ready', async (_req, res) => {
   }
 })
 
-// GET /api/health/status — Full system status
-router.get('/status', async (_req, res) => {
+// GET /api/health/status — Full system status (requires auth — exposes infra info)
+router.get('/status', authenticate, async (_req, res) => {
   const memoryUsage = process.memoryUsage()
   let dbStatus = 'ok'
   let dbLatency: number | undefined
@@ -41,7 +42,6 @@ router.get('/status', async (_req, res) => {
     version: process.env.npm_package_version || '1.0.0',
     uptime: Math.floor(process.uptime()),
     timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV,
     database: {
       status: dbStatus,
       latency: dbLatency,

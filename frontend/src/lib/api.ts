@@ -49,7 +49,15 @@ class ApiClient {
       throw new Error('Unauthorized')
     }
 
-    const data = await response.json()
+    // Safely parse response — handle non-JSON responses (e.g. HTML error pages)
+    let data: any
+    try {
+      data = await response.json()
+    } catch {
+      const error = new Error(`Request failed with status ${response.status}`)
+      ;(error as any).status = response.status
+      throw error
+    }
 
     if (!response.ok) {
       const error = new Error(data.error?.message || 'Request failed')
@@ -258,7 +266,7 @@ class ApiClient {
       this.post<ApiResponse<{ id: string; email: string; role: string; token: string; expiresAt: string }>>('/api/users/invite', { email, role }),
 
     getInvites: () =>
-      this.get<ApiResponse<{ id: string; email: string; role: string; token: string; expiresAt: string; createdBy: { id: string; name: string } | null }[]>>('/api/users/invites'),
+      this.get<ApiResponse<{ id: string; email: string; role: string; expiresAt: string; createdAt: string; createdBy: { id: string; name: string } | null }[]>>('/api/users/invites'),
 
     revokeInvite: (id: string) =>
       this.delete<ApiResponse<null>>(`/api/users/invites/${id}`),

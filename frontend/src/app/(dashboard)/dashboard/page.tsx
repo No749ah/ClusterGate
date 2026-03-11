@@ -14,7 +14,7 @@ import { formatRelativeTime, formatDuration, getStatusColor } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function DashboardPage() {
-  const { data: routesData, isLoading: routesLoading } = useRoutes({ pageSize: 5 })
+  const { data: routesData, isLoading: routesLoading } = useRoutes({ pageSize: 100 })
   const { data: logsData, isLoading: logsLoading } = useLogs({ pageSize: 10 })
   const { data: errorsData } = useRecentErrors(undefined, 5)
 
