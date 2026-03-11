@@ -120,6 +120,19 @@ class ApiClient {
 
     acceptInvite: (data: { token: string; name: string; password: string }) =>
       this.post<ApiResponse<{ user: User }>>('/api/auth/accept-invite', data),
+
+    // 2FA
+    twoFactorVerify: (tempToken: string, code: string) =>
+      this.post<ApiResponse<{ user: User }>>('/api/auth/2fa/verify', { tempToken, code }),
+
+    twoFactorSetup: () =>
+      this.post<ApiResponse<{ uri: string; secret: string }>>('/api/auth/2fa/setup'),
+
+    twoFactorEnable: (token: string) =>
+      this.post<ApiResponse<{ recoveryCodes: string[] }>>('/api/auth/2fa/enable', { token }),
+
+    twoFactorDisable: (password: string) =>
+      this.post<ApiResponse<null>>('/api/auth/2fa/disable', { password }),
   }
 
   // ============================================================================
@@ -162,7 +175,7 @@ class ApiClient {
     duplicate: (id: string) =>
       this.post<ApiResponse<Route>>(`/api/routes/${id}/duplicate`),
 
-    test: (id: string, params: { method?: string; path?: string; headers?: Record<string, string>; body?: string }) =>
+    test: (id: string, params: { method?: string; path?: string; headers?: Record<string, string>; body?: string; skipAuth?: boolean }) =>
       this.post<ApiResponse<TestResult>>(`/api/routes/${id}/test`, params),
 
     health: (id: string) =>
@@ -424,6 +437,92 @@ class ApiClient {
 
     forceLogoutAll: () =>
       this.post<ApiResponse<{ affectedUsers: number; message: string }>>('/api/system/force-logout-all'),
+  }
+
+  // ============================================================================
+  // Analytics
+  // ============================================================================
+
+  analytics = {
+    overview: (routeId?: string, days?: number) => {
+      const params = new URLSearchParams()
+      if (routeId) params.set('routeId', routeId)
+      if (days) params.set('days', String(days))
+      const qs = params.toString()
+      return this.get<ApiResponse<{
+        totalRequests: number
+        avgResponseTime: number
+        errorRate: number
+        p50: number
+        p95: number
+        p99: number
+      }>>(`/api/analytics/overview${qs ? `?${qs}` : ''}`)
+    },
+
+    latencyTrend: (routeId?: string, days?: number, granularity?: 'hour' | 'day') => {
+      const params = new URLSearchParams()
+      if (routeId) params.set('routeId', routeId)
+      if (days) params.set('days', String(days))
+      if (granularity) params.set('granularity', granularity)
+      const qs = params.toString()
+      return this.get<ApiResponse<{
+        timestamp: string
+        p50: number
+        p95: number
+        p99: number
+        count: number
+      }[]>>(`/api/analytics/latency-trend${qs ? `?${qs}` : ''}`)
+    },
+
+    errorTrend: (routeId?: string, days?: number) => {
+      const params = new URLSearchParams()
+      if (routeId) params.set('routeId', routeId)
+      if (days) params.set('days', String(days))
+      const qs = params.toString()
+      return this.get<ApiResponse<{
+        timestamp: string
+        total: number
+        errors: number
+        errorRate: number
+      }[]>>(`/api/analytics/error-trend${qs ? `?${qs}` : ''}`)
+    },
+
+    heatmap: (routeId?: string, days?: number) => {
+      const params = new URLSearchParams()
+      if (routeId) params.set('routeId', routeId)
+      if (days) params.set('days', String(days))
+      const qs = params.toString()
+      return this.get<ApiResponse<{
+        dayOfWeek: number
+        hour: number
+        count: number
+      }[]>>(`/api/analytics/heatmap${qs ? `?${qs}` : ''}`)
+    },
+
+    slowest: (limit?: number) => {
+      const params = new URLSearchParams()
+      if (limit) params.set('limit', String(limit))
+      const qs = params.toString()
+      return this.get<ApiResponse<{
+        routeId: string
+        routeName: string
+        publicPath: string
+        avgDuration: number
+        p95Duration: number
+        requestCount: number
+      }[]>>(`/api/analytics/slowest${qs ? `?${qs}` : ''}`)
+    },
+
+    statusDistribution: (routeId?: string, days?: number) => {
+      const params = new URLSearchParams()
+      if (routeId) params.set('routeId', routeId)
+      if (days) params.set('days', String(days))
+      const qs = params.toString()
+      return this.get<ApiResponse<{
+        bucket: string
+        count: number
+      }[]>>(`/api/analytics/status-distribution${qs ? `?${qs}` : ''}`)
+    },
   }
 
   // ============================================================================

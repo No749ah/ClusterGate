@@ -16,7 +16,7 @@ const router = Router()
 const routeBodySchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
-  publicPath: z.string().min(1, 'Public path is required').startsWith('/', 'Must start with /'),
+  publicPath: z.string().min(1, 'Public path is required').startsWith('/r/', 'Public path must start with /r/'),
   targetUrl: z.string().url('Target URL must be a valid URL'),
   methods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])).min(1),
   tags: z.array(z.string()).default([]),
@@ -228,7 +228,12 @@ router.post('/:id/test', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), a
       })
     }
 
-    const { method = 'GET', path = route.publicPath, headers = {}, body } = req.body
+    const { method = 'GET', path = route.publicPath, headers = {}, body, skipAuth } = req.body
+
+    // If skipAuth is requested, temporarily disable auth enforcement for this test
+    if (skipAuth === true) {
+      ;(route as any).requireAuth = false
+    }
 
     // Build a mock request-like object for the proxy
     const mockReq = {

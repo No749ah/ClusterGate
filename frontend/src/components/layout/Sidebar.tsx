@@ -14,6 +14,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   LogOut,
+  BarChart3,
 } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
@@ -37,6 +38,11 @@ const navItems = [
     href: '/activity',
     icon: ScrollText,
     label: 'Logs',
+  },
+  {
+    href: '/analytics',
+    icon: BarChart3,
+    label: 'Analytics',
   },
   {
     href: '/users',

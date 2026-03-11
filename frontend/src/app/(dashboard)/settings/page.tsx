@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, Shield, Wrench, Database, Activity, LogOut, ExternalLink } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldOff, Wrench, Database, Activity, LogOut, ExternalLink, Copy, KeyRound } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -106,6 +106,17 @@ export default function SettingsPage() {
   const [cleaningAuditLogs, setCleaningAuditLogs] = useState(false)
   const [exportingAuditLogs, setExportingAuditLogs] = useState(false)
   const [forcingLogout, setForcingLogout] = useState(false)
+
+  // 2FA state
+  const [twoFactorStep, setTwoFactorStep] = useState<'idle' | 'setup' | 'verify' | 'recovery'>('idle')
+  const [twoFactorUri, setTwoFactorUri] = useState('')
+  const [twoFactorSecret, setTwoFactorSecret] = useState('')
+  const [twoFactorCode, setTwoFactorCode] = useState('')
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([])
+  const [isSettingUp2FA, setIsSettingUp2FA] = useState(false)
+  const [isEnabling2FA, setIsEnabling2FA] = useState(false)
+  const [isDisabling2FA, setIsDisabling2FA] = useState(false)
+  const [disablePassword, setDisablePassword] = useState('')
 
   const isAdmin = user?.role === 'ADMIN'
 
@@ -430,6 +441,242 @@ export default function SettingsPage() {
               )}
             </Button>
           </form>
+        </CardContent>
+      </Card>
+
+      {/* Two-Factor Authentication */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4" /> Two-Factor Authentication
+          </CardTitle>
+          <CardDescription>
+            Add an extra layer of security to your account using a TOTP authenticator app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {user?.twoFactorEnabled ? (
+            // 2FA is enabled — show status and disable option
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10">
+                <ShieldCheck className="w-5 h-5 text-emerald-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-emerald-500">Two-factor authentication is enabled</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Your account is protected with TOTP verification.</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Confirm Password to Disable</label>
+                <Input
+                  type="password"
+                  placeholder="Enter your password"
+                  value={disablePassword}
+                  onChange={(e) => setDisablePassword(e.target.value)}
+                />
+              </div>
+
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={isDisabling2FA || !disablePassword}
+                onClick={async () => {
+                  setIsDisabling2FA(true)
+                  try {
+                    await api.auth.twoFactorDisable(disablePassword)
+                    toast.success('Two-factor authentication has been disabled.')
+                    setDisablePassword('')
+                    // Refresh user data
+                    window.location.reload()
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to disable 2FA')
+                  } finally {
+                    setIsDisabling2FA(false)
+                  }
+                }}
+              >
+                {isDisabling2FA ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Disabling...</>
+                ) : (
+                  <><ShieldOff className="w-4 h-4 mr-2" /> Disable Two-Factor Authentication</>
+                )}
+              </Button>
+            </div>
+          ) : twoFactorStep === 'idle' ? (
+            // 2FA not enabled — show enable button
+            <div className="space-y-4">
+              <div className="flex items-center gap-3 p-3 rounded-lg border border-border/50">
+                <Shield className="w-5 h-5 text-muted-foreground shrink-0" />
+                <div>
+                  <p className="text-sm font-medium">Two-factor authentication is not enabled</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Protect your account by requiring a verification code at login.</p>
+                </div>
+              </div>
+
+              <Button
+                size="sm"
+                disabled={isSettingUp2FA}
+                onClick={async () => {
+                  setIsSettingUp2FA(true)
+                  try {
+                    const res = await api.auth.twoFactorSetup()
+                    setTwoFactorUri(res.data.uri)
+                    setTwoFactorSecret(res.data.secret)
+                    setTwoFactorStep('setup')
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to start 2FA setup')
+                  } finally {
+                    setIsSettingUp2FA(false)
+                  }
+                }}
+              >
+                {isSettingUp2FA ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Setting up...</>
+                ) : (
+                  <><ShieldCheck className="w-4 h-4 mr-2" /> Enable Two-Factor Authentication</>
+                )}
+              </Button>
+            </div>
+          ) : twoFactorStep === 'setup' ? (
+            // Show QR code / secret and verification input
+            <div className="space-y-5">
+              <div className="space-y-3">
+                <p className="text-sm font-medium">1. Scan this QR code with your authenticator app</p>
+                <div className="flex justify-center p-4 bg-white rounded-lg border border-border/50">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(twoFactorUri)}`}
+                    alt="2FA QR Code"
+                    width={200}
+                    height={200}
+                    className="rounded"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Or enter this secret manually</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono bg-muted/50 border border-border/50 rounded px-3 py-2 break-all select-all">
+                    {twoFactorSecret}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(twoFactorSecret)
+                      toast.success('Secret copied to clipboard')
+                    }}
+                  >
+                    <Copy className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+
+              <Separator />
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">2. Enter the 6-digit code from your app to verify</p>
+                <Input
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  className="font-mono tracking-widest text-center"
+                  value={twoFactorCode}
+                  onChange={(e) => setTwoFactorCode(e.target.value.replace(/\D/g, ''))}
+                />
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setTwoFactorStep('idle')
+                    setTwoFactorUri('')
+                    setTwoFactorSecret('')
+                    setTwoFactorCode('')
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  disabled={isEnabling2FA || twoFactorCode.length < 6}
+                  onClick={async () => {
+                    setIsEnabling2FA(true)
+                    try {
+                      const res = await api.auth.twoFactorEnable(twoFactorCode)
+                      setRecoveryCodes(res.data.recoveryCodes)
+                      setTwoFactorStep('recovery')
+                      toast.success('Two-factor authentication enabled!')
+                    } catch (err: any) {
+                      toast.error(err.message || 'Invalid verification code')
+                      setTwoFactorCode('')
+                    } finally {
+                      setIsEnabling2FA(false)
+                    }
+                  }}
+                >
+                  {isEnabling2FA ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Verifying...</>
+                  ) : (
+                    'Verify & Enable'
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : twoFactorStep === 'recovery' ? (
+            // Show recovery codes
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-amber-500/30 bg-amber-500/10">
+                <AlertCircle className="w-5 h-5 text-amber-500 shrink-0" />
+                <p className="text-sm text-amber-500 font-medium">
+                  Save these recovery codes in a safe place. They can only be shown once.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                {recoveryCodes.map((code, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded border border-border/50 bg-muted/30"
+                  >
+                    <KeyRound className="w-3 h-3 text-muted-foreground shrink-0" />
+                    <code className="text-xs font-mono select-all">{code}</code>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(recoveryCodes.join('\n'))
+                    toast.success('Recovery codes copied to clipboard')
+                  }}
+                >
+                  <Copy className="w-4 h-4 mr-2" /> Copy All
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    setTwoFactorStep('idle')
+                    setRecoveryCodes([])
+                    setTwoFactorCode('')
+                    setTwoFactorUri('')
+                    setTwoFactorSecret('')
+                    // Refresh user data to reflect 2FA enabled state
+                    window.location.reload()
+                  }}
+                >
+                  Done
+                </Button>
+              </div>
+            </div>
+          ) : null}
         </CardContent>
       </Card>
 

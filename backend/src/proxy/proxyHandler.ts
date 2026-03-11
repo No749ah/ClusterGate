@@ -3,9 +3,16 @@ import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { proxyRequest } from '../services/proxyService'
 
+/**
+ * Proxy handler — mounted at /r in the Express app.
+ * Express strips the /r mount prefix from req.path, so if the full
+ * request is /r/my-service/hello, req.path here is /my-service/hello.
+ * Route publicPaths are stored with the /r prefix (e.g. /r/my-service),
+ * so we strip /r before matching.
+ */
 export async function proxyHandler(req: Request, res: Response, next: NextFunction) {
   try {
-    const path = req.path
+    const path = req.path // already has /r stripped by Express mount
 
     // Find matching route by path prefix
     const routes = await prisma.route.findMany({
@@ -21,11 +28,19 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
     })
 
     // Find best matching route (longest prefix match)
+    // Strip the /r prefix from stored publicPath for comparison
     const route = routes.find((r) => {
-      // Normalize: strip trailing /* for wildcard routes
-      const routePath = r.publicPath.endsWith('/*')
-        ? r.publicPath.slice(0, -2)
-        : r.publicPath
+      let routePath = r.publicPath
+      // Strip /r prefix from stored path for matching
+      if (routePath.startsWith('/r/')) {
+        routePath = routePath.slice(2) // /r/my-service -> /my-service
+      } else if (routePath.startsWith('/r')) {
+        routePath = routePath.slice(2) || '/'
+      }
+      // Strip trailing /* for wildcard routes
+      if (routePath.endsWith('/*')) {
+        routePath = routePath.slice(0, -2)
+      }
       if (routePath === '/' || routePath === '') return true
       return path === routePath || path.startsWith(routePath + '/') || path.startsWith(routePath)
     })
@@ -35,7 +50,7 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
         success: false,
         error: {
           code: 'ROUTE_NOT_FOUND',
-          message: `No route configured for ${path}`,
+          message: `No route configured for /r${path}`,
         },
       })
     }
@@ -65,11 +80,15 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
     logger.debug('Proxying request', {
       route: route.name,
       method: req.method,
-      path,
+      path: `/r${path}`,
       target: route.targetUrl,
     })
 
+    // Restore the full path including /r prefix so proxyService can strip publicPath correctly
+    const originalPath = req.path
+    ;(req as any).path = `/r${originalPath}`
     await proxyRequest(route, req, res)
+    ;(req as any).path = originalPath
   } catch (err) {
     next(err)
   }

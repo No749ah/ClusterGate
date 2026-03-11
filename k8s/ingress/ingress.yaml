@@ -41,6 +41,14 @@ spec:
                 name: clustergate-backend
                 port:
                   number: 3001
+          # Proxy routes (routed to backend)
+          - path: /r
+            pathType: Prefix
+            backend:
+              service:
+                name: clustergate-backend
+                port:
+                  number: 3001
           # Prometheus metrics (restrict access!)
           - path: /metrics
             pathType: Exact

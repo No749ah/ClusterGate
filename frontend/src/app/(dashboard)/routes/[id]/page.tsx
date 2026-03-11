@@ -228,7 +228,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
               <CardTitle>Test Route</CardTitle>
             </CardHeader>
             <CardContent>
-              <RouteTestPanel routeId={id} defaultPath={route.publicPath} methods={route.methods} />
+              <RouteTestPanel routeId={id} defaultPath={route.publicPath} methods={route.methods} requireAuth={route.requireAuth} authType={route.authType} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -364,7 +364,8 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
 function CopyUrlButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const url = `${origin}${path}`
+  const proxyPath = path.startsWith('/r/') ? path : `/r${path.startsWith('/') ? path : `/${path}`}`
+  const url = `${origin}${proxyPath}`
 
   const truncateUrl = (u: string, maxLen = 50) => {
     if (u.length <= maxLen) return u

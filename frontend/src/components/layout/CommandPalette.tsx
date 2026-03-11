@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard } from 'lucide-react'
+import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3 } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -22,6 +22,7 @@ const PAGES: CommandItem[] = [
   { id: 'routes', label: 'Routes', description: 'Manage routes', icon: Route, href: '/routes' },
   { id: 'routes-new', label: 'New Route', description: 'Create a new route', icon: Route, href: '/routes/new' },
   { id: 'activity', label: 'Request Logs', description: 'View proxy logs', icon: ScrollText, href: '/activity' },
+  { id: 'analytics', label: 'Analytics', description: 'Route performance metrics', icon: BarChart3, href: '/analytics' },
   { id: 'users', label: 'Users', description: 'Manage users', icon: Users, href: '/users', adminOnly: true },
   { id: 'audit', label: 'Audit Log', description: 'Activity history', icon: Shield, href: '/audit', adminOnly: true },
   { id: 'settings', label: 'Settings', description: 'Account & system', icon: Settings, href: '/settings' },

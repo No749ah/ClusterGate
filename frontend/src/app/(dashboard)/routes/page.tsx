@@ -250,7 +250,8 @@ export default function RoutesPage() {
 function CopyUrlButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  const url = `${origin}${path}`
+  const proxyPath = path.startsWith('/r/') ? path : `/r${path.startsWith('/') ? path : `/${path}`}`
+  const url = `${origin}${proxyPath}`
 
   const handleCopy = (e: React.MouseEvent) => {
     e.preventDefault()

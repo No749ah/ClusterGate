@@ -18,7 +18,7 @@ import { RouteFormData } from '@/types'
 const routeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
-  publicPath: z.string().min(1, 'Public path is required').startsWith('/', 'Must start with /'),
+  publicPath: z.string().min(1, 'Public path is required').refine((v) => v.startsWith('/r/'), { message: 'Public path must start with /r/' }),
   targetUrl: z.string().url('Must be a valid URL (include http:// or https://)'),
   methods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])).min(1, 'Select at least one method'),
   tags: z.array(z.string()).default([]),
@@ -70,6 +70,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const [tagInput, setTagInput] = useState('')
   const [pathStatus, setPathStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
   const [pathConflict, setPathConflict] = useState<string | null>(null)
+  const [prefixShake, setPrefixShake] = useState(false)
   const isNew = !defaultValues?.publicPath
 
   const form = useForm<RouteFormValues>({
@@ -275,11 +276,36 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             <Field label="Description" error={errors.description?.message}>
               <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
             </Field>
-            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /api/v1/*)' : 'e.g. /api/users or /service/health'}>
+            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /r/my-service/*)' : 'Must start with /r/ — e.g. /r/my-service'}>
               <div className="space-y-2">
                 <div className="flex gap-2">
-                  <div className="relative flex-1">
-                    <input {...register('publicPath')} placeholder="/api/my-service" className={fieldClass(errors.publicPath)} />
+                  <div className="relative flex-1 flex">
+                    <span
+                      className={cn(
+                        'inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-mono select-none transition-all',
+                        prefixShake && 'animate-[shake_0.4s_ease-in-out] text-destructive border-destructive/50 bg-destructive/10'
+                      )}
+                    >
+                      /r/
+                    </span>
+                    <input
+                      value={publicPath.startsWith('/r/') ? publicPath.slice(3) : publicPath}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/^\/+/, '')
+                        setValue('publicPath', `/r/${val}`, { shouldValidate: true })
+                      }}
+                      onKeyDown={(e) => {
+                        // If input is empty and user presses Backspace, shake the prefix
+                        const suffix = publicPath.startsWith('/r/') ? publicPath.slice(3) : publicPath
+                        if (e.key === 'Backspace' && suffix === '') {
+                          e.preventDefault()
+                          setPrefixShake(true)
+                          setTimeout(() => setPrefixShake(false), 400)
+                        }
+                      }}
+                      placeholder="my-service"
+                      className={cn(fieldClass(errors.publicPath), 'rounded-l-none')}
+                    />
                     {pathStatus === 'checking' && (
                       <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
                     )}

@@ -2,10 +2,14 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { login, getCurrentUser, changePassword, isSetupComplete, setupInitialAdmin } from '../services/authService'
 import { validateInvite, acceptInvite } from '../services/inviteService'
+import { generateSetup, verifyAndEnable, verifyToken as verify2FAToken, disable as disable2FA } from '../services/twoFactorService'
 import { authenticate } from '../middleware/authenticate'
 import { authLimiter } from '../middleware/rateLimiter'
 import { config } from '../config'
+import { signToken, signShortLivedToken, verifyShortLivedToken } from '../lib/jwt'
 import { createAuditLog } from '../services/auditService'
+import { AppError } from '../lib/errors'
+import { prisma } from '../lib/prisma'
 
 const router = Router()
 
@@ -110,6 +114,28 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
     const { email, password } = schema.parse(req.body)
     const result = await login(email, password)
 
+    // Check if user has 2FA enabled
+    if (result.user.twoFactorEnabled) {
+      // Don't set session cookie — issue a short-lived temp token instead
+      const tempToken = signShortLivedToken({ userId: result.user.id, purpose: '2fa' })
+
+      createAuditLog({
+        userId: result.user.id,
+        action: 'auth.login_2fa_pending',
+        resource: 'auth',
+        resourceId: result.user.id,
+        details: { email },
+        ip: req.ip || req.socket.remoteAddress,
+        userAgent: req.get('user-agent'),
+      })
+
+      res.json({
+        success: true,
+        data: { requiresTwoFactor: true, tempToken },
+      })
+      return
+    }
+
     res.cookie('cg_session', result.token, COOKIE_OPTIONS)
 
     createAuditLog({
@@ -138,6 +164,163 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
         userAgent: req.get('user-agent'),
       })
     }
+    next(err)
+  }
+})
+
+// POST /api/auth/2fa/verify — verify 2FA code during login
+router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      tempToken: z.string().min(1, 'Temporary token is required'),
+      code: z.string().min(1, 'Verification code is required'),
+    })
+
+    const { tempToken, code } = schema.parse(req.body)
+
+    let payload
+    try {
+      payload = verifyShortLivedToken(tempToken, '2fa')
+    } catch {
+      throw AppError.unauthorized('Invalid or expired 2FA token')
+    }
+
+    const valid = await verify2FAToken(payload.userId, code)
+    if (!valid) {
+      createAuditLog({
+        userId: payload.userId,
+        action: 'auth.2fa_failed',
+        resource: 'auth',
+        resourceId: payload.userId,
+        ip: req.ip || req.socket.remoteAddress,
+        userAgent: req.get('user-agent'),
+      })
+      throw AppError.unauthorized('Invalid verification code')
+    }
+
+    // 2FA verified — issue real session
+    const user = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        twoFactorEnabled: true,
+        lastLoginAt: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    })
+
+    if (!user || !user.isActive) {
+      throw AppError.unauthorized('Account not found or deactivated')
+    }
+
+    // Update last login
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() },
+    })
+
+    const token = signToken({ userId: user.id, email: user.email, role: user.role })
+    res.cookie('cg_session', token, COOKIE_OPTIONS)
+
+    createAuditLog({
+      userId: user.id,
+      action: 'auth.login',
+      resource: 'auth',
+      resourceId: user.id,
+      details: { email: user.email, twoFactor: true },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({
+      success: true,
+      data: { user },
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/2fa/setup — initiate 2FA setup (authenticated)
+router.post('/2fa/setup', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const result = await generateSetup(req.user!.userId)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'auth.2fa_setup',
+      resource: 'auth',
+      resourceId: req.user!.userId,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({
+      success: true,
+      data: { uri: result.uri, secret: result.secret },
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/2fa/enable — verify token and enable 2FA (authenticated)
+router.post('/2fa/enable', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      token: z.string().min(6, 'Verification code must be at least 6 characters'),
+    })
+
+    const { token } = schema.parse(req.body)
+    const recoveryCodes = await verifyAndEnable(req.user!.userId, token)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'auth.2fa_enabled',
+      resource: 'auth',
+      resourceId: req.user!.userId,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({
+      success: true,
+      data: { recoveryCodes },
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/2fa/disable — disable 2FA (authenticated, requires password)
+router.post('/2fa/disable', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      password: z.string().min(1, 'Password is required'),
+    })
+
+    const { password } = schema.parse(req.body)
+    await disable2FA(req.user!.userId, password)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'auth.2fa_disabled',
+      resource: 'auth',
+      resourceId: req.user!.userId,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({
+      success: true,
+      message: 'Two-factor authentication has been disabled.',
+    })
+  } catch (err) {
     next(err)
   }
 })

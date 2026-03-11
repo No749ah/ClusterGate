@@ -25,6 +25,7 @@ import auditRouter from './routes/audit.router'
 import apikeysRouter from './routes/apikeys.router'
 import notificationsRouter from './routes/notifications.router'
 import systemRouter from './routes/system.router'
+import analyticsRouter from './routes/analytics.router'
 
 const app = express()
 
@@ -100,12 +101,13 @@ app.use('/api/audit', auditRouter)
 app.use('/api/routes', auditLogger, apikeysRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/system', systemRouter)
+app.use('/api/analytics', analyticsRouter)
 
 // ============================================================================
-// Proxy Handler (catch-all for non-API routes)
+// Proxy Handler — all proxy routes live under /r/ prefix
 // ============================================================================
 
-app.use(proxyLimiter, proxyHandler)
+app.use('/r', proxyLimiter, proxyHandler)
 
 // ============================================================================
 // Error Handling

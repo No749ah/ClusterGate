@@ -116,7 +116,7 @@ export function useDuplicateRoute() {
 
 export function useTestRoute(id: string) {
   return useMutation({
-    mutationFn: (params: { method?: string; path?: string; headers?: Record<string, string>; body?: string }) =>
+    mutationFn: (params: { method?: string; path?: string; headers?: Record<string, string>; body?: string; skipAuth?: boolean }) =>
       api.routes.test(id, params),
     onError: (err: any) => {
       toast.error(err.message || 'Test request failed')

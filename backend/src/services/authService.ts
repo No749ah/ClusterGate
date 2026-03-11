@@ -7,7 +7,7 @@ import { User } from '@prisma/client'
 const BCRYPT_ROUNDS = 12
 
 export interface LoginResult {
-  user: Omit<User, 'passwordHash'>
+  user: Omit<User, 'passwordHash' | 'twoFactorSecret' | 'recoveryCodes'>
   token: string
 }
 
@@ -27,6 +27,13 @@ export async function login(email: string, password: string): Promise<LoginResul
     throw AppError.unauthorized('Invalid email or password')
   }
 
+  // If 2FA is enabled, don't update lastLoginAt or issue a real token yet
+  // The auth router will handle the 2FA flow
+  if (user.twoFactorEnabled) {
+    const { passwordHash: _, twoFactorSecret: _s, recoveryCodes: _r, ...safeUser } = user
+    return { user: safeUser, token: '' }
+  }
+
   // Update last login
   await prisma.user.update({
     where: { id: user.id },
@@ -35,7 +42,7 @@ export async function login(email: string, password: string): Promise<LoginResul
 
   const token = signToken({ userId: user.id, email: user.email, role: user.role })
 
-  const { passwordHash: _, ...safeUser } = user
+  const { passwordHash: _, twoFactorSecret: _s, recoveryCodes: _r, ...safeUser } = user
 
   return { user: { ...safeUser, lastLoginAt: new Date() }, token }
 }
@@ -137,7 +144,7 @@ export async function setupInitialAdmin(data: {
   }, { isolationLevel: 'Serializable' })
 
   const token = signToken({ userId: user.id, email: user.email, role: user.role })
-  const { passwordHash: _, ...safeUser } = user
+  const { passwordHash: _, twoFactorSecret: _s, recoveryCodes: _r, ...safeUser } = user
 
   return { user: safeUser, token }
 }
