@@ -8,6 +8,7 @@ import { useRouter } from 'next/navigation'
 import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react'
 import { LogoLarge } from '@/components/common/Logo'
 import { SetupWizard } from '@/components/auth/SetupWizard'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 
@@ -20,6 +21,7 @@ type LoginForm = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [showPassword, setShowPassword] = useState(false)
   const [showSetup, setShowSetup] = useState(false)
 
@@ -44,9 +46,9 @@ export default function LoginPage() {
   const onSubmit = async (data: LoginForm) => {
     try {
       await api.auth.login(data.email, data.password)
+      await queryClient.invalidateQueries({ queryKey: ['auth'] })
       toast.success('Welcome back!')
       router.push('/dashboard')
-      router.refresh()
     } catch (err: any) {
       toast.error(err.message || 'Login failed. Please check your credentials.')
     }

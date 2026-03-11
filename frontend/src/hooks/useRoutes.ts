@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 import { RouteFilters, RouteFormData } from '@/types'
@@ -7,7 +7,8 @@ export function useRoutes(filters: RouteFilters = {}) {
   return useQuery({
     queryKey: ['routes', filters],
     queryFn: () => api.routes.list(filters),
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000,
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -16,7 +17,7 @@ export function useRoute(id: string) {
     queryKey: ['routes', id],
     queryFn: () => api.routes.getById(id),
     enabled: !!id,
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000,
   })
 }
 
@@ -135,7 +136,7 @@ export function useRouteVersions(id: string) {
     queryKey: ['routes', id, 'versions'],
     queryFn: () => api.routes.getVersions(id),
     enabled: !!id,
-    staleTime: 30 * 1000,
+    staleTime: 60 * 1000,
   })
 }
 
@@ -159,6 +160,7 @@ export function useRouteStats(id: string) {
     queryKey: ['routes', id, 'stats'],
     queryFn: () => api.routes.getStats(id),
     enabled: !!id,
+    staleTime: 60 * 1000,
     refetchInterval: 60 * 1000,
   })
 }

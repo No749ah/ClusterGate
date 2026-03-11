@@ -121,7 +121,7 @@ export default function UsersPage() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Users</h1>
@@ -156,6 +156,7 @@ export default function UsersPage() {
                   size="icon-sm"
                   className="text-destructive hover:text-destructive"
                   onClick={() => revokeInviteMutation.mutate(invite.id)}
+                  disabled={revokeInviteMutation.isPending}
                 >
                   <X className="w-3.5 h-3.5" />
                 </Button>
@@ -235,6 +236,7 @@ export default function UsersPage() {
                           variant="ghost"
                           size="icon-sm"
                           className="text-destructive hover:text-destructive"
+                          disabled={deleteMutation.isPending}
                           onClick={async () => {
                             const ok = await confirm({
                               title: 'Remove User',

@@ -5,8 +5,8 @@ export function useNotifications(unreadOnly = false) {
   return useQuery({
     queryKey: ['notifications', { unreadOnly }],
     queryFn: () => api.notifications.list(unreadOnly),
-    staleTime: 30 * 1000,
-    refetchInterval: 60 * 1000,
+    staleTime: 60 * 1000,
+    refetchInterval: 2 * 60 * 1000,
   })
 }
 
@@ -14,8 +14,8 @@ export function useUnreadCount() {
   return useQuery({
     queryKey: ['notifications', 'count'],
     queryFn: () => api.notifications.unreadCount(),
-    staleTime: 30 * 1000,
-    refetchInterval: 30 * 1000,
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
   })
 }
 

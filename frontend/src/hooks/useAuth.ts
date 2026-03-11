@@ -4,16 +4,17 @@ import { toast } from 'sonner'
 import { api } from '@/lib/api'
 
 export function useAuth() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, isFetched } = useQuery({
     queryKey: ['auth', 'me'],
     queryFn: () => api.auth.getMe(),
     retry: false,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 10 * 60 * 1000,
+    gcTime: 15 * 60 * 1000,
   })
 
   return {
     user: data?.data ?? null,
-    isLoading,
+    isLoading: !isFetched && isLoading,
     isAuthenticated: !!data?.data,
     error,
   }
@@ -52,12 +53,14 @@ export function useLogout() {
 
 export function useChangePassword() {
   const router = useRouter()
+  const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: ({ currentPassword, newPassword }: { currentPassword: string; newPassword: string }) =>
       api.auth.changePassword(currentPassword, newPassword),
     onSuccess: () => {
       toast.success('Password changed successfully. Please sign in again.')
+      queryClient.clear()
       router.push('/login')
     },
     onError: (err: any) => {

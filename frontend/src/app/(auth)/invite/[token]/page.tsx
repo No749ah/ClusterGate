@@ -7,6 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { Eye, EyeOff, Loader2, Lock, User, Mail, ShieldCheck } from 'lucide-react'
 import { LogoLarge } from '@/components/common/Logo'
+import { useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
 
@@ -29,6 +30,7 @@ const ROLE_LABELS: Record<string, string> = {
 
 export default function InvitePage({ params }: { params: { token: string } }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const [showPassword, setShowPassword] = useState(false)
   const [inviteData, setInviteData] = useState<{ email: string; role: string } | null>(null)
   const [loading, setLoading] = useState(true)
@@ -61,9 +63,9 @@ export default function InvitePage({ params }: { params: { token: string } }) {
         name: data.name,
         password: data.password,
       })
+      await queryClient.invalidateQueries({ queryKey: ['auth'] })
       toast.success('Account created! Welcome to ClusterGate.')
       router.push('/dashboard')
-      router.refresh()
     } catch (err: any) {
       toast.error(err.message || 'Failed to create account')
     }

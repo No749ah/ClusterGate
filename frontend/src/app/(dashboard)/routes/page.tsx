@@ -82,7 +82,7 @@ export default function RoutesPage() {
   const totalPages = data?.totalPages ?? 1
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -372,7 +372,7 @@ function RouteRow({
                   Deactivate
                 </DropdownMenuItem>
               )}
-              <DropdownMenuItem onClick={onDuplicate}>
+              <DropdownMenuItem onClick={onDuplicate} disabled={isLoading}>
                 <Copy className="w-4 h-4 mr-2" />
                 Duplicate
               </DropdownMenuItem>

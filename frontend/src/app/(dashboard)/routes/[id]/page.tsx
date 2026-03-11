@@ -62,7 +62,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
   const health = route.healthChecks?.[0]
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-start gap-4">
@@ -107,9 +107,9 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
               Deactivate
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={() => duplicate.mutate(id)}>
+          <Button variant="outline" size="sm" onClick={() => duplicate.mutate(id)} disabled={duplicate.isPending}>
             <Copy className="w-3.5 h-3.5 mr-2" />
-            Duplicate
+            {duplicate.isPending ? 'Duplicating...' : 'Duplicate'}
           </Button>
           <Button size="sm" asChild>
             <Link href={`/routes/${id}/edit`}>
@@ -301,6 +301,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
                         <Button
                           variant="outline"
                           size="sm"
+                          disabled={restoreVersion.isPending}
                           onClick={async () => {
                             const ok = await confirm({
                               title: 'Restore Version',
@@ -310,7 +311,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
                             if (ok) restoreVersion.mutate(v.id)
                           }}
                         >
-                          Restore
+                          {restoreVersion.isPending ? 'Restoring...' : 'Restore'}
                         </Button>
                       )}
                       {v.version === route.version && (

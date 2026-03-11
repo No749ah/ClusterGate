@@ -81,16 +81,15 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-      target: development
+      target: production
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+        NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-ClusterGate}
     container_name: clustergate-frontend
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
       NEXT_PUBLIC_APP_NAME: ${NEXT_PUBLIC_APP_NAME:-ClusterGate}
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-      - /app/.next
     ports:
       - "3000:3000"
     networks:

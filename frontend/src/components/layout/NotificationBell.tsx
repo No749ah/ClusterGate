@@ -38,8 +38,8 @@ export function NotificationBell() {
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8 relative text-foreground hover:text-foreground">
-          <Bell className="h-4 w-4" />
+        <Button variant="ghost" size="icon" className="h-8 w-8 relative text-foreground hover:text-foreground [&>svg]:text-foreground">
+          <Bell className="h-4 w-4 text-foreground" />
           {count > 0 && (
             <span className="absolute -top-0.5 -right-0.5 flex items-center justify-center w-4 h-4 rounded-full bg-destructive text-destructive-foreground text-[10px] font-medium">
               {count > 9 ? '9+' : count}

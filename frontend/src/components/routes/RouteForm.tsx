@@ -586,7 +586,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
           type="button"
           variant="outline"
           onClick={() => setStep((s) => s - 1)}
-          disabled={step === 0}
+          disabled={step === 0 || isSubmitting}
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
           Back
@@ -594,7 +594,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
 
         <div className="flex gap-3">
           {step < STEPS.length - 1 ? (
-            <Button type="button" onClick={handleNext}>
+            <Button type="button" onClick={handleNext} disabled={isSubmitting}>
               Next
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>

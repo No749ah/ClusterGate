@@ -26,7 +26,7 @@ export function Header({ title }: HeaderProps) {
   const logout = useLogout()
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border/50 bg-background/80 backdrop-blur px-6">
+    <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border/50 bg-background backdrop-blur-sm border-border px-6">
       {/* Search trigger */}
       <div className="flex-1">
         <button
@@ -54,7 +54,7 @@ export function Header({ title }: HeaderProps) {
           variant="ghost"
           size="icon"
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-          className="h-8 w-8"
+          className="h-8 w-8 text-foreground hover:text-foreground"
         >
           <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
           <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
