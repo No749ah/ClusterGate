@@ -27,7 +27,7 @@ router.get('/setup-status', async (_req: Request, res: Response, next: NextFunct
 })
 
 // POST /api/auth/setup — create first admin, only works when 0 users exist
-router.post('/setup', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/setup', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
       email: z.string().email('Invalid email address'),
@@ -60,7 +60,7 @@ router.get('/invite/:token', async (req: Request, res: Response, next: NextFunct
 })
 
 // POST /api/auth/accept-invite — accept invite and create account (public)
-router.post('/accept-invite', async (req: Request, res: Response, next: NextFunction) => {
+router.post('/accept-invite', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
   try {
     const schema = z.object({
       token: z.string().min(1, 'Token is required'),

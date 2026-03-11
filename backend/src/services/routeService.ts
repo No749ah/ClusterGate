@@ -2,6 +2,7 @@ import { Prisma, Route, RouteStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { activeRoutesTotal } from '../lib/metrics'
+import { validateTargetUrl, isSafeRegex } from '../lib/security'
 
 export interface RouteFilters {
   search?: string
@@ -97,17 +98,27 @@ export async function getRouteById(id: string) {
 }
 
 export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId: string) {
-  // Validate target URL
+  // Validate target URL (format + SSRF protection)
   try {
-    new URL(data.targetUrl as string)
-  } catch {
-    throw AppError.badRequest('Invalid target URL format')
+    await validateTargetUrl(data.targetUrl as string)
+  } catch (err) {
+    throw AppError.badRequest((err as Error).message)
   }
 
   // Validate path starts with /
   const publicPath = data.publicPath as string
   if (!publicPath.startsWith('/')) {
     throw AppError.badRequest('Public path must start with /')
+  }
+
+  // Validate rewrite rules are safe regex patterns
+  const rewriteRules = data.rewriteRules as unknown as Array<{ from: string; to: string }> | undefined
+  if (rewriteRules) {
+    for (const rule of rewriteRules) {
+      if (!isSafeRegex(rule.from)) {
+        throw AppError.badRequest(`Unsafe regex pattern in rewrite rule: ${rule.from}`)
+      }
+    }
   }
 
   const route = await prisma.route.create({
@@ -134,6 +145,25 @@ export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId
 export async function updateRoute(id: string, data: Partial<Prisma.RouteUncheckedUpdateInput>, userId: string) {
   const existing = await prisma.route.findUnique({ where: { id, deletedAt: null } })
   if (!existing) throw AppError.notFound('Route')
+
+  // Validate target URL if changed (SSRF protection)
+  if (data.targetUrl) {
+    try {
+      await validateTargetUrl(data.targetUrl as string)
+    } catch (err) {
+      throw AppError.badRequest((err as Error).message)
+    }
+  }
+
+  // Validate rewrite rules if changed
+  const rewriteRules = data.rewriteRules as unknown as Array<{ from: string; to: string }> | undefined
+  if (rewriteRules) {
+    for (const rule of rewriteRules) {
+      if (!isSafeRegex(rule.from)) {
+        throw AppError.badRequest(`Unsafe regex pattern in rewrite rule: ${rule.from}`)
+      }
+    }
+  }
 
   const route = await prisma.route.update({
     where: { id },

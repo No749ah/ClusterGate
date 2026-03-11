@@ -7,7 +7,7 @@ import { config } from './config'
 import { logger } from './lib/logger'
 import { prisma } from './lib/prisma'
 import { registry } from './lib/metrics'
-import { globalLimiter } from './middleware/rateLimiter'
+import { globalLimiter, proxyLimiter } from './middleware/rateLimiter'
 import { requestLogger } from './middleware/requestLogger'
 import { auditLogger } from './middleware/auditLogger'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
@@ -70,11 +70,16 @@ app.use(globalLimiter)
 // ============================================================================
 
 app.get('/metrics', async (req, res) => {
-  // Optional: Protect metrics with a secret
+  // Protect metrics endpoint — require secret via header (not query param)
   if (config.METRICS_SECRET) {
-    const providedSecret = req.get('X-Metrics-Secret') || req.query.secret
+    const providedSecret = req.get('X-Metrics-Secret')
     if (providedSecret !== config.METRICS_SECRET) {
       return res.status(401).json({ error: 'Unauthorized' })
+    }
+  } else {
+    // No secret configured — block public access in production
+    if (config.isProd) {
+      return res.status(403).json({ error: 'Metrics secret not configured' })
     }
   }
   res.set('Content-Type', registry.contentType)
@@ -99,7 +104,7 @@ app.use('/api/system', systemRouter)
 // Proxy Handler (catch-all for non-API routes)
 // ============================================================================
 
-app.use(proxyHandler)
+app.use(proxyLimiter, proxyHandler)
 
 // ============================================================================
 // Error Handling

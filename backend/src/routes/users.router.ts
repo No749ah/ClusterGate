@@ -4,6 +4,7 @@ import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as userService from '../services/userService'
 import { createInvite, getPendingInvites, revokeInvite } from '../services/inviteService'
+import { safePageSize } from '../lib/security'
 
 const router = Router()
 
@@ -12,8 +13,8 @@ router.get('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =>
   try {
     const { page = '1', pageSize = '20' } = req.query
     const result = await userService.getUsers({
-      page: parseInt(String(page)),
-      pageSize: parseInt(String(pageSize)),
+      page: parseInt(String(page)) || 1,
+      pageSize: safePageSize(pageSize as string),
     })
     res.json({ success: true, ...result })
   } catch (err) {

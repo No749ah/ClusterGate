@@ -38,7 +38,7 @@ router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPER
 // POST /api/routes/:routeId/api-keys/:keyId/revoke
 router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
-    await apiKeyService.revokeApiKey(req.params.keyId)
+    await apiKeyService.revokeApiKey(req.params.keyId, req.params.routeId)
     res.json({ success: true, message: 'API key revoked' })
   } catch (err) {
     next(err)
@@ -48,7 +48,7 @@ router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.AD
 // DELETE /api/routes/:routeId/api-keys/:keyId
 router.delete('/:routeId/api-keys/:keyId', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
-    await apiKeyService.deleteApiKey(req.params.keyId)
+    await apiKeyService.deleteApiKey(req.params.keyId, req.params.routeId)
     res.json({ success: true, message: 'API key deleted' })
   } catch (err) {
     next(err)

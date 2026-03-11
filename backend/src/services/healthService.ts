@@ -4,6 +4,7 @@ import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { healthCheckStatus } from '../lib/metrics'
 import { notifyHealthDown } from './notificationService'
+import { validateTargetUrlSync } from '../lib/security'
 
 export async function checkRouteHealth(route: Route): Promise<{
   status: HealthStatus
@@ -12,11 +13,24 @@ export async function checkRouteHealth(route: Route): Promise<{
 }> {
   const start = Date.now()
 
+  // SSRF protection — skip health check for private/blocked URLs
+  try {
+    validateTargetUrlSync(route.targetUrl)
+  } catch (err) {
+    const error = `SSRF blocked: ${(err as Error).message}`
+    await prisma.healthCheck.create({
+      data: { routeId: route.id, status: HealthStatus.UNHEALTHY, responseTime: 0, error, lastCheckedAt: new Date() },
+    })
+    healthCheckStatus.set({ route_id: route.id, route_name: route.name }, 0)
+    return { status: HealthStatus.UNHEALTHY, responseTime: 0, error }
+  }
+
   try {
     const response = await axios({
       method: 'HEAD',
       url: route.targetUrl,
       timeout: 10000,
+      maxRedirects: 0,
       validateStatus: (status) => status < 500,
     })
 

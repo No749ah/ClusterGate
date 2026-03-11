@@ -2,6 +2,7 @@ import axios, { AxiosError, AxiosRequestConfig } from 'axios'
 import https from 'https'
 import { Request, Response } from 'express'
 import { createHmac } from 'crypto'
+import { validateWebhookSignature, isSafeRegex } from '../lib/security'
 import { Route } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
@@ -35,15 +36,14 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     }
   }
 
-  // Validate webhook secret
+  // Validate webhook secret (timing-safe comparison)
   if (route.webhookSecret) {
     const signature = req.get('X-Hub-Signature-256') || req.get('X-Webhook-Signature')
     if (!signature) {
       throw AppError.unauthorized('Missing webhook signature')
     }
     const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
-    const expected = `sha256=${createHmac('sha256', route.webhookSecret).update(body).digest('hex')}`
-    if (signature !== expected) {
+    if (!validateWebhookSignature(body, route.webhookSecret, signature)) {
       throw AppError.unauthorized('Invalid webhook signature')
     }
   }
@@ -57,9 +57,13 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     targetPath = targetPath.slice(basePath.length) || '/'
   }
 
-  // Apply path rewrite rules (on the suffix)
+  // Apply path rewrite rules (on the suffix) — skip unsafe patterns
   const rewriteRules = (route.rewriteRules as unknown as Array<{ from: string; to: string }>) || []
   for (const rule of rewriteRules) {
+    if (!isSafeRegex(rule.from)) {
+      logger.warn('Skipping unsafe rewrite regex', { routeId: route.id, pattern: rule.from })
+      continue
+    }
     const regex = new RegExp(rule.from)
     if (regex.test(targetPath)) {
       targetPath = targetPath.replace(regex, rule.to)
@@ -126,7 +130,7 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     timeout: route.timeout,
     responseType: 'arraybuffer',
     validateStatus: () => true, // Don't throw on any HTTP status
-    maxRedirects: 5,
+    maxRedirects: 0, // Disable redirect following to prevent SSRF via open redirectors
     decompress: true,
     httpsAgent: new https.Agent({ rejectUnauthorized: (route as any).sslVerify !== false }),
   }

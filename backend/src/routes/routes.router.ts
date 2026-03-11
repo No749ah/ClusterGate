@@ -8,6 +8,7 @@ import * as logService from '../services/logService'
 import { proxyRequest } from '../services/proxyService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
+import { stripSensitiveRouteFields, safePageSize } from '../lib/security'
 
 const router = Router()
 
@@ -54,8 +55,8 @@ router.get('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR, Role.VIEWER]
         tags: tags ? String(tags).split(',') : undefined,
       },
       {
-        page: parseInt(String(page)),
-        pageSize: parseInt(String(pageSize)),
+        page: parseInt(String(page)) || 1,
+        pageSize: safePageSize(pageSize as string),
         sortBy: sortBy as string,
         sortDir: (sortDir as 'asc' | 'desc') || 'desc',
       }
@@ -111,8 +112,8 @@ router.get('/export', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), asyn
 // POST /api/routes/import
 router.post('/import', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
-    const { routes } = z.object({ routes: z.array(z.unknown()) }).parse(req.body)
-    const result = await routeService.importRoutes(routes, req.user!.userId)
+    const { routes } = z.object({ routes: z.array(routeBodySchema) }).parse(req.body)
+    const result = await routeService.importRoutes(routes as any[], req.user!.userId)
     res.json({ success: true, data: result })
   } catch (err) {
     next(err)
@@ -123,7 +124,11 @@ router.post('/import', authenticate, authorize([Role.ADMIN]), async (req, res, n
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const route = await routeService.getRouteById(req.params.id)
-    res.json({ success: true, data: route })
+    // Strip sensitive fields for non-admin users
+    const data = req.user?.role === Role.VIEWER
+      ? stripSensitiveRouteFields(route as any)
+      : route
+    res.json({ success: true, data })
   } catch (err) {
     next(err)
   }
@@ -321,7 +326,7 @@ router.get('/:id/logs', authenticate, async (req, res, next) => {
         dateFrom: dateFrom ? new Date(String(dateFrom)) : undefined,
         dateTo: dateTo ? new Date(String(dateTo)) : undefined,
       },
-      { page: parseInt(String(page)), pageSize: parseInt(String(pageSize)) }
+      { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )
 
     res.json({ success: true, ...result })

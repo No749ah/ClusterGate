@@ -60,7 +60,7 @@ services:
       - ./backend:/app
       - /app/node_modules
       - backend_logs:/app/logs
-      - /var/run/docker.sock:/var/run/docker.sock
+      # Docker socket removed — use external update mechanism instead (security risk)
     ports:
       - "3001:3001"
     networks:

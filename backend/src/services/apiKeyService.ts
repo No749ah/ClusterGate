@@ -52,9 +52,9 @@ export async function createApiKey(routeId: string, name: string, expiresAt?: Da
   return { ...apiKey, key: rawKey }
 }
 
-export async function revokeApiKey(keyId: string) {
+export async function revokeApiKey(keyId: string, routeId: string) {
   const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } })
-  if (!apiKey) throw AppError.notFound('API Key')
+  if (!apiKey || apiKey.routeId !== routeId) throw AppError.notFound('API Key')
 
   return prisma.apiKey.update({
     where: { id: keyId },
@@ -62,9 +62,9 @@ export async function revokeApiKey(keyId: string) {
   })
 }
 
-export async function deleteApiKey(keyId: string) {
+export async function deleteApiKey(keyId: string, routeId: string) {
   const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } })
-  if (!apiKey) throw AppError.notFound('API Key')
+  if (!apiKey || apiKey.routeId !== routeId) throw AppError.notFound('API Key')
 
   return prisma.apiKey.delete({ where: { id: keyId } })
 }
