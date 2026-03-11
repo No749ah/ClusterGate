@@ -39,7 +39,7 @@ router.post('/setup', authLimiter, async (req: Request, res: Response, next: Nex
     const data = schema.parse(req.body)
     const result = await setupInitialAdmin(data)
 
-    res.cookie('token', result.token, COOKIE_OPTIONS)
+    res.cookie('cg_session', result.token, COOKIE_OPTIONS)
 
     createAuditLog({
       userId: result.user.id,
@@ -81,7 +81,7 @@ router.post('/accept-invite', authLimiter, async (req: Request, res: Response, n
     const data = schema.parse(req.body)
     const result = await acceptInvite(data.token, { name: data.name, password: data.password })
 
-    res.cookie('token', result.token, COOKIE_OPTIONS)
+    res.cookie('cg_session', result.token, COOKIE_OPTIONS)
 
     createAuditLog({
       userId: result.user.id,
@@ -110,7 +110,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
     const { email, password } = schema.parse(req.body)
     const result = await login(email, password)
 
-    res.cookie('token', result.token, COOKIE_OPTIONS)
+    res.cookie('cg_session', result.token, COOKIE_OPTIONS)
 
     createAuditLog({
       userId: result.user.id,
@@ -153,7 +153,7 @@ router.post('/logout', authenticate, (req: Request, res: Response) => {
     userAgent: req.get('user-agent'),
   })
 
-  res.clearCookie('token', { path: '/' })
+  res.clearCookie('cg_session', { path: '/' })
   res.json({ success: true, message: 'Logged out successfully' })
 })
 
@@ -188,7 +188,7 @@ router.post('/change-password', authenticate, async (req: Request, res: Response
     })
 
     // Invalidate session by clearing cookie
-    res.clearCookie('token', { path: '/' })
+    res.clearCookie('cg_session', { path: '/' })
 
     res.json({
       success: true,

@@ -17,11 +17,11 @@ declare global {
   }
 }
 
-export async function authenticate(req: Request, _res: Response, next: NextFunction) {
+export async function authenticate(req: Request, res: Response, next: NextFunction) {
   try {
     // Try cookie first, then Authorization header
     const token =
-      req.cookies?.token ||
+      req.cookies?.cg_session ||
       (req.headers.authorization?.startsWith('Bearer ')
         ? req.headers.authorization.slice(7)
         : null)
@@ -34,6 +34,8 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     try {
       payload = verifyToken(token)
     } catch {
+      // Clear stale/invalid cookie to prevent redirect loops
+      res.clearCookie('cg_session', { path: '/' })
       throw AppError.unauthorized('Invalid or expired token')
     }
 
@@ -44,6 +46,7 @@ export async function authenticate(req: Request, _res: Response, next: NextFunct
     })
 
     if (!user || !user.isActive) {
+      res.clearCookie('cg_session', { path: '/' })
       throw AppError.unauthorized('Account not found or deactivated')
     }
 
