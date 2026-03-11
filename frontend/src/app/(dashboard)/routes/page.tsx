@@ -62,11 +62,19 @@ function MethodBadge({ method }: { method: string }) {
 export default function RoutesPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<RouteStatus | 'ALL'>('ALL')
+  const [tagFilter, setTagFilter] = useState<string>('ALL')
   const [page, setPage] = useState(1)
+
+  // Fetch all routes (no tag filter) to extract unique tags for the filter dropdown
+  const { data: allRoutesData } = useRoutes({ pageSize: 200 })
+  const allTags = Array.from(
+    new Set((allRoutesData?.data ?? []).flatMap((r) => r.tags))
+  ).sort()
 
   const { data, isLoading } = useRoutes({
     search: search || undefined,
     status: statusFilter === 'ALL' ? undefined : statusFilter,
+    tags: tagFilter !== 'ALL' ? [tagFilter] : undefined,
     page,
     pageSize: 20,
   })
@@ -121,6 +129,19 @@ export default function RoutesPage() {
             <SelectItem value="DRAFT">Draft</SelectItem>
           </SelectContent>
         </Select>
+        {allTags.length > 0 && (
+          <Select value={tagFilter} onValueChange={(v) => { setTagFilter(v); setPage(1) }}>
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="All Tags" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Tags</SelectItem>
+              {allTags.map((tag) => (
+                <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
 
       {/* Table */}
