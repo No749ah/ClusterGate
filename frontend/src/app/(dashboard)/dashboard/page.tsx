@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { Route, Activity, CheckCircle2, AlertCircle, Plus, ScrollText, ArrowRight } from 'lucide-react'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { RequestsChart } from '@/components/dashboard/RequestsChart'
+import { SystemHealth } from '@/components/dashboard/SystemHealth'
 import { useRoutes } from '@/hooks/useRoutes'
 import { useLogs, useRecentErrors } from '@/hooks/useLogs'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,8 @@ export default function DashboardPage() {
   const publishedRoutes = routes.filter((r) => r.status === 'PUBLISHED' && r.isActive).length
   const totalRequests = logsData?.total ?? 0
   const errorCount = recentErrors.length
+  const healthyRoutes = routes.filter(r => r.isActive && r.healthChecks?.[0]?.status === 'HEALTHY').length
+  const unhealthyRoutes = routes.filter(r => r.isActive && r.healthChecks?.[0]?.status === 'UNHEALTHY').length
 
   return (
     <div className="space-y-6">
@@ -81,7 +84,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Charts + Recent Activity */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-4">
         <div className="lg:col-span-2">
           <RequestsChart />
         </div>
@@ -134,6 +137,8 @@ export default function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <SystemHealth healthyRoutes={healthyRoutes} unhealthyRoutes={unhealthyRoutes} />
       </div>
 
       {/* Recent Request Logs */}
