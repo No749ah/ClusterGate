@@ -14,12 +14,15 @@ import { RequestLog } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 
+const PAGE_SIZE_OPTIONS = [25, 50, 100] as const
+
 export default function LogsPage() {
   const queryClient = useQueryClient()
   const [routeId, setRouteId] = useState<string>('')
   const [method, setMethod] = useState<string>('')
   const [statusType, setStatusType] = useState<string>('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState<number>(25)
   const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
 
   const { data: routesData } = useRoutes({ pageSize: 100 })
@@ -28,7 +31,7 @@ export default function LogsPage() {
     method: method || undefined,
     statusType: (statusType as 'success' | 'error') || undefined,
     page,
-    pageSize: 50,
+    pageSize,
   })
 
   const logs = logsData?.data ?? []
@@ -193,19 +196,60 @@ export default function LogsPage() {
         )}
 
         {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
-            <p className="text-xs text-muted-foreground">Page {page} of {totalPages}</p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
-                Previous
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
+          <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground">
+              {total > 0
+                ? `Showing ${((page - 1) * pageSize) + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`
+                : 'No results'}
+            </p>
+            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
+              <SelectTrigger className="w-20 h-7 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <SelectItem key={size} value={String(size)}>{size} / page</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 1} onClick={() => setPage(1)}>
+                First
               </Button>
-              <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
+                Prev
+              </Button>
+              {(() => {
+                const pages: number[] = []
+                const maxVisible = 5
+                let start = Math.max(1, page - Math.floor(maxVisible / 2))
+                const end = Math.min(totalPages, start + maxVisible - 1)
+                if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1)
+                for (let i = start; i <= end; i++) pages.push(i)
+                return pages.map((p) => (
+                  <Button
+                    key={p}
+                    variant={p === page ? 'default' : 'outline'}
+                    size="sm"
+                    className="h-7 w-7 px-0 text-xs"
+                    onClick={() => setPage(p)}
+                  >
+                    {p}
+                  </Button>
+                ))
+              })()}
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
                 Next
               </Button>
+              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === totalPages} onClick={() => setPage(totalPages)}>
+                Last
+              </Button>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   )
