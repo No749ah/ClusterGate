@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authenticate'
-import { checkForUpdates, pullAndRestart } from '../services/updateService'
+import { checkForUpdates, pullAndRestart, getCachedUpdateStatus } from '../services/updateService'
 import { prisma } from '../lib/prisma'
 import { getVersion } from '../lib/version'
 import { runAllHealthChecks } from '../services/healthService'
@@ -28,8 +28,17 @@ router.get('/version', (_req, res) => {
 })
 
 /**
+ * GET /api/system/update-status
+ * Return cached update check result (lightweight, no external API call).
+ */
+router.get('/update-status', (_req, res) => {
+  const cached = getCachedUpdateStatus()
+  res.json({ success: true, data: cached })
+})
+
+/**
  * GET /api/system/update-check
- * Check GHCR for newer images.
+ * Check GHCR for newer images (forces a fresh check).
  */
 router.get('/update-check', async (_req, res, next) => {
   try {

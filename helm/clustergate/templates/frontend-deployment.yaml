@@ -54,6 +54,10 @@ spec:
             - containerPort: {{ .Values.frontend.service.port }}
               name: http
           env:
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            - name: PORT
+              value: "{{ .Values.frontend.service.port }}"
             {{- range $key, $value := .Values.frontend.env }}
             - name: {{ $key }}
               value: {{ $value | quote }}

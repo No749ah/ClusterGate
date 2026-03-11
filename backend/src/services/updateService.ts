@@ -30,6 +30,31 @@ export interface UpdateCheckResult {
   checkedAt: string
 }
 
+// In-memory cache for update check results
+let cachedUpdateResult: UpdateCheckResult | null = null
+
+/**
+ * Get the cached update check result (lightweight, no external calls).
+ */
+export function getCachedUpdateStatus(): UpdateCheckResult | null {
+  return cachedUpdateResult
+}
+
+/**
+ * Run update check and cache the result. Used by the cron job.
+ */
+export async function runScheduledUpdateCheck(): Promise<void> {
+  try {
+    cachedUpdateResult = await checkForUpdates()
+    if (cachedUpdateResult.updateAvailable) {
+      const latest = cachedUpdateResult.backend.latestTag || cachedUpdateResult.frontend.latestTag
+      logger.info(`Update available: ${CURRENT_VERSION} → ${latest}`)
+    }
+  } catch (err) {
+    logger.error('Scheduled update check failed', { error: (err as Error).message })
+  }
+}
+
 /**
  * Fetch tags from GHCR (GitHub Container Registry) using the OCI distribution API.
  * GHCR supports anonymous pulls for public packages.
@@ -156,7 +181,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     ? `https://github.com/${GHCR_OWNER}/ClusterGate/releases/tag/v${latestTag.replace(/^v/, '')}`
     : null
 
-  return {
+  const result: UpdateCheckResult = {
     currentVersion: CURRENT_VERSION,
     backend: {
       image: BACKEND_IMAGE,
@@ -178,6 +203,10 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     releaseUrl,
     checkedAt: now,
   }
+
+  // Update cache whenever a check completes
+  cachedUpdateResult = result
+  return result
 }
 
 /**

@@ -335,6 +335,16 @@ class ApiClient {
     version: () =>
       this.get<ApiResponse<{ version: string }>>('/api/system/version'),
 
+    updateStatus: () =>
+      this.get<ApiResponse<{
+        currentVersion: string
+        backend: { image: string; currentTag: string; latestTag: string | null; updateAvailable: boolean; checkedAt: string }
+        frontend: { image: string; currentTag: string; latestTag: string | null; updateAvailable: boolean; checkedAt: string }
+        updateAvailable: boolean
+        releaseUrl: string | null
+        checkedAt: string
+      } | null>>('/api/system/update-status'),
+
     updateCheck: () =>
       this.get<ApiResponse<{
         currentVersion: string

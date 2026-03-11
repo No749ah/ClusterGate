@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { ArrowUpCircle, X, ExternalLink } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
 import Link from 'next/link'
 
 const DISMISS_KEY = 'clustergate-update-dismissed'
+const POLL_INTERVAL = 5 * 60 * 1000 // 5 minutes
 
 export function UpdateBanner() {
   const { user } = useAuth()
@@ -15,22 +16,36 @@ export function UpdateBanner() {
   const [releaseUrl, setReleaseUrl] = useState<string | null>(null)
   const [dismissed, setDismissed] = useState(true)
 
-  useEffect(() => {
+  const checkStatus = useCallback(async () => {
     if (user?.role !== 'ADMIN') return
-
-    api.system.updateCheck().then((res) => {
+    try {
+      const res = await api.system.updateStatus()
       const data = res.data
-      if (data.updateAvailable) {
-        const latest = data.backend.latestTag || data.frontend.latestTag
-        const dismissedVersion = localStorage.getItem(DISMISS_KEY)
-        if (dismissedVersion === latest) return
-        setCurrentVersion(data.currentVersion)
-        setLatestVersion(latest)
-        setReleaseUrl(data.releaseUrl)
-        setDismissed(false)
+      if (!data || !data.updateAvailable) {
+        // No cached result yet or no update — clear banner
+        if (latestVersion) {
+          setLatestVersion(null)
+          setDismissed(true)
+        }
+        return
       }
-    }).catch(() => {})
-  }, [user?.role])
+      const latest = data.backend.latestTag || data.frontend.latestTag
+      const dismissedVersion = localStorage.getItem(DISMISS_KEY)
+      if (dismissedVersion === latest) return
+      setCurrentVersion(data.currentVersion)
+      setLatestVersion(latest)
+      setReleaseUrl(data.releaseUrl)
+      setDismissed(false)
+    } catch {
+      // Silently ignore — banner just won't show
+    }
+  }, [user?.role, latestVersion])
+
+  useEffect(() => {
+    checkStatus()
+    const interval = setInterval(checkStatus, POLL_INTERVAL)
+    return () => clearInterval(interval)
+  }, [checkStatus])
 
   if (dismissed || !latestVersion || user?.role !== 'ADMIN') return null
 
