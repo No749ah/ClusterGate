@@ -36,7 +36,7 @@ router.use(authorize(['ADMIN']))
  *                   properties:
  *                     version:
  *                       type: string
- *                       example: "1.2.0"
+ *                       example: "1.2.1"
  *       401:
  *         description: Not authenticated
  *       403:
