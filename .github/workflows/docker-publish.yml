@@ -150,14 +150,12 @@ jobs:
             # Edit .env — set JWT_SECRET and POSTGRES_PASSWORD
             docker compose up -d
             docker compose exec backend npm run db:migrate
-            docker compose exec backend npm run db:seed
             ```
 
             Frontend: http://localhost:3000
             Backend API: http://localhost:3001
 
-            **Default login:** `admin@clustergate.local` / `Admin@ClusterGate1`
-            > Change credentials immediately after first login!
+            On first visit, the **Setup Wizard** will guide you through creating your admin account.
 
             ### Kubernetes Deploy
 

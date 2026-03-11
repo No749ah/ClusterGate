@@ -317,8 +317,8 @@ function RouteRow({
           )}
         </div>
       </td>
-      <td className="px-4 py-3">
-        <span className="text-xs text-muted-foreground font-mono max-w-[200px] block truncate">
+      <td className="px-4 py-3 max-w-[200px]">
+        <span className="text-xs text-muted-foreground font-mono block truncate" title={route.targetUrl}>
           {route.targetUrl}
         </span>
       </td>

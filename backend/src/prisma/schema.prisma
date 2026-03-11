@@ -63,6 +63,7 @@ model User {
   routeVersions  RouteVersion[]
   auditLogs      AuditLog[]
   notifications  Notification[]
+  inviteTokens   InviteToken[]  @relation("InviteCreatedBy")
 
   @@index([email])
   @@map("users")
@@ -237,4 +238,20 @@ model Notification {
   @@index([userId, isRead])
   @@index([createdAt])
   @@map("notifications")
+}
+
+model InviteToken {
+  id          String    @id @default(cuid())
+  email       String
+  role        Role      @default(VIEWER)
+  token       String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String?
+  createdBy   User?     @relation("InviteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+
+  @@index([token])
+  @@index([email])
+  @@map("invite_tokens")
 }

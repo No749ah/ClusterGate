@@ -90,7 +90,7 @@ export default function LoginPage() {
                 <input
                   id="email"
                   type="email"
-                  placeholder="admin@clustergate.local"
+                  placeholder="you@example.com"
                   className={`w-full h-10 pl-10 pr-4 rounded-md border bg-background text-sm outline-none transition-colors
                     focus:ring-2 focus:ring-primary/30 focus:border-primary
                     ${errors.email ? 'border-destructive focus:ring-destructive/30' : 'border-input'}`}

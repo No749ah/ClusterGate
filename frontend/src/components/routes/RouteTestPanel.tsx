@@ -14,10 +14,11 @@ import { toast } from 'sonner'
 interface RouteTestPanelProps {
   routeId: string
   defaultPath?: string
+  methods?: string[]
 }
 
-export function RouteTestPanel({ routeId, defaultPath = '/' }: RouteTestPanelProps) {
-  const [method, setMethod] = useState('GET')
+export function RouteTestPanel({ routeId, defaultPath = '/', methods }: RouteTestPanelProps) {
+  const [method, setMethod] = useState(methods?.[0] ?? 'GET')
   const [path, setPath] = useState(defaultPath)
   const [body, setBody] = useState('')
   const [headers, setHeaders] = useState<{ key: string; value: string }[]>([])
@@ -62,7 +63,7 @@ export function RouteTestPanel({ routeId, defaultPath = '/' }: RouteTestPanelPro
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].map((m) => (
+              {(methods ?? ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD']).map((m) => (
                 <SelectItem key={m} value={m}>{m}</SelectItem>
               ))}
             </SelectContent>

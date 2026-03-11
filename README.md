@@ -53,7 +53,7 @@ api.example.com/api/v1        →  http://myservice.production.svc.cluster.local
 
 | Layer       | Technology                               |
 |-------------|------------------------------------------|
-| Frontend    | Next.js 14, TypeScript, Tailwind, shadcn |
+| Frontend    | Next.js 14, TypeScript, Tailwind CSS, shadcn/ui |
 | Backend     | Node.js, TypeScript, Express.js, Prisma  |
 | Database    | PostgreSQL 16                            |
 | Auth        | JWT (httpOnly cookies, 7 days), bcrypt   |
@@ -88,27 +88,21 @@ cp .env.example .env
 ```bash
 docker compose up -d
 
-# Wait for postgres to be healthy, then run migrations + seed:
+# Wait for postgres to be healthy, then run migrations:
 docker compose exec backend npm run db:migrate
-docker compose exec backend npm run db:seed
 ```
 
 ### 3. Open the UI
 
 | Service      | URL                                    |
 |--------------|----------------------------------------|
-| 🖥️ Frontend  | http://localhost:3000                  |
-| ⚙️ Backend   | http://localhost:3001                  |
-| 💓 Health    | http://localhost:3001/api/health/ready |
+| Frontend     | http://localhost:3000                  |
+| Backend API  | http://localhost:3001                  |
+| Health       | http://localhost:3001/api/health/ready |
 
-### Default Login Credentials
+### First-time Setup
 
-| Email                         | Password              | Role     |
-|-------------------------------|-----------------------|----------|
-| admin@clustergate.local       | Admin@ClusterGate1    | ADMIN    |
-| operator@clustergate.local    | Operator@1234         | OPERATOR |
-
-> ⚠️ **Change these immediately after first login!**
+On the first visit, a **Setup Wizard** will prompt you to create your administrator account. There are no default credentials — you choose your own email and password during setup.
 
 ---
 
@@ -124,9 +118,6 @@ cp ../.env.example .env.local   # set DATABASE_URL etc.
 # Run migrations
 npx prisma migrate dev
 npx prisma generate
-
-# Seed database
-npm run db:seed
 
 # Start dev server (hot reload)
 npm run dev
@@ -178,7 +169,7 @@ Public Request
   Backend receives request
         │
         ▼
-  Match route by domain + path prefix
+  Match route by path prefix (longest match)
         │
         ├── Check: isActive, status=PUBLISHED
         ├── Check: maintenance mode
@@ -224,7 +215,6 @@ Public Request
 ```json
 {
   "name": "n8n Webhooks",
-  "domain": "api.example.com",
   "publicPath": "/webhook",
   "targetUrl": "http://n8n.default.svc.cluster.local/webhook",
   "methods": ["POST"],
@@ -238,7 +228,6 @@ Public Request
 ```json
 {
   "name": "Protected Internal API",
-  "domain": "api.example.com",
   "publicPath": "/api/v1",
   "targetUrl": "http://myservice.production.svc.cluster.local/v1",
   "methods": ["GET", "POST", "PUT", "DELETE"],
@@ -284,10 +273,12 @@ Public Request
 ### Authentication
 
 ```
-POST /api/auth/login
-POST /api/auth/logout
-GET  /api/auth/me
-POST /api/auth/change-password
+GET  /api/auth/setup-status       Check if initial setup is complete
+POST /api/auth/setup              Create first admin account (first-run only)
+POST /api/auth/login              Login with email/password
+POST /api/auth/logout             Logout (clears session)
+GET  /api/auth/me                 Get current user
+POST /api/auth/change-password    Change password
 ```
 
 ### Routes
@@ -309,6 +300,7 @@ GET    /api/routes/:id/logs     Request logs for route
 GET    /api/routes/:id/stats    Stats for route
 POST   /api/routes/import       Import routes JSON
 GET    /api/routes/export       Export routes JSON
+GET    /api/routes/check-path   Check if public path is available
 ```
 
 ### Logs
@@ -327,6 +319,30 @@ POST   /api/users               Create user (admin)
 PUT    /api/users/:id           Update user (admin)
 DELETE /api/users/:id           Delete user (admin)
 POST   /api/users/:id/reset-password  Reset password (admin)
+```
+
+### Audit Logs
+
+```
+GET    /api/audit                Audit log entries (admin, filterable)
+```
+
+### API Keys
+
+```
+GET    /api/routes/:id/api-keys          List API keys for route
+POST   /api/routes/:id/api-keys          Create API key
+POST   /api/routes/:id/api-keys/:kid/revoke  Revoke API key
+DELETE /api/routes/:id/api-keys/:kid     Delete API key
+```
+
+### Notifications
+
+```
+GET    /api/notifications            List notifications
+GET    /api/notifications/count      Unread notification count
+POST   /api/notifications/:id/read   Mark notification as read
+POST   /api/notifications/read-all   Mark all as read
 ```
 
 ### Health & Metrics
@@ -365,12 +381,6 @@ kubectl run migrate \
   --namespace=clustergate \
   --env="DATABASE_URL=$(kubectl get secret clustergate-secrets -n clustergate -o jsonpath='{.data.DATABASE_URL}' | base64 -d)" \
   --command -- npm run db:migrate
-kubectl run seed \
-  --image=your-registry/clustergate-backend:latest \
-  --namespace=clustergate \
-  --env="DATABASE_URL=$(kubectl get secret clustergate-secrets -n clustergate -o jsonpath='{.data.DATABASE_URL}' | base64 -d)" \
-  --command -- npm run db:seed
-
 # 6. Deploy backend + frontend
 kubectl apply -f k8s/backend/
 kubectl apply -f k8s/frontend/
@@ -410,7 +420,7 @@ helm status clustergate -n clustergate
 
 ### Production Checklist
 
-- [ ] Change default admin password immediately after first login
+- [ ] Create a strong admin password via the setup wizard
 - [ ] Set a strong `JWT_SECRET` (min 64 chars, random)
 - [ ] Set a strong `POSTGRES_PASSWORD`
 - [ ] Enable TLS via cert-manager or bring your own certs
@@ -481,7 +491,7 @@ clustergate/
 │   │   │   ├── logs/           # Logs UI
 │   │   │   ├── dashboard/      # Dashboard widgets
 │   │   │   └── common/         # Shared components
-│   │   ├── hooks/              # React Query hooks
+│   │   ├── hooks/              # Custom React hooks
 │   │   ├── lib/                # API client, utilities
 │   │   └── types/              # TypeScript types
 │   ├── Dockerfile
@@ -533,9 +543,6 @@ npm run db:studio
 
 # Regenerate Prisma client (after schema changes)
 npm run db:generate
-
-# Seed database
-npm run db:seed
 ```
 
 ### Building for Production

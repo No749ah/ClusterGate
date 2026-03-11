@@ -47,7 +47,7 @@ If you discover a security vulnerability in ClusterGate, please disclose it resp
 
 When deploying ClusterGate in production, please follow these recommendations:
 
-- **Change default credentials** immediately after first login (`admin@clustergate.local` / `operator@clustergate.local`).
+- **Use a strong admin password** when completing the initial setup wizard.
 - **Generate a strong `JWT_SECRET`** — use `openssl rand -base64 64` and store it securely (e.g. Kubernetes Secret, Vault).
 - **Restrict the admin UI** — do not expose port `3000` (frontend) or `3001` (backend) directly to the public internet; place them behind a firewall or VPN.
 - **Enable IP allowlists** per route where possible, using the built-in allowlist feature.

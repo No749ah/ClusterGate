@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { login, getCurrentUser, changePassword, isSetupComplete, setupInitialAdmin } from '../services/authService'
+import { validateInvite, acceptInvite } from '../services/inviteService'
 import { authenticate } from '../middleware/authenticate'
 import { authLimiter } from '../middleware/rateLimiter'
 import { config } from '../config'
@@ -43,6 +44,35 @@ router.post('/setup', async (req: Request, res: Response, next: NextFunction) =>
       success: true,
       data: { user: result.user },
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/auth/invite/:token — validate invite token (public)
+router.get('/invite/:token', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const invite = await validateInvite(req.params.token)
+    res.json({ success: true, data: invite })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/auth/accept-invite — accept invite and create account (public)
+router.post('/accept-invite', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const schema = z.object({
+      token: z.string().min(1, 'Token is required'),
+      name: z.string().min(1, 'Name is required'),
+      password: z.string().min(8, 'Password must be at least 8 characters'),
+    })
+
+    const data = schema.parse(req.body)
+    const result = await acceptInvite(data.token, { name: data.name, password: data.password })
+
+    res.cookie('token', result.token, COOKIE_OPTIONS)
+    res.json({ success: true, data: { user: result.user } })
   } catch (err) {
     next(err)
   }

@@ -78,10 +78,10 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
             {route.description && (
               <p className="text-sm text-muted-foreground mt-1">{route.description}</p>
             )}
-            <div className="flex items-center gap-2 mt-2 font-mono text-sm">
+            <div className="flex items-center gap-2 mt-2 font-mono text-sm min-w-0">
               <CopyUrlButton path={route.publicPath} />
-              <span className="text-muted-foreground">→</span>
-              <span className="text-primary">{route.targetUrl}</span>
+              <span className="text-muted-foreground flex-shrink-0">→</span>
+              <span className="text-primary truncate max-w-[300px]" title={route.targetUrl}>{route.targetUrl}</span>
             </div>
           </div>
         </div>
@@ -215,7 +215,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
               <CardTitle>Test Route</CardTitle>
             </CardHeader>
             <CardContent>
-              <RouteTestPanel routeId={id} defaultPath={route.publicPath} />
+              <RouteTestPanel routeId={id} defaultPath={route.publicPath} methods={route.methods} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -332,6 +332,14 @@ function CopyUrlButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
   const url = `${PROXY_BASE}${path}`
 
+  const truncateUrl = (u: string, maxLen = 50) => {
+    if (u.length <= maxLen) return u
+    const proto = u.indexOf('://') + 3
+    const start = u.slice(0, proto + 15)
+    const end = u.slice(-15)
+    return `${start}...${end}`
+  }
+
   return (
     <button
       onClick={() => {
@@ -339,11 +347,11 @@ function CopyUrlButton({ path }: { path: string }) {
         setCopied(true)
         setTimeout(() => setCopied(false), 1500)
       }}
-      title={`Copy: ${url}`}
-      className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors"
+      title={url}
+      className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground transition-colors min-w-0"
     >
-      {copied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-      <span>{url}</span>
+      {copied ? <Check className="w-3.5 h-3.5 text-green-500 flex-shrink-0" /> : <Copy className="w-3.5 h-3.5 flex-shrink-0" />}
+      <span className="truncate">{truncateUrl(url)}</span>
     </button>
   )
 }
@@ -377,7 +385,10 @@ function InfoRow({ label, value, mono }: { label: string; value: React.ReactNode
     <div className="flex items-start justify-between gap-4">
       <span className="text-muted-foreground flex-shrink-0">{label}</span>
       {typeof value === 'string' ? (
-        <span className={`text-foreground text-right truncate max-w-[240px] ${mono ? 'font-mono text-xs' : ''}`}>
+        <span
+          className={`text-foreground text-right truncate max-w-[260px] ${mono ? 'font-mono text-xs' : ''}`}
+          title={value}
+        >
           {value}
         </span>
       ) : (

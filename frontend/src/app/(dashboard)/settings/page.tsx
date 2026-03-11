@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -43,6 +43,15 @@ export default function SettingsPage() {
   const [showNew, setShowNew] = useState(false)
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
+  const [isUpdating, setIsUpdating] = useState(false)
+  const [updateInfo, setUpdateInfo] = useState<{
+    currentVersion: string
+    backend: { latestTag: string | null; updateAvailable: boolean }
+    frontend: { latestTag: string | null; updateAvailable: boolean }
+    updateAvailable: boolean
+    checkedAt: string
+  } | null>(null)
 
   const {
     register,
@@ -77,6 +86,39 @@ export default function SettingsPage() {
       toast.error('Failed to export routes')
     } finally {
       setIsExporting(false)
+    }
+  }
+
+  const handleCheckUpdate = async () => {
+    setIsCheckingUpdate(true)
+    try {
+      const result = await api.system.updateCheck()
+      setUpdateInfo(result.data)
+      if (result.data.updateAvailable) {
+        toast.info('A new version is available!')
+      } else {
+        toast.success('You are running the latest version.')
+      }
+    } catch {
+      toast.error('Failed to check for updates')
+    } finally {
+      setIsCheckingUpdate(false)
+    }
+  }
+
+  const handleUpdate = async () => {
+    setIsUpdating(true)
+    try {
+      const result = await api.system.update()
+      if (result.data.success) {
+        toast.success(result.data.message)
+      } else {
+        toast.error(result.data.message)
+      }
+    } catch {
+      toast.error('Failed to pull updates')
+    } finally {
+      setIsUpdating(false)
     }
   }
 
@@ -260,7 +302,7 @@ export default function SettingsPage() {
             <Info className="w-4 h-4" /> System
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-muted-foreground">Application</p>
@@ -268,7 +310,7 @@ export default function SettingsPage() {
             </div>
             <div>
               <p className="text-muted-foreground">Version</p>
-              <p className="font-medium">v1.0.0</p>
+              <p className="font-medium">v{updateInfo?.currentVersion || '1.0.0'}</p>
             </div>
             <div>
               <p className="text-muted-foreground">API</p>
@@ -277,6 +319,95 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+
+          {/* Update Check (Admin only) */}
+          {user?.role === 'ADMIN' && (
+            <>
+              <Separator />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium">Software Updates</p>
+                    <p className="text-xs text-muted-foreground">
+                      Check GHCR for newer Docker images
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleCheckUpdate}
+                    disabled={isCheckingUpdate}
+                  >
+                    {isCheckingUpdate ? (
+                      <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                    ) : (
+                      <RefreshCw className="w-4 h-4 mr-2" />
+                    )}
+                    Check for Updates
+                  </Button>
+                </div>
+
+                {updateInfo && (
+                  <div className="rounded-lg border border-border/50 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      {updateInfo.updateAvailable ? (
+                        <ArrowUpCircle className="w-4 h-4 text-amber-500" />
+                      ) : (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                      )}
+                      <span className="text-sm font-medium">
+                        {updateInfo.updateAvailable
+                          ? 'Update available'
+                          : 'Up to date'}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">Backend:</span>
+                        {updateInfo.backend.updateAvailable ? (
+                          <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+                            {updateInfo.backend.latestTag}
+                          </Badge>
+                        ) : (
+                          <span className="text-emerald-500">latest</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-muted-foreground">Frontend:</span>
+                        {updateInfo.frontend.updateAvailable ? (
+                          <Badge variant="warning" className="text-[10px] px-1.5 py-0">
+                            {updateInfo.frontend.latestTag}
+                          </Badge>
+                        ) : (
+                          <span className="text-emerald-500">latest</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="text-[10px] text-muted-foreground">
+                      Last checked: {new Date(updateInfo.checkedAt).toLocaleString()}
+                    </p>
+
+                    {updateInfo.updateAvailable && (
+                      <Button
+                        size="sm"
+                        className="w-full mt-1"
+                        onClick={handleUpdate}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          <><Loader2 className="w-4 h-4 animate-spin mr-2" /> Pulling images...</>
+                        ) : (
+                          <><ArrowUpCircle className="w-4 h-4 mr-2" /> Pull Latest Images</>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </CardContent>
       </Card>
     </div>

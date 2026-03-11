@@ -103,7 +103,6 @@ cp ../.env.example .env.local   # configure DATABASE_URL, JWT_SECRET, etc.
 
 npx prisma migrate dev
 npx prisma generate
-npm run db:seed
 
 npm run dev          # starts on :3001 with hot reload
 ```
@@ -124,7 +123,6 @@ cp .env.example .env   # edit as needed
 
 docker compose up -d
 docker compose exec backend npm run db:migrate
-docker compose exec backend npm run db:seed
 ```
 
 ---

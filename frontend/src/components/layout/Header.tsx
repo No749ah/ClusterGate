@@ -1,9 +1,10 @@
 'use client'
 
 import { useTheme } from 'next-themes'
-import { Moon, Sun, LogOut, User, Settings, KeyRound } from 'lucide-react'
+import { Moon, Sun, LogOut, User, Settings, KeyRound, Search } from 'lucide-react'
 import { useAuth, useLogout } from '@/hooks/useAuth'
 import { NotificationBell } from '@/components/layout/NotificationBell'
+import { CommandPalette } from '@/components/layout/CommandPalette'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,12 +27,22 @@ export function Header({ title }: HeaderProps) {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-border/50 bg-background/80 backdrop-blur px-6">
-      {/* Title */}
+      {/* Search trigger */}
       <div className="flex-1">
-        {title && (
-          <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-        )}
+        <button
+          onClick={() => {
+            window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }))
+          }}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-md border border-border/50 bg-muted/30 text-sm text-muted-foreground hover:bg-muted/50 hover:text-foreground transition-colors max-w-xs w-full"
+        >
+          <Search className="w-3.5 h-3.5" />
+          <span className="flex-1 text-left text-xs">Search...</span>
+          <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border/50 bg-muted px-1.5 font-mono text-[10px]">
+            Ctrl K
+          </kbd>
+        </button>
       </div>
+      <CommandPalette />
 
       {/* Actions */}
       <div className="flex items-center gap-2">

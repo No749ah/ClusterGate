@@ -16,6 +16,7 @@ export function useRoute(id: string) {
     queryKey: ['routes', id],
     queryFn: () => api.routes.getById(id),
     enabled: !!id,
+    staleTime: 30 * 1000,
   })
 }
 
@@ -134,6 +135,7 @@ export function useRouteVersions(id: string) {
     queryKey: ['routes', id, 'versions'],
     queryFn: () => api.routes.getVersions(id),
     enabled: !!id,
+    staleTime: 30 * 1000,
   })
 }
 

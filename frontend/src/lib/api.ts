@@ -106,6 +106,12 @@ class ApiClient {
 
     setup: (data: { email: string; password: string; name: string }) =>
       this.post<ApiResponse<{ user: User }>>('/api/auth/setup', data),
+
+    validateInvite: (token: string) =>
+      this.get<ApiResponse<{ email: string; role: string }>>(`/api/auth/invite/${token}`),
+
+    acceptInvite: (data: { token: string; name: string; password: string }) =>
+      this.post<ApiResponse<{ user: User }>>('/api/auth/accept-invite', data),
   }
 
   // ============================================================================
@@ -247,6 +253,15 @@ class ApiClient {
 
     resetPassword: (id: string, newPassword: string) =>
       this.post<ApiResponse<null>>(`/api/users/${id}/reset-password`, { newPassword }),
+
+    invite: (email: string, role: string) =>
+      this.post<ApiResponse<{ id: string; email: string; role: string; token: string; expiresAt: string }>>('/api/users/invite', { email, role }),
+
+    getInvites: () =>
+      this.get<ApiResponse<{ id: string; email: string; role: string; token: string; expiresAt: string; createdBy: { id: string; name: string } | null }[]>>('/api/users/invites'),
+
+    revokeInvite: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/users/invites/${id}`),
   }
 
   // ============================================================================
@@ -299,6 +314,27 @@ class ApiClient {
 
     delete: (routeId: string, keyId: string) =>
       this.delete<ApiResponse<null>>(`/api/routes/${routeId}/api-keys/${keyId}`),
+  }
+
+  // ============================================================================
+  // System
+  // ============================================================================
+
+  system = {
+    version: () =>
+      this.get<ApiResponse<{ version: string }>>('/api/system/version'),
+
+    updateCheck: () =>
+      this.get<ApiResponse<{
+        currentVersion: string
+        backend: { image: string; currentTag: string; latestTag: string | null; updateAvailable: boolean; checkedAt: string }
+        frontend: { image: string; currentTag: string; latestTag: string | null; updateAvailable: boolean; checkedAt: string }
+        updateAvailable: boolean
+        checkedAt: string
+      }>>('/api/system/update-check'),
+
+    update: () =>
+      this.post<{ success: boolean; data: { success: boolean; message: string } }>('/api/system/update'),
   }
 
   // ============================================================================

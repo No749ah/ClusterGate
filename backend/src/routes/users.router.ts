@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as userService from '../services/userService'
+import { createInvite, getPendingInvites, revokeInvite } from '../services/inviteService'
 
 const router = Router()
 
@@ -20,7 +21,7 @@ router.get('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =>
   }
 })
 
-// POST /api/users
+// POST /api/users — create user directly (kept for backwards compat)
 router.post('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     const schema = z.object({
@@ -32,6 +33,41 @@ router.post('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =
     const data = schema.parse(req.body)
     const user = await userService.createUser(data)
     res.status(201).json({ success: true, data: user })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// POST /api/users/invite — invite user by email
+router.post('/invite', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    const schema = z.object({
+      email: z.string().email(),
+      role: z.nativeEnum(Role).default(Role.VIEWER),
+    })
+    const data = schema.parse(req.body)
+    const invite = await createInvite(data.email, data.role, req.user!.userId)
+    res.status(201).json({ success: true, data: invite })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/users/invites — list pending invites
+router.get('/invites', authenticate, authorize([Role.ADMIN]), async (_req, res, next) => {
+  try {
+    const invites = await getPendingInvites()
+    res.json({ success: true, data: invites })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// DELETE /api/users/invites/:id — revoke invite
+router.delete('/invites/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    await revokeInvite(req.params.id)
+    res.json({ success: true, message: 'Invite revoked' })
   } catch (err) {
     next(err)
   }

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Edit, Trash2, KeyRound } from 'lucide-react'
+import { Plus, Edit, Trash2, KeyRound, Link2, Copy, Check, X, Mail, Clock } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -26,36 +26,44 @@ const ROLE_CONFIG: Record<Role, { label: string; variant: 'purple' | 'info' | 's
   VIEWER: { label: 'Viewer', variant: 'secondary' },
 }
 
-const userSchema = z.object({
-  name: z.string().min(1, 'Name is required'),
+const inviteSchema = z.object({
   email: z.string().email('Valid email required'),
-  password: z.string().min(8, 'Min 8 characters').optional(),
   role: z.enum(['ADMIN', 'OPERATOR', 'VIEWER']),
 })
 
-type UserForm = z.infer<typeof userSchema>
+type InviteForm = z.infer<typeof inviteSchema>
 
 export default function UsersPage() {
   const queryClient = useQueryClient()
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false)
   const [editUser, setEditUser] = useState<User | null>(null)
   const [resetPasswordUser, setResetPasswordUser] = useState<User | null>(null)
   const [newPassword, setNewPassword] = useState('')
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [copiedLink, setCopiedLink] = useState(false)
 
   const confirm = useConfirm()
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
     queryFn: () => api.users.list(),
+    staleTime: 30 * 1000,
   })
 
-  const createMutation = useMutation({
-    mutationFn: (data: { email: string; password: string; name: string; role: string }) =>
-      api.users.create(data),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['users'] })
-      toast.success('User created')
-      setDialogOpen(false)
+  const { data: invitesData } = useQuery({
+    queryKey: ['invites'],
+    queryFn: () => api.users.getInvites(),
+    staleTime: 30 * 1000,
+  })
+
+  const inviteMutation = useMutation({
+    mutationFn: (data: { email: string; role: string }) =>
+      api.users.invite(data.email, data.role),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['invites'] })
+      const link = `${window.location.origin}/invite/${res.data.token}`
+      setInviteLink(link)
+      toast.success('Invite created')
     },
     onError: (err: any) => toast.error(err.message),
   })
@@ -91,7 +99,26 @@ export default function UsersPage() {
     onError: (err: any) => toast.error(err.message),
   })
 
+  const revokeInviteMutation = useMutation({
+    mutationFn: (id: string) => api.users.revokeInvite(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['invites'] })
+      toast.success('Invite revoked')
+    },
+    onError: (err: any) => toast.error(err.message),
+  })
+
   const users = data?.data ?? []
+  const pendingInvites = invitesData?.data ?? []
+
+  const handleCopyLink = () => {
+    if (inviteLink) {
+      navigator.clipboard.writeText(inviteLink)
+      setCopiedLink(true)
+      toast.success('Link copied to clipboard')
+      setTimeout(() => setCopiedLink(false), 2000)
+    }
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -100,11 +127,45 @@ export default function UsersPage() {
           <h1 className="text-2xl font-bold text-foreground">Users</h1>
           <p className="text-sm text-muted-foreground mt-1">{users.length} users</p>
         </div>
-        <Button onClick={() => setDialogOpen(true)}>
-          <Plus className="w-4 h-4 mr-2" /> New User
+        <Button onClick={() => { setInviteDialogOpen(true); setInviteLink(null); setCopiedLink(false) }}>
+          <Mail className="w-4 h-4 mr-2" /> Invite User
         </Button>
       </div>
 
+      {/* Pending Invites */}
+      {pendingInvites.length > 0 && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-4 space-y-2">
+          <p className="text-sm font-medium text-foreground flex items-center gap-2">
+            <Clock className="w-4 h-4 text-amber-500" />
+            Pending Invites ({pendingInvites.length})
+          </p>
+          <div className="space-y-1">
+            {pendingInvites.map((invite) => (
+              <div key={invite.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-amber-500/5">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-foreground">{invite.email}</span>
+                  <Badge variant={ROLE_CONFIG[invite.role as Role]?.variant ?? 'secondary'} className="text-[10px]">
+                    {ROLE_CONFIG[invite.role as Role]?.label ?? invite.role}
+                  </Badge>
+                  <span className="text-[11px] text-muted-foreground">
+                    expires {formatRelativeTime(invite.expiresAt)}
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => revokeInviteMutation.mutate(invite.id)}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Users Table */}
       <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
         <table className="w-full text-sm">
           <thead className="bg-muted/30 border-b border-border/50">
@@ -197,24 +258,25 @@ export default function UsersPage() {
         </table>
       </div>
 
-      {/* Create User Dialog */}
-      <UserDialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        onSubmit={(data) => createMutation.mutate({ ...data, password: data.password! })}
-        isSubmitting={createMutation.isPending}
-        requirePassword
+      {/* Invite User Dialog */}
+      <InviteDialog
+        open={inviteDialogOpen}
+        onClose={() => { setInviteDialogOpen(false); setInviteLink(null) }}
+        onSubmit={(data) => inviteMutation.mutate(data)}
+        isSubmitting={inviteMutation.isPending}
+        inviteLink={inviteLink}
+        copiedLink={copiedLink}
+        onCopyLink={handleCopyLink}
       />
 
       {/* Edit User Dialog */}
       {editUser && (
-        <UserDialog
+        <EditUserDialog
           open={!!editUser}
           onClose={() => setEditUser(null)}
-          defaultValues={editUser}
+          user={editUser}
           onSubmit={(data) => updateMutation.mutate({ id: editUser.id, data })}
           isSubmitting={updateMutation.isPending}
-          title={`Edit: ${editUser.name}`}
         />
       )}
 
@@ -248,22 +310,22 @@ export default function UsersPage() {
   )
 }
 
-function UserDialog({
+function InviteDialog({
   open,
   onClose,
-  defaultValues,
   onSubmit,
   isSubmitting,
-  title = 'Create New User',
-  requirePassword = false,
+  inviteLink,
+  copiedLink,
+  onCopyLink,
 }: {
   open: boolean
   onClose: () => void
-  defaultValues?: Partial<User>
-  onSubmit: (data: any) => void
+  onSubmit: (data: InviteForm) => void
   isSubmitting: boolean
-  title?: string
-  requirePassword?: boolean
+  inviteLink: string | null
+  copiedLink: boolean
+  onCopyLink: () => void
 }) {
   const {
     register,
@@ -271,39 +333,126 @@ function UserDialog({
     setValue,
     watch,
     formState: { errors },
-  } = useForm<UserForm>({
-    resolver: zodResolver(requirePassword ? userSchema.required({ password: true }) : userSchema),
-    defaultValues: {
-      name: defaultValues?.name ?? '',
-      email: defaultValues?.email ?? '',
-      role: defaultValues?.role ?? 'VIEWER',
-    },
+  } = useForm<InviteForm>({
+    resolver: zodResolver(inviteSchema),
+    defaultValues: { email: '', role: 'VIEWER' },
   })
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">
+            <Mail className="w-4 h-4" /> Invite User
+          </DialogTitle>
+          <DialogDescription>
+            Send an invite link. The user will create their own account with a password.
+          </DialogDescription>
+        </DialogHeader>
+
+        {inviteLink ? (
+          <div className="space-y-4">
+            <div className="p-4 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+              <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400 mb-2">
+                Invite created!
+              </p>
+              <p className="text-xs text-muted-foreground mb-3">
+                Share this link with the user. It expires in 72 hours.
+              </p>
+              <div className="flex items-center gap-2">
+                <Input
+                  readOnly
+                  value={inviteLink}
+                  className="text-xs font-mono flex-1"
+                  onClick={(e) => (e.target as HTMLInputElement).select()}
+                />
+                <Button size="sm" variant="outline" onClick={onCopyLink}>
+                  {copiedLink ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                </Button>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Done</Button>
+            </DialogFooter>
+          </div>
+        ) : (
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Email</label>
+              <Input {...register('email')} placeholder="user@example.com" type="email" />
+              {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Role</label>
+              <Select value={watch('role')} onValueChange={(v) => setValue('role', v as Role)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ADMIN">Admin</SelectItem>
+                  <SelectItem value="OPERATOR">Operator</SelectItem>
+                  <SelectItem value="VIEWER">Viewer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? 'Creating...' : 'Create Invite'}
+              </Button>
+            </DialogFooter>
+          </form>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function EditUserDialog({
+  open,
+  onClose,
+  user,
+  onSubmit,
+  isSubmitting,
+}: {
+  open: boolean
+  onClose: () => void
+  user: User
+  onSubmit: (data: { name?: string; role?: string }) => void
+  isSubmitting: boolean
+}) {
+  const editSchema = z.object({
+    name: z.string().min(1, 'Name is required'),
+    role: z.enum(['ADMIN', 'OPERATOR', 'VIEWER']),
+  })
+
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm({
+    resolver: zodResolver(editSchema),
+    defaultValues: { name: user.name, role: user.role },
+  })
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit: {user.name}</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Name</label>
-            <Input {...register('name')} placeholder="Jane Smith" />
+            <Input {...register('name')} />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Email</label>
-            <Input {...register('email')} placeholder="jane@example.com" type="email" disabled={!!defaultValues} />
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            <Input value={user.email} disabled className="opacity-60" />
           </div>
-          {requirePassword && (
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium">Password</label>
-              <Input {...register('password')} type="password" placeholder="Min 8 characters" />
-              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
-            </div>
-          )}
           <div className="space-y-1.5">
             <label className="text-sm font-medium">Role</label>
             <Select value={watch('role')} onValueChange={(v) => setValue('role', v as Role)}>
