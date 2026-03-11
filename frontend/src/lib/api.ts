@@ -285,7 +285,7 @@ class ApiClient {
         status: string
         uptime: number
         database: { status: string; latency: number }
-        memory: { heapUsed: number; heapTotal: number }
+        memory: { heapUsed: number; heapTotal: number; rss: number }
       }>('/api/health/status'),
   }
 
