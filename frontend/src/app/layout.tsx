@@ -1,6 +1,6 @@
 'use client'
 
-import { Inter } from 'next/font/google'
+import localFont from 'next/font/local'
 import { ThemeProvider } from 'next-themes'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
@@ -9,7 +9,11 @@ import { ConfirmDialogProvider } from '@/components/ui/confirm-dialog'
 import { useState } from 'react'
 import './globals.css'
 
-const inter = Inter({ subsets: ['latin'] })
+const inter = localFont({
+  src: '../../public/fonts/InterVariable.woff2',
+  variable: '--font-inter',
+  display: 'swap',
+})
 
 export default function RootLayout({
   children,
