@@ -263,10 +263,10 @@ function getK8sApiBase(): string {
 }
 
 /**
- * Trigger a rolling restart of a Kubernetes deployment by patching
- * the pod template annotation with the current timestamp.
+ * Update a Kubernetes deployment by setting the new image tag on all containers
+ * and adding a restart annotation. This forces K8s to pull the new image.
  */
-async function restartK8sDeployment(namespace: string, deploymentName: string, newTag?: string): Promise<void> {
+async function updateK8sDeployment(namespace: string, deploymentName: string, newImage: string, newTag: string): Promise<void> {
   const token = getK8sToken()
   if (!token) throw new Error('Kubernetes service account token not found')
 
@@ -277,7 +277,21 @@ async function restartK8sDeployment(namespace: string, deploymentName: string, n
   const base = getK8sApiBase()
   const url = `${base}/apis/apps/v1/namespaces/${namespace}/deployments/${deploymentName}`
 
-  // Strategic merge patch to update the restart annotation and optionally the image tag
+  // First, get the current deployment to find container names
+  const current = await axios.get(url, {
+    headers: { Authorization: `Bearer ${token}` },
+    httpsAgent,
+    timeout: 15000,
+  })
+  const containers = current.data.spec.template.spec.containers || []
+
+  // Build container image patches — update all containers to the new tag
+  const containerPatches = containers.map((c: any) => ({
+    name: c.name,
+    image: `${newImage}:${newTag}`,
+  }))
+
+  // Strategic merge patch: update image tags + restart annotation
   const patch: any = {
     spec: {
       template: {
@@ -285,6 +299,9 @@ async function restartK8sDeployment(namespace: string, deploymentName: string, n
           annotations: {
             'kubectl.kubernetes.io/restartedAt': new Date().toISOString(),
           },
+        },
+        spec: {
+          containers: containerPatches,
         },
       },
     },
@@ -374,51 +391,62 @@ export async function pullAndRestart(onProgress?: UpdateProgressCallback): Promi
     const namespace = process.env.K8S_NAMESPACE || 'clustergate'
     const backendDeployment = process.env.K8S_BACKEND_DEPLOYMENT || 'clustergate-backend'
     const frontendDeployment = process.env.K8S_FRONTEND_DEPLOYMENT || 'clustergate-frontend'
-    const totalSteps = 5
+    const totalSteps = 6
 
     try {
-      // Step 1: Trigger frontend restart
-      emit({ step: 1, totalSteps, label: 'Restarting frontend deployment', status: 'running' })
-      await restartK8sDeployment(namespace, frontendDeployment)
-      emit({ step: 1, totalSteps, label: 'Frontend restart triggered', status: 'done' })
+      // Step 1: Check for available updates and get target versions
+      emit({ step: 1, totalSteps, label: 'Checking for latest versions', status: 'running' })
+      const updateInfo = cachedUpdateResult || await checkForUpdates()
+      const backendTag = updateInfo.backend.latestTag || CURRENT_VERSION
+      const frontendTag = updateInfo.frontend.latestTag || CURRENT_VERSION
+      if (!updateInfo.updateAvailable) {
+        emit({ step: 1, totalSteps, label: 'Already running the latest version', status: 'done' })
+        return { success: true, environment: 'kubernetes', message: 'Already up to date.' }
+      }
+      emit({ step: 1, totalSteps, label: `Updating to backend:${backendTag} frontend:${frontendTag}`, status: 'done' })
 
-      // Step 2: Wait for frontend rollout
-      emit({ step: 2, totalSteps, label: 'Waiting for frontend pods', status: 'running' })
+      // Step 2: Update frontend deployment image tag
+      emit({ step: 2, totalSteps, label: `Updating frontend image to ${frontendTag}`, status: 'running' })
+      await updateK8sDeployment(namespace, frontendDeployment, FRONTEND_IMAGE, frontendTag)
+      emit({ step: 2, totalSteps, label: `Frontend image set to ${frontendTag}`, status: 'done' })
+
+      // Step 3: Wait for frontend rollout
+      emit({ step: 3, totalSteps, label: 'Waiting for frontend pods', status: 'running' })
       const frontendResult = await waitForRollout(namespace, frontendDeployment, 120000, (msg) => {
-        emit({ step: 2, totalSteps, label: msg, status: 'running' })
+        emit({ step: 3, totalSteps, label: msg, status: 'running' })
       })
       if (!frontendResult.ready) {
-        emit({ step: 2, totalSteps, label: frontendResult.message, status: 'error' })
+        emit({ step: 3, totalSteps, label: frontendResult.message, status: 'error' })
         return { success: false, environment: 'kubernetes', message: frontendResult.message }
       }
-      emit({ step: 2, totalSteps, label: frontendResult.message, status: 'done' })
+      emit({ step: 3, totalSteps, label: frontendResult.message, status: 'done' })
 
-      // Step 3: Trigger backend restart
-      emit({ step: 3, totalSteps, label: 'Restarting backend deployment', status: 'running' })
-      await restartK8sDeployment(namespace, backendDeployment)
-      emit({ step: 3, totalSteps, label: 'Backend restart triggered', status: 'done' })
+      // Step 4: Update backend deployment image tag
+      emit({ step: 4, totalSteps, label: `Updating backend image to ${backendTag}`, status: 'running' })
+      await updateK8sDeployment(namespace, backendDeployment, BACKEND_IMAGE, backendTag)
+      emit({ step: 4, totalSteps, label: `Backend image set to ${backendTag}`, status: 'done' })
 
-      // Step 4: Wait for backend rollout (will likely kill this process)
-      emit({ step: 4, totalSteps, label: 'Waiting for backend pods', status: 'running' })
+      // Step 5: Wait for backend rollout (will likely kill this process as the pod gets replaced)
+      emit({ step: 5, totalSteps, label: 'Waiting for backend pods — connection may drop', status: 'running' })
       const backendResult = await waitForRollout(namespace, backendDeployment, 120000, (msg) => {
-        emit({ step: 4, totalSteps, label: msg, status: 'running' })
+        emit({ step: 5, totalSteps, label: msg, status: 'running' })
       })
-      emit({ step: 4, totalSteps, label: backendResult.ready ? backendResult.message : 'Backend restarting — connection may drop', status: backendResult.ready ? 'done' : 'running' })
+      emit({ step: 5, totalSteps, label: backendResult.ready ? backendResult.message : 'Backend restarting — connection may drop', status: backendResult.ready ? 'done' : 'running' })
 
-      // Step 5: Complete
-      emit({ step: 5, totalSteps, label: 'Update complete', status: 'done' })
+      // Step 6: Complete
+      emit({ step: 6, totalSteps, label: 'Update complete', status: 'done' })
 
       return {
         success: true,
         environment: 'kubernetes',
-        message: 'Update complete. All pods are running the latest images.',
+        message: `Update complete. Running backend:${backendTag} frontend:${frontendTag}.`,
       }
     } catch (err: any) {
       const status = err.response?.status
       const msg = status === 403
-        ? 'RBAC permission denied. Ensure the backend ServiceAccount has patch access to deployments.'
-        : `Rolling restart failed: ${err.message}`
-      logger.error('Kubernetes rolling restart failed', { error: err.message, status })
+        ? 'RBAC permission denied. Ensure the backend ServiceAccount has patch/get access to deployments.'
+        : `Update failed: ${err.message}`
+      logger.error('Kubernetes update failed', { error: err.message, status })
       emit({ step: 0, totalSteps, label: msg, status: 'error', message: msg })
       return { success: false, environment: 'kubernetes', message: msg }
     }

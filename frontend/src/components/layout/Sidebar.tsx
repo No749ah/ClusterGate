@@ -23,50 +23,42 @@ import { useAuth, useLogout } from '@/hooks/useAuth'
 
 const COLLAPSED_KEY = 'clustergate-sidebar-collapsed'
 
-const navItems = [
+interface NavItem {
+  href: string
+  icon: any
+  label: string
+  exact?: boolean
+  adminOnly?: boolean
+}
+
+interface NavSection {
+  title: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
   {
-    href: '/dashboard',
-    icon: LayoutDashboard,
-    label: 'Dashboard',
-    exact: true,
+    title: 'Overview',
+    items: [
+      { href: '/dashboard', icon: LayoutDashboard, label: 'Dashboard', exact: true },
+      { href: '/analytics', icon: BarChart3, label: 'Analytics' },
+    ],
   },
   {
-    href: '/routes',
-    icon: Route,
-    label: 'Routes',
+    title: 'Traffic',
+    items: [
+      { href: '/routes', icon: Route, label: 'Routes' },
+      { href: '/activity', icon: ScrollText, label: 'Logs' },
+    ],
   },
   {
-    href: '/activity',
-    icon: ScrollText,
-    label: 'Logs',
-  },
-  {
-    href: '/analytics',
-    icon: BarChart3,
-    label: 'Analytics',
-  },
-  {
-    href: '/users',
-    icon: Users,
-    label: 'Users',
-    adminOnly: true,
-  },
-  {
-    href: '/audit',
-    icon: Shield,
-    label: 'Audit Log',
-    adminOnly: true,
-  },
-  {
-    href: '/backups',
-    icon: HardDrive,
-    label: 'Backups',
-    adminOnly: true,
-  },
-  {
-    href: '/settings',
-    icon: Settings,
-    label: 'Settings',
+    title: 'Administration',
+    items: [
+      { href: '/users', icon: Users, label: 'Users', adminOnly: true },
+      { href: '/audit', icon: Shield, label: 'Audit Log', adminOnly: true },
+      { href: '/backups', icon: HardDrive, label: 'Backups', adminOnly: true },
+      { href: '/settings', icon: Settings, label: 'Settings' },
+    ],
   },
 ]
 
@@ -92,6 +84,37 @@ export function Sidebar() {
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return pathname === href
     return pathname.startsWith(href)
+  }
+
+  const renderNavItem = (item: NavItem) => {
+    if (item.adminOnly && user?.role !== 'ADMIN') return null
+
+    const active = isActive(item.href, item.exact)
+    const Icon = item.icon
+
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        title={collapsed ? item.label : undefined}
+        className={cn(
+          'flex items-center rounded-lg text-sm font-medium transition-all group',
+          collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
+          active
+            ? 'bg-primary/15 text-primary'
+            : 'text-muted-foreground hover:bg-white/5 hover:text-sidebar-foreground'
+        )}
+      >
+        <Icon
+          className={cn(
+            'w-4 h-4 flex-shrink-0 transition-colors',
+            active ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-foreground'
+          )}
+        />
+        {!collapsed && <span className="flex-1">{item.label}</span>}
+        {!collapsed && active && <ChevronRight className="w-3 h-3 text-primary opacity-60" />}
+      </Link>
+    )
   }
 
   return (
@@ -127,7 +150,7 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+      <nav className="flex-1 p-3 overflow-y-auto">
         {collapsed && (
           <button
             onClick={() => setCollapsed(false)}
@@ -138,40 +161,27 @@ export function Sidebar() {
           </button>
         )}
 
-        {!collapsed && (
-          <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
-            Management
-          </p>
-        )}
-
-        {navItems.map((item) => {
-          if (item.adminOnly && user?.role !== 'ADMIN') return null
-
-          const active = isActive(item.href, item.exact)
-          const Icon = item.icon
+        {navSections.map((section, idx) => {
+          // Filter visible items in this section
+          const visibleItems = section.items.filter(
+            (item) => !item.adminOnly || user?.role === 'ADMIN'
+          )
+          if (visibleItems.length === 0) return null
 
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              title={collapsed ? item.label : undefined}
-              className={cn(
-                'flex items-center rounded-lg text-sm font-medium transition-all group',
-                collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
-                active
-                  ? 'bg-primary/15 text-primary'
-                  : 'text-muted-foreground hover:bg-white/5 hover:text-sidebar-foreground'
+            <div key={section.title} className={cn(idx > 0 && 'mt-4')}>
+              {!collapsed && (
+                <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  {section.title}
+                </p>
               )}
-            >
-              <Icon
-                className={cn(
-                  'w-4 h-4 flex-shrink-0 transition-colors',
-                  active ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-foreground'
-                )}
-              />
-              {!collapsed && <span className="flex-1">{item.label}</span>}
-              {!collapsed && active && <ChevronRight className="w-3 h-3 text-primary opacity-60" />}
-            </Link>
+              {collapsed && idx > 0 && (
+                <div className="mx-2 my-2 border-t border-sidebar-border" />
+              )}
+              <div className="space-y-1">
+                {section.items.map(renderNavItem)}
+              </div>
+            </div>
           )
         })}
       </nav>

@@ -1,19 +1,16 @@
-import { execFile } from 'child_process'
-import { promisify } from 'util'
 import fs from 'fs'
 import path from 'path'
-import { config } from '../config'
 import { logger } from '../lib/logger'
 import { AppError } from '../lib/errors'
+import { prisma } from '../lib/prisma'
 
-const execFileAsync = promisify(execFile)
 const fsPromises = fs.promises
 
 // Backup directory inside the app
 const BACKUPS_DIR = path.resolve(process.cwd(), 'backups')
 
 // Strict filename validation: alphanumeric, dashes, underscores, dots only
-const SAFE_FILENAME_RE = /^[a-zA-Z0-9_\-]+\.sql$/
+const SAFE_FILENAME_RE = /^[a-zA-Z0-9_\-]+\.json$/
 
 interface BackupMeta {
   filename: string
@@ -21,39 +18,23 @@ interface BackupMeta {
   createdAt: string
 }
 
-/**
- * Parse DATABASE_URL to extract connection parameters.
- * Format: postgresql://user:password@host:port/database?schema=...
- */
-function parseDatabaseUrl(): {
-  host: string
-  port: string
-  user: string
-  password: string
-  database: string
-} {
-  const url = config.DATABASE_URL
-  let parsed: URL
-  try {
-    parsed = new URL(url)
-  } catch {
-    throw AppError.internal('Invalid DATABASE_URL format')
-  }
-
-  const host = parsed.hostname || 'localhost'
-  const port = parsed.port || '5432'
-  const user = decodeURIComponent(parsed.username || 'postgres')
-  const password = decodeURIComponent(parsed.password || '')
-  const database = parsed.pathname.replace(/^\//, '') || 'clustergate'
-
-  return { host, port, user, password, database }
-}
+// All models to export, in dependency order (parents before children)
+const BACKUP_MODELS = [
+  'user',
+  'route',
+  'routeVersion',
+  'requestLog',
+  'apiKey',
+  'auditLog',
+  'healthCheck',
+  'notification',
+  'inviteToken',
+] as const
 
 function validateFilename(filename: string): void {
   if (!filename || !SAFE_FILENAME_RE.test(filename)) {
-    throw AppError.badRequest('Invalid backup filename. Only alphanumeric characters, dashes, underscores, and .sql extension are allowed.')
+    throw AppError.badRequest('Invalid backup filename. Only alphanumeric characters, dashes, underscores, and .json extension are allowed.')
   }
-  // Extra path traversal protection
   if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
     throw AppError.badRequest('Invalid backup filename')
   }
@@ -69,7 +50,8 @@ async function ensureBackupsDir(): Promise<void> {
 }
 
 /**
- * Create a new database backup using pg_dump.
+ * Create a new database backup using Prisma.
+ * Exports all tables as JSON — no pg_dump binary needed.
  */
 export async function createBackup(): Promise<BackupMeta> {
   await ensureBackupsDir()
@@ -80,25 +62,27 @@ export async function createBackup(): Promise<BackupMeta> {
     .replace(/T/, '_')
     .replace(/:/g, '-')
     .replace(/\..+/, '')
-  const filename = `clustergate_backup_${timestamp}.sql`
+  const filename = `clustergate_backup_${timestamp}.json`
   const filePath = path.join(BACKUPS_DIR, filename)
 
-  const db = parseDatabaseUrl()
-
   try {
-    await execFileAsync('pg_dump', [
-      '-h', db.host,
-      '-p', db.port,
-      '-U', db.user,
-      '-d', db.database,
-      '--no-owner',
-      '--no-acl',
-      '-f', filePath,
-    ], {
-      env: { ...process.env, PGPASSWORD: db.password },
-      timeout: 120000, // 2 minutes
-    })
+    const data: Record<string, any[]> = {}
 
+    // Export each model
+    for (const model of BACKUP_MODELS) {
+      const delegate = (prisma as any)[model]
+      if (delegate && typeof delegate.findMany === 'function') {
+        data[model] = await delegate.findMany()
+      }
+    }
+
+    data._meta = [{
+      version: '1.0',
+      createdAt: now.toISOString(),
+      models: BACKUP_MODELS as unknown as string[],
+    }]
+
+    await fsPromises.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
     const stat = await fsPromises.stat(filePath)
 
     logger.info('Database backup created', { filename, size: stat.size })
@@ -109,7 +93,6 @@ export async function createBackup(): Promise<BackupMeta> {
       createdAt: now.toISOString(),
     }
   } catch (err) {
-    // Clean up partial file
     try { await fsPromises.unlink(filePath) } catch {}
     logger.error('Backup creation failed', { error: (err as Error).message })
     throw AppError.internal(`Backup failed: ${(err as Error).message}`)
@@ -123,10 +106,10 @@ export async function listBackups(): Promise<BackupMeta[]> {
   await ensureBackupsDir()
 
   const files = await fsPromises.readdir(BACKUPS_DIR)
-  const sqlFiles = files.filter((f) => f.endsWith('.sql'))
+  const backupFiles = files.filter((f) => f.endsWith('.json') || f.endsWith('.sql'))
 
   const backups: BackupMeta[] = []
-  for (const file of sqlFiles) {
+  for (const file of backupFiles) {
     const filePath = path.join(BACKUPS_DIR, file)
     const stat = await fsPromises.stat(filePath)
     backups.push({
@@ -136,18 +119,27 @@ export async function listBackups(): Promise<BackupMeta[]> {
     })
   }
 
-  // Sort newest first
   backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   return backups
 }
 
 /**
- * Restore a database from a backup file.
- * Drops existing schema and restores from the SQL dump.
+ * Restore a database from a JSON backup file.
+ * Clears all tables and re-inserts data in dependency order.
  */
 export async function restoreBackup(filename: string): Promise<void> {
-  validateFilename(filename)
+  // Accept both .json and legacy .sql filenames for validation
+  if (!filename || (!/^[a-zA-Z0-9_\-]+\.json$/.test(filename) && !/^[a-zA-Z0-9_\-]+\.sql$/.test(filename))) {
+    throw AppError.badRequest('Invalid backup filename')
+  }
+  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    throw AppError.badRequest('Invalid backup filename')
+  }
+
+  if (filename.endsWith('.sql')) {
+    throw AppError.badRequest('Legacy .sql backups cannot be restored. Please create a new backup first.')
+  }
 
   const filePath = path.join(BACKUPS_DIR, filename)
 
@@ -157,27 +149,44 @@ export async function restoreBackup(filename: string): Promise<void> {
     throw AppError.notFound('Backup file')
   }
 
-  const db = parseDatabaseUrl()
-  const env = { ...process.env, PGPASSWORD: db.password }
-
   try {
-    // Drop and recreate the public schema to get a clean slate
-    await execFileAsync('psql', [
-      '-h', db.host,
-      '-p', db.port,
-      '-U', db.user,
-      '-d', db.database,
-      '-c', 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;',
-    ], { env, timeout: 30000 })
+    const raw = await fsPromises.readFile(filePath, 'utf-8')
+    const data: Record<string, any[]> = JSON.parse(raw)
 
-    // Restore from backup file
-    await execFileAsync('psql', [
-      '-h', db.host,
-      '-p', db.port,
-      '-U', db.user,
-      '-d', db.database,
-      '-f', filePath,
-    ], { env, timeout: 300000 }) // 5 minutes
+    // Delete all data in reverse dependency order (children before parents)
+    const deleteOrder = [...BACKUP_MODELS].reverse()
+
+    await prisma.$transaction(async (tx: any) => {
+      // Clear tables in reverse order
+      for (const model of deleteOrder) {
+        const delegate = (tx as any)[model]
+        if (delegate && typeof delegate.deleteMany === 'function') {
+          await delegate.deleteMany()
+        }
+      }
+
+      // Re-insert in dependency order (parents first)
+      for (const model of BACKUP_MODELS) {
+        const records = data[model]
+        if (!records || !Array.isArray(records) || records.length === 0) continue
+
+        const delegate = (tx as any)[model]
+        if (delegate && typeof delegate.createMany === 'function') {
+          // Convert date strings back to Date objects
+          const processed = records.map((record) => {
+            const converted: any = { ...record }
+            for (const [key, value] of Object.entries(converted)) {
+              if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(value)) {
+                converted[key] = new Date(value)
+              }
+            }
+            return converted
+          })
+
+          await delegate.createMany({ data: processed, skipDuplicates: true })
+        }
+      }
+    }, { timeout: 300000 }) // 5 minute timeout
 
     logger.info('Database restored from backup', { filename })
   } catch (err) {
@@ -190,7 +199,13 @@ export async function restoreBackup(filename: string): Promise<void> {
  * Delete a specific backup file.
  */
 export async function deleteBackup(filename: string): Promise<void> {
-  validateFilename(filename)
+  // Accept both .json and .sql for deletion
+  if (!filename || (!/^[a-zA-Z0-9_\-]+\.json$/.test(filename) && !/^[a-zA-Z0-9_\-]+\.sql$/.test(filename))) {
+    throw AppError.badRequest('Invalid backup filename')
+  }
+  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    throw AppError.badRequest('Invalid backup filename')
+  }
 
   const filePath = path.join(BACKUPS_DIR, filename)
 
@@ -208,7 +223,13 @@ export async function deleteBackup(filename: string): Promise<void> {
  * Returns the absolute file path for a backup file (for streaming download).
  */
 export async function downloadBackup(filename: string): Promise<string> {
-  validateFilename(filename)
+  // Accept both .json and .sql for download
+  if (!filename || (!/^[a-zA-Z0-9_\-]+\.json$/.test(filename) && !/^[a-zA-Z0-9_\-]+\.sql$/.test(filename))) {
+    throw AppError.badRequest('Invalid backup filename')
+  }
+  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+    throw AppError.badRequest('Invalid backup filename')
+  }
 
   const filePath = path.join(BACKUPS_DIR, filename)
 

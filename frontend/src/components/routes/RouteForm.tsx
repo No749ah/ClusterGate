@@ -18,7 +18,7 @@ import { RouteFormData } from '@/types'
 const routeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
   description: z.string().max(500).optional(),
-  publicPath: z.string().min(1, 'Public path is required').refine((v) => v.startsWith('/r/'), { message: 'Public path must start with /r/' }),
+  publicPath: z.string().min(4, 'Path is required').refine((v) => v.startsWith('/r/'), { message: 'Invalid path' }),
   targetUrl: z.string().url('Must be a valid URL (include http:// or https://)'),
   methods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])).min(1, 'Select at least one method'),
   tags: z.array(z.string()).default([]),
@@ -276,7 +276,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             <Field label="Description" error={errors.description?.message}>
               <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
             </Field>
-            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /r/my-service/*)' : 'Must start with /r/ — e.g. /r/my-service'}>
+            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /r/my-service/*)' : 'e.g. my-service'}>
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <div className="relative flex-1 flex">
