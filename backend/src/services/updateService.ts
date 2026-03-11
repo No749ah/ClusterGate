@@ -56,18 +56,18 @@ export async function runScheduledUpdateCheck(): Promise<void> {
 }
 
 /**
- * Get a GHCR anonymous token with pull scope for multiple repositories.
+ * Get a GHCR anonymous token with pull scope for a single repository.
  */
-async function getGhcrToken(images: string[]): Promise<string | null> {
+async function getGhcrToken(image: string): Promise<string | null> {
   try {
-    const scopes = images.map(img => `repository:${img.replace('ghcr.io/', '')}:pull`).join(' ')
+    const scope = `repository:${image.replace('ghcr.io/', '')}:pull`
     const tokenRes = await axios.get(
-      `https://ghcr.io/token?scope=${encodeURIComponent(scopes)}`,
+      `https://ghcr.io/token?scope=${encodeURIComponent(scope)}`,
       { timeout: 15000 }
     )
     return tokenRes.data.token
   } catch (err: any) {
-    logger.warn('Failed to get GHCR token', { error: err.message })
+    logger.warn(`Failed to get GHCR token for ${image}`, { error: err.message, status: err.response?.status })
     return null
   }
 }
@@ -155,10 +155,16 @@ function isNewerVersion(local: string, remote: string): boolean {
  * Check GHCR for newer image versions.
  */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
-  // Single token for both repos — avoids double token fetch and rate limits
-  const token = await getGhcrToken([BACKEND_IMAGE, FRONTEND_IMAGE])
-  if (!token) {
-    const now = new Date().toISOString()
+  // Separate tokens per repo — multi-scope anonymous tokens can fail on GHCR
+  const [backendToken, frontendToken] = await Promise.all([
+    getGhcrToken(BACKEND_IMAGE),
+    getGhcrToken(FRONTEND_IMAGE),
+  ])
+
+  const now = new Date().toISOString()
+
+  if (!backendToken && !frontendToken) {
+    logger.warn('Failed to get any GHCR tokens — cannot check for updates')
     return {
       currentVersion: CURRENT_VERSION,
       backend: { image: BACKEND_IMAGE, currentTag: CURRENT_VERSION, latestTag: null, latestDigest: null, updateAvailable: false, checkedAt: now },
@@ -170,16 +176,23 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   }
 
   const [backendTags, frontendTags] = await Promise.all([
-    fetchGhcrTags(BACKEND_IMAGE, token),
-    fetchGhcrTags(FRONTEND_IMAGE, token),
+    backendToken ? fetchGhcrTags(BACKEND_IMAGE, backendToken) : [],
+    frontendToken ? fetchGhcrTags(FRONTEND_IMAGE, frontendToken) : [],
   ])
+
+  logger.info('GHCR tags fetched', {
+    backendTags: backendTags.length,
+    frontendTags: frontendTags.length,
+    backendSample: backendTags.slice(0, 5),
+    frontendSample: frontendTags.slice(0, 5),
+  })
 
   const latestBackendTag = findLatestSemverTag(backendTags)
   const latestFrontendTag = findLatestSemverTag(frontendTags)
 
   const [backendDigest, frontendDigest] = await Promise.all([
-    latestBackendTag ? fetchGhcrDigest(BACKEND_IMAGE, latestBackendTag, token) : null,
-    latestFrontendTag ? fetchGhcrDigest(FRONTEND_IMAGE, latestFrontendTag, token) : null,
+    latestBackendTag && backendToken ? fetchGhcrDigest(BACKEND_IMAGE, latestBackendTag, backendToken) : null,
+    latestFrontendTag && frontendToken ? fetchGhcrDigest(FRONTEND_IMAGE, latestFrontendTag, frontendToken) : null,
   ])
 
   const backendUpdateAvailable = latestBackendTag
@@ -189,8 +202,6 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
   const frontendUpdateAvailable = latestFrontendTag
     ? isNewerVersion(CURRENT_VERSION, latestFrontendTag)
     : false
-
-  const now = new Date().toISOString()
 
   const latestTag = latestBackendTag || latestFrontendTag
   const releaseUrl = latestTag

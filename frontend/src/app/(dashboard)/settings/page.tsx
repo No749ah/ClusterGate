@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, Shield, ShieldCheck, ShieldOff, Wrench, Database, Activity, LogOut, ExternalLink, Copy, KeyRound } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldOff, Wrench, Database, Activity, LogOut, ExternalLink, Copy, KeyRound } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -1036,6 +1036,8 @@ export default function SettingsPage() {
                   {updateInfo ? (
                     updateInfo.updateAvailable ? (
                       <><ArrowUpCircle className="w-4 h-4 text-amber-500" /><span className="text-sm font-medium text-amber-500">Update available</span></>
+                    ) : !updateInfo.backend.latestTag && !updateInfo.frontend.latestTag ? (
+                      <><AlertTriangle className="w-4 h-4 text-amber-500" /><span className="text-sm font-medium text-amber-500">Could not fetch versions from GHCR</span></>
                     ) : (
                       <><CheckCircle2 className="w-4 h-4 text-emerald-500" /><span className="text-sm font-medium text-emerald-500">Up to date</span></>
                     )
