@@ -38,6 +38,7 @@ services:
   # Backend API
   # ---------------------------------------------------------------------------
   backend:
+    image: clustergate-backend:latest
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -78,6 +79,7 @@ services:
   # Frontend
   # ---------------------------------------------------------------------------
   frontend:
+    image: clustergate-frontend:latest
     build:
       context: ./frontend
       dockerfile: Dockerfile
