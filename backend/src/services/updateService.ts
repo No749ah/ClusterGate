@@ -56,25 +56,33 @@ export async function runScheduledUpdateCheck(): Promise<void> {
 }
 
 /**
- * Fetch tags from GHCR (GitHub Container Registry) using the OCI distribution API.
- * GHCR supports anonymous pulls for public packages.
+ * Get a GHCR anonymous token with pull scope for multiple repositories.
  */
-async function fetchGhcrTags(image: string): Promise<string[]> {
+async function getGhcrToken(images: string[]): Promise<string | null> {
   try {
-    // GHCR uses ghcr.io/v2/<owner>/<name>/tags/list
-    const imagePath = image.replace('ghcr.io/', '')
-    // First get an anonymous token
+    const scopes = images.map(img => `repository:${img.replace('ghcr.io/', '')}:pull`).join(' ')
     const tokenRes = await axios.get(
-      `https://ghcr.io/token?scope=repository:${imagePath}:pull`,
-      { timeout: 10000 }
+      `https://ghcr.io/token?scope=${encodeURIComponent(scopes)}`,
+      { timeout: 15000 }
     )
-    const token = tokenRes.data.token
+    return tokenRes.data.token
+  } catch (err: any) {
+    logger.warn('Failed to get GHCR token', { error: err.message })
+    return null
+  }
+}
 
+/**
+ * Fetch tags from GHCR using a pre-fetched token.
+ */
+async function fetchGhcrTags(image: string, token: string): Promise<string[]> {
+  try {
+    const imagePath = image.replace('ghcr.io/', '')
     const res = await axios.get(
       `https://ghcr.io/v2/${imagePath}/tags/list`,
       {
         headers: { Authorization: `Bearer ${token}` },
-        timeout: 10000,
+        timeout: 15000,
       }
     )
     return res.data.tags || []
@@ -85,17 +93,11 @@ async function fetchGhcrTags(image: string): Promise<string[]> {
 }
 
 /**
- * Get the digest of a specific tag from GHCR.
+ * Get the digest of a specific tag from GHCR using a pre-fetched token.
  */
-async function fetchGhcrDigest(image: string, tag: string): Promise<string | null> {
+async function fetchGhcrDigest(image: string, tag: string, token: string): Promise<string | null> {
   try {
     const imagePath = image.replace('ghcr.io/', '')
-    const tokenRes = await axios.get(
-      `https://ghcr.io/token?scope=repository:${imagePath}:pull`,
-      { timeout: 10000 }
-    )
-    const token = tokenRes.data.token
-
     const res = await axios.head(
       `https://ghcr.io/v2/${imagePath}/manifests/${tag}`,
       {
@@ -103,7 +105,7 @@ async function fetchGhcrDigest(image: string, tag: string): Promise<string | nul
           Authorization: `Bearer ${token}`,
           Accept: 'application/vnd.docker.distribution.manifest.v2+json, application/vnd.oci.image.index.v1+json',
         },
-        timeout: 10000,
+        timeout: 15000,
       }
     )
     return res.headers['docker-content-digest'] || null
@@ -153,17 +155,31 @@ function isNewerVersion(local: string, remote: string): boolean {
  * Check GHCR for newer image versions.
  */
 export async function checkForUpdates(): Promise<UpdateCheckResult> {
+  // Single token for both repos — avoids double token fetch and rate limits
+  const token = await getGhcrToken([BACKEND_IMAGE, FRONTEND_IMAGE])
+  if (!token) {
+    const now = new Date().toISOString()
+    return {
+      currentVersion: CURRENT_VERSION,
+      backend: { image: BACKEND_IMAGE, currentTag: CURRENT_VERSION, latestTag: null, latestDigest: null, updateAvailable: false, checkedAt: now },
+      frontend: { image: FRONTEND_IMAGE, currentTag: CURRENT_VERSION, latestTag: null, latestDigest: null, updateAvailable: false, checkedAt: now },
+      updateAvailable: false,
+      releaseUrl: null,
+      checkedAt: now,
+    }
+  }
+
   const [backendTags, frontendTags] = await Promise.all([
-    fetchGhcrTags(BACKEND_IMAGE),
-    fetchGhcrTags(FRONTEND_IMAGE),
+    fetchGhcrTags(BACKEND_IMAGE, token),
+    fetchGhcrTags(FRONTEND_IMAGE, token),
   ])
 
   const latestBackendTag = findLatestSemverTag(backendTags)
   const latestFrontendTag = findLatestSemverTag(frontendTags)
 
   const [backendDigest, frontendDigest] = await Promise.all([
-    latestBackendTag ? fetchGhcrDigest(BACKEND_IMAGE, latestBackendTag) : null,
-    latestFrontendTag ? fetchGhcrDigest(FRONTEND_IMAGE, latestFrontendTag) : null,
+    latestBackendTag ? fetchGhcrDigest(BACKEND_IMAGE, latestBackendTag, token) : null,
+    latestFrontendTag ? fetchGhcrDigest(FRONTEND_IMAGE, latestFrontendTag, token) : null,
   ])
 
   const backendUpdateAvailable = latestBackendTag

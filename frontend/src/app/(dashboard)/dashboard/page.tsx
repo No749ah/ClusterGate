@@ -146,7 +146,7 @@ export default function DashboardPage() {
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Requests</CardTitle>
           <Button variant="ghost" size="sm" asChild>
-            <Link href="/logs">
+            <Link href="/activity">
               View all <ArrowRight className="w-3 h-3 ml-1" />
             </Link>
           </Button>

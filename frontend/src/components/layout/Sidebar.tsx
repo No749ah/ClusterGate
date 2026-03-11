@@ -34,7 +34,7 @@ const navItems = [
     label: 'Routes',
   },
   {
-    href: '/logs',
+    href: '/activity',
     icon: ScrollText,
     label: 'Logs',
   },

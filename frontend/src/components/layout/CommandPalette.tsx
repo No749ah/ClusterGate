@@ -21,7 +21,7 @@ const PAGES: CommandItem[] = [
   { id: 'dashboard', label: 'Dashboard', description: 'Overview', icon: LayoutDashboard, href: '/dashboard' },
   { id: 'routes', label: 'Routes', description: 'Manage routes', icon: Route, href: '/routes' },
   { id: 'routes-new', label: 'New Route', description: 'Create a new route', icon: Route, href: '/routes/new' },
-  { id: 'logs', label: 'Request Logs', description: 'View proxy logs', icon: ScrollText, href: '/logs' },
+  { id: 'activity', label: 'Request Logs', description: 'View proxy logs', icon: ScrollText, href: '/activity' },
   { id: 'users', label: 'Users', description: 'Manage users', icon: Users, href: '/users', adminOnly: true },
   { id: 'audit', label: 'Audit Log', description: 'Activity history', icon: Shield, href: '/audit', adminOnly: true },
   { id: 'settings', label: 'Settings', description: 'Account & system', icon: Settings, href: '/settings' },

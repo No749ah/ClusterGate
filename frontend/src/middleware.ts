@@ -8,7 +8,7 @@ export function middleware(request: NextRequest) {
   // Protect dashboard routes
   if (pathname.startsWith('/dashboard') ||
       pathname.startsWith('/routes') ||
-      pathname.startsWith('/logs') ||
+      pathname.startsWith('/activity') ||
       pathname.startsWith('/users') ||
       pathname.startsWith('/settings') ||
       pathname.startsWith('/audit')) {
