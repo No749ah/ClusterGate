@@ -25,7 +25,7 @@ CMD ["npm", "run", "dev"]
 # ---------------------------------------------------------------------------
 FROM base AS builder
 COPY . .
-ARG NEXT_PUBLIC_API_URL=http://localhost:3001
+ARG NEXT_PUBLIC_API_URL=
 ARG NEXT_PUBLIC_APP_NAME=ClusterGate
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_APP_NAME=$NEXT_PUBLIC_APP_NAME

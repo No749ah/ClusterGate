@@ -66,7 +66,6 @@ frontend:
       memory: "512Mi"
       cpu: "500m"
   env:
-    NEXT_PUBLIC_API_URL: "https://clustergate.example.com"
     NEXT_PUBLIC_APP_NAME: "ClusterGate"
 
 # -----------------------------------------------------------------------------
