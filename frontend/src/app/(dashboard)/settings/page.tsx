@@ -314,7 +314,7 @@ export default function SettingsPage() {
             <div>
               <p className="text-muted-foreground">API</p>
               <p className="font-medium font-mono text-xs">
-                {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}
+                {process.env.NEXT_PUBLIC_API_URL || window.location.origin}
               </p>
             </div>
           </div>

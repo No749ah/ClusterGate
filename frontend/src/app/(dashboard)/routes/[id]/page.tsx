@@ -19,7 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { RequestLog, RouteVersion } from '@/types'
 import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard } from '@/lib/utils'
 
-const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || ''
 
 export default function RouteDetailPage({ params }: { params: { id: string } }) {
   const { id } = params
