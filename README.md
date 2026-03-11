@@ -44,8 +44,8 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Two-Factor Authentication** — TOTP-based 2FA with recovery codes for user accounts
 - **Analytics Dashboard** — Latency trends (p50/p95/p99), error rates, traffic heatmap, status distribution
 - **Security** — JWT auth (httpOnly cookies, 7-day sessions), bcrypt, per-route auth (API key / Basic / Bearer), rate limiting, IP allowlists, webhook secrets, CORS
-- **Monitoring** — Request logs, error tracking, Prometheus metrics, automated health checks
-- **Database Backups** — Create, download, restore, and manage PostgreSQL backups from the UI
+- **Monitoring** — Paginated request logs, error tracking, Prometheus metrics, automated health checks
+- **Database Backups** — Create, download, restore, and manage backups from the UI (Prisma-based JSON export, no pg_dump needed)
 - **API Documentation** — Interactive Swagger/OpenAPI docs at `/api/docs`
 - **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui
 - **Kubernetes-native** — Kubernetes manifests + Helm chart + HPE PCAI support
