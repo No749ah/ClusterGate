@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
 
-let cachedVersion: string | null = null
+let cachedVersion = ''
 
 export function getVersion(): string {
   if (cachedVersion) return cachedVersion
