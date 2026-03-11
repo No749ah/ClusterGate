@@ -341,11 +341,50 @@ class ApiClient {
         backend: { image: string; currentTag: string; latestTag: string | null; updateAvailable: boolean; checkedAt: string }
         frontend: { image: string; currentTag: string; latestTag: string | null; updateAvailable: boolean; checkedAt: string }
         updateAvailable: boolean
+        releaseUrl: string | null
         checkedAt: string
       }>>('/api/system/update-check'),
 
     update: () =>
-      this.post<{ success: boolean; data: { success: boolean; message: string } }>('/api/system/update'),
+      this.post<{ success: boolean; data: { success: boolean; message: string; environment: string; instructions: string[] } }>('/api/system/update'),
+
+    config: () =>
+      this.get<ApiResponse<{
+        logRetentionDays: number
+        proxyTimeout: number
+        rateLimitWindowMs: number
+        rateLimitMax: number
+        authRateLimitMax: number
+        metricsEnabled: boolean
+        logLevel: string
+        jwtExpiresIn: string
+        nodeEnv: string
+      }>>('/api/system/config'),
+
+    stats: () =>
+      this.get<ApiResponse<{
+        counts: { users: number; routes: number; activeRoutes: number; requestLogs: number; auditLogs: number; apiKeys: number; healthChecks: number }
+        database: { size: string | null; oldestLog: string | null }
+        system: { uptime: number; version: string; nodeVersion: string; platform: string; memory: { heapUsed: number; heapTotal: number; rss: number } }
+      }>>('/api/system/stats'),
+
+    triggerHealthChecks: () =>
+      this.post<ApiResponse<{ message: string }>>('/api/system/health-check'),
+
+    cleanupLogs: (days?: number) =>
+      this.post<ApiResponse<{ deleted: number; retentionDays: number }>>('/api/system/cleanup-logs', days ? { days } : undefined),
+
+    cleanupHealthChecks: (days?: number) =>
+      this.post<ApiResponse<{ deleted: number; retentionDays: number }>>('/api/system/cleanup-health-checks', days ? { days } : undefined),
+
+    cleanupAuditLogs: (days?: number) =>
+      this.post<ApiResponse<{ deleted: number; retentionDays: number }>>('/api/system/cleanup-audit-logs', days ? { days } : undefined),
+
+    exportAuditLogs: () =>
+      this.get<{ success: boolean; data: any[]; exportedAt: string; count: number }>('/api/system/audit-export'),
+
+    forceLogoutAll: () =>
+      this.post<ApiResponse<{ affectedUsers: number; message: string }>>('/api/system/force-logout-all'),
   }
 
   // ============================================================================

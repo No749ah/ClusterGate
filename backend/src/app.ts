@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser'
 import compression from 'compression'
 import { config } from './config'
 import { logger } from './lib/logger'
+import { getVersion } from './lib/version'
 import { prisma } from './lib/prisma'
 import { registry } from './lib/metrics'
 import { globalLimiter, proxyLimiter } from './middleware/rateLimiter'
@@ -128,7 +129,7 @@ async function start() {
       logger.info(`ClusterGate backend started`, {
         port: config.PORT,
         env: config.NODE_ENV,
-        version: process.env.npm_package_version || '1.0.0',
+        version: getVersion(),
       })
     })
 

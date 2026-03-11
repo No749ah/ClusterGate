@@ -1,19 +1,9 @@
 import { Router } from 'express'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { prisma } from '../lib/prisma'
+import { getVersion } from '../lib/version'
 import { authenticate } from '../middleware/authenticate'
 
 const router = Router()
-
-function getVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'))
-    return pkg.version || '1.0.0'
-  } catch {
-    return process.env.npm_package_version || '1.0.0'
-  }
-}
 
 // GET /api/health/live — Kubernetes liveness probe (public, no sensitive data)
 router.get('/live', (_req, res) => {

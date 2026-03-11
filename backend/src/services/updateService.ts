@@ -1,20 +1,10 @@
 import axios from 'axios'
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { logger } from '../lib/logger'
+import { getVersion } from '../lib/version'
 
 const GHCR_OWNER = 'no749ah'
 const BACKEND_IMAGE = `ghcr.io/${GHCR_OWNER}/clustergate-backend`
 const FRONTEND_IMAGE = `ghcr.io/${GHCR_OWNER}/clustergate-frontend`
-
-function getVersion(): string {
-  try {
-    const pkg = JSON.parse(readFileSync(join(__dirname, '../../package.json'), 'utf-8'))
-    return pkg.version || '1.0.0'
-  } catch {
-    return process.env.npm_package_version || '1.0.0'
-  }
-}
 
 const CURRENT_VERSION = getVersion()
 
@@ -35,6 +25,7 @@ export interface UpdateCheckResult {
   backend: ImageVersionInfo
   frontend: ImageVersionInfo
   updateAvailable: boolean
+  releaseUrl: string | null
   checkedAt: string
 }
 
@@ -159,6 +150,11 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
 
   const now = new Date().toISOString()
 
+  const latestTag = latestBackendTag || latestFrontendTag
+  const releaseUrl = latestTag
+    ? `https://github.com/${GHCR_OWNER}/ClusterGate/releases/tag/v${latestTag.replace(/^v/, '')}`
+    : null
+
   return {
     currentVersion: CURRENT_VERSION,
     backend: {
@@ -167,7 +163,7 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       latestTag: latestBackendTag,
       latestDigest: backendDigest,
       updateAvailable: backendUpdateAvailable,
-    checkedAt: now,
+      checkedAt: now,
     },
     frontend: {
       image: FRONTEND_IMAGE,
@@ -178,48 +174,114 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
       checkedAt: now,
     },
     updateAvailable: backendUpdateAvailable || frontendUpdateAvailable,
+    releaseUrl,
     checkedAt: now,
   }
 }
 
 /**
- * Pull the latest images and restart containers via the Docker socket.
+ * Detect runtime environment.
  */
-export async function pullAndRestart(): Promise<{ success: boolean; message: string }> {
+function detectEnvironment(): 'kubernetes' | 'docker' | 'standalone' {
+  if (process.env.KUBERNETES_SERVICE_HOST) return 'kubernetes'
+  // Check if running inside Docker (cgroup or .dockerenv)
   try {
-    // Check if Docker socket is accessible
-    const dockerBase = `http://localhost/v1.43`
-    const client = axios.create({
-      socketPath: DOCKER_SOCKET,
-      baseURL: dockerBase,
-      timeout: 120000,
-    })
+    const fs = require('fs')
+    if (fs.existsSync('/.dockerenv') || fs.existsSync('/run/.containerenv')) return 'docker'
+  } catch {}
+  return 'standalone'
+}
 
-    // Test connection
-    await client.get('/info')
+/**
+ * Get update instructions based on deployment environment.
+ */
+export async function pullAndRestart(): Promise<{
+  success: boolean
+  message: string
+  environment: string
+  instructions: string[]
+}> {
+  const env = detectEnvironment()
+  const latestTag = CURRENT_VERSION // Will be compared by the frontend
 
-    // Pull latest images
-    logger.info('Pulling latest backend image...')
-    await client.post(`/images/create`, null, {
-      params: { fromImage: BACKEND_IMAGE, tag: 'latest' },
-    })
-
-    logger.info('Pulling latest frontend image...')
-    await client.post(`/images/create`, null, {
-      params: { fromImage: FRONTEND_IMAGE, tag: 'latest' },
-    })
-
-    logger.info('Images pulled successfully. Containers need to be recreated.')
-
+  if (env === 'kubernetes') {
     return {
       success: true,
-      message: 'Images pulled successfully. Please run "docker compose up -d" to recreate containers with the new images, or use your orchestrator to rolling-restart the services.',
+      environment: 'kubernetes',
+      message: 'Running in Kubernetes. Update your Helm values or deployment manifests to use the new image tag, then roll out.',
+      instructions: [
+        `helm upgrade clustergate ./helm/clustergate --set backend.image.tag=<new-version> --set frontend.image.tag=<new-version>`,
+        `# Or update values.yaml and run: helm upgrade clustergate ./helm/clustergate -f values.yaml`,
+        `# Or for a rolling restart with latest tag: kubectl rollout restart deployment/clustergate-backend deployment/clustergate-frontend`,
+      ],
     }
-  } catch (err: any) {
-    const msg = err.code === 'ENOENT'
-      ? 'Docker socket not available. Mount /var/run/docker.sock to enable updates.'
-      : `Update failed: ${err.message}`
-    logger.error('Pull and restart failed', { error: err.message })
-    return { success: false, message: msg }
+  }
+
+  if (env === 'docker') {
+    try {
+      const dockerBase = `http://localhost/v1.43`
+      const client = axios.create({
+        socketPath: DOCKER_SOCKET,
+        baseURL: dockerBase,
+        timeout: 120000,
+      })
+
+      await client.get('/info')
+
+      logger.info('Pulling latest backend image...')
+      await client.post(`/images/create`, null, {
+        params: { fromImage: BACKEND_IMAGE, tag: 'latest' },
+      })
+
+      logger.info('Pulling latest frontend image...')
+      await client.post(`/images/create`, null, {
+        params: { fromImage: FRONTEND_IMAGE, tag: 'latest' },
+      })
+
+      logger.info('Images pulled successfully.')
+
+      return {
+        success: true,
+        environment: 'docker',
+        message: 'Images pulled successfully. Recreate containers to apply the update.',
+        instructions: [
+          `docker compose pull`,
+          `docker compose up -d`,
+        ],
+      }
+    } catch (err: any) {
+      if (err.code === 'ENOENT') {
+        return {
+          success: true,
+          environment: 'docker',
+          message: 'Docker socket not mounted. Pull images manually.',
+          instructions: [
+            `docker compose pull`,
+            `docker compose up -d`,
+          ],
+        }
+      }
+      logger.error('Pull and restart failed', { error: err.message })
+      return {
+        success: false,
+        environment: 'docker',
+        message: `Update failed: ${err.message}`,
+        instructions: [
+          `docker compose pull`,
+          `docker compose up -d`,
+        ],
+      }
+    }
+  }
+
+  // Standalone / unknown
+  return {
+    success: true,
+    environment: 'standalone',
+    message: 'Pull the latest images and restart the services.',
+    instructions: [
+      `docker pull ${BACKEND_IMAGE}:latest`,
+      `docker pull ${FRONTEND_IMAGE}:latest`,
+    ],
   }
 }
