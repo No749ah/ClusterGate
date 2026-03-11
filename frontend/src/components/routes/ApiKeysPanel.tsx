@@ -172,7 +172,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
               <Input
                 value={keyName}
                 onChange={(e) => setKeyName(e.target.value)}
-                placeholder="e.g. Production Integration"
+                placeholder="My API Key"
               />
             </div>
           </div>

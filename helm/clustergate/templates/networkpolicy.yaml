@@ -1,0 +1,66 @@
+{{- if .Values.networkPolicy.enabled }}
+# Allow frontend to reach backend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-frontend-to-backend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "clustergate.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}-backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {{ .Release.Name }}-frontend
+      ports:
+        - port: {{ .Values.backend.service.port }}
+          protocol: TCP
+---
+# Allow backend to reach postgres
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-backend-to-postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "clustergate.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}-postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: {{ .Release.Name }}-backend
+      ports:
+        - port: {{ .Values.postgres.service.port }}
+          protocol: TCP
+---
+# Allow ingress/istio to reach frontend
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-ingress-to-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "clustergate.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      app: {{ .Release.Name }}-frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: {{ .Values.frontend.service.port }}
+          protocol: TCP
+{{- end }}

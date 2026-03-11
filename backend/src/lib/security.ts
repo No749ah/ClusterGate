@@ -3,7 +3,8 @@ import dns from 'dns/promises'
 import { timingSafeEqual, createHmac } from 'crypto'
 
 // =============================================================================
-// SSRF Protection — Block private/internal IPs and non-HTTP schemes
+// SSRF Protection — Block cloud metadata endpoints only
+// Private/internal addresses are allowed since ClusterGate is an internal gateway
 // =============================================================================
 
 const BLOCKED_HOSTNAMES = new Set([
@@ -11,61 +12,27 @@ const BLOCKED_HOSTNAMES = new Set([
   'metadata.gke.internal',
   '169.254.169.254',           // AWS/GCP/Azure metadata
   '169.254.170.2',             // AWS ECS metadata
-  'kubernetes.default',
-  'kubernetes.default.svc',
-  'kubernetes.default.svc.cluster.local',
 ])
 
 /**
- * Check if an IP address is in a private/reserved range (RFC 1918, loopback, link-local, etc.)
+ * Check if an IP is a cloud metadata endpoint (169.254.169.254, 169.254.170.2)
  */
-function isPrivateIp(ip: string): boolean {
-  // Block IPv6 loopback and mapped addresses
-  const lower = ip.toLowerCase()
-  if (lower === '::1' || lower === '::' || lower === '0:0:0:0:0:0:0:1') return true
-  if (lower.startsWith('::ffff:')) {
-    // IPv4-mapped IPv6 — extract and check the IPv4 part
-    return isPrivateIp(lower.slice(7))
-  }
-  if (lower.startsWith('fe80:') || lower.startsWith('fc00:') || lower.startsWith('fd')) return true
-
+function isMetadataIp(ip: string): boolean {
   const parts = ip.split('.').map(Number)
-  if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
-    // Not a valid IPv4 — block by default
-    return true
+  if (parts.length !== 4) return false
+  // 169.254.169.254 and 169.254.170.2 — cloud metadata endpoints
+  if (parts[0] === 169 && parts[1] === 254) {
+    if ((parts[2] === 169 && parts[3] === 254) || (parts[2] === 170 && parts[3] === 2)) {
+      return true
+    }
   }
-
-  const [a, b] = parts
-
-  // 0.0.0.0/8 — Current network
-  if (a === 0) return true
-  // 10.0.0.0/8 — Private (RFC 1918)
-  if (a === 10) return true
-  // 100.64.0.0/10 — Carrier-grade NAT (RFC 6598)
-  if (a === 100 && b >= 64 && b <= 127) return true
-  // 127.0.0.0/8 — Loopback
-  if (a === 127) return true
-  // 169.254.0.0/16 — Link-local / metadata
-  if (a === 169 && b === 254) return true
-  // 172.16.0.0/12 — Private (RFC 1918)
-  if (a === 172 && b >= 16 && b <= 31) return true
-  // 192.0.0.0/24 — IETF Protocol Assignments
-  if (a === 192 && b === 0 && parts[2] === 0) return true
-  // 192.168.0.0/16 — Private (RFC 1918)
-  if (a === 192 && b === 168) return true
-  // 198.18.0.0/15 — Benchmarking
-  if (a === 198 && (b === 18 || b === 19)) return true
-  // 224.0.0.0/4 — Multicast
-  if (a >= 224 && a <= 239) return true
-  // 240.0.0.0/4 — Reserved
-  if (a >= 240) return true
-
   return false
 }
 
 /**
- * Validate a target URL is safe to proxy to (no SSRF)
- * Checks: scheme, hostname blocklist, and DNS resolution to private IPs
+ * Validate a target URL is safe to proxy to.
+ * Only blocks cloud metadata endpoints — private/internal addresses are allowed
+ * since ClusterGate is designed to route to internal services.
  */
 export async function validateTargetUrl(targetUrl: string): Promise<void> {
   let parsed: URL
@@ -82,36 +49,29 @@ export async function validateTargetUrl(targetUrl: string): Promise<void> {
 
   const hostname = parsed.hostname.toLowerCase()
 
-  // Block known metadata/internal hostnames
+  // Block known cloud metadata hostnames
   if (BLOCKED_HOSTNAMES.has(hostname)) {
-    throw new Error(`Blocked target hostname: ${hostname}`)
+    throw new Error(`Blocked cloud metadata endpoint: ${hostname}`)
   }
 
-  // Block if hostname is a raw private IP
-  if (isPrivateIp(hostname)) {
-    throw new Error(`Blocked private/reserved IP address: ${hostname}`)
-  }
-
-  // Resolve DNS and check resolved IPs
+  // Resolve DNS and check for metadata IPs
   try {
     const addresses = await dns.resolve4(hostname)
     for (const addr of addresses) {
-      if (isPrivateIp(addr)) {
-        throw new Error(`Target hostname ${hostname} resolves to private IP ${addr}`)
+      if (isMetadataIp(addr)) {
+        throw new Error(`Target hostname ${hostname} resolves to cloud metadata IP ${addr}`)
       }
     }
   } catch (err: any) {
-    // If DNS resolution fails with our own error, re-throw
     if (err.message?.startsWith('Target hostname') || err.message?.startsWith('Blocked')) {
       throw err
     }
-    // DNS resolution failures for IPs are fine (they're checked above)
-    // For hostnames that can't be resolved, let the proxy handle the error
+    // DNS failures are OK — let the proxy handle the error at request time
   }
 }
 
 /**
- * Quick synchronous check for URL scheme and obvious blocklisted hosts.
+ * Quick synchronous check for URL scheme and cloud metadata endpoints.
  * Used in health checks and other places that need a fast check.
  */
 export function validateTargetUrlSync(targetUrl: string): void {
@@ -129,11 +89,7 @@ export function validateTargetUrlSync(targetUrl: string): void {
   const hostname = parsed.hostname.toLowerCase()
 
   if (BLOCKED_HOSTNAMES.has(hostname)) {
-    throw new Error(`Blocked target hostname: ${hostname}`)
-  }
-
-  if (isPrivateIp(hostname)) {
-    throw new Error(`Blocked private/reserved IP address: ${hostname}`)
+    throw new Error(`Blocked cloud metadata endpoint: ${hostname}`)
   }
 }
 

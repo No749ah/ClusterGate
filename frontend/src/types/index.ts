@@ -61,6 +61,11 @@ export interface Route {
   authValue: string | null
   webhookSecret: string | null
 
+  // Rate limiting
+  rateLimitEnabled: boolean
+  rateLimitMax: number
+  rateLimitWindow: number
+
   // Maintenance
   maintenanceMode: boolean
   maintenanceMessage: string | null
@@ -189,6 +194,9 @@ export interface RouteFormData {
   authType: AuthType
   authValue?: string
   webhookSecret?: string
+  rateLimitEnabled: boolean
+  rateLimitMax: number
+  rateLimitWindow: number
   maintenanceMode: boolean
   maintenanceMessage?: string
 }

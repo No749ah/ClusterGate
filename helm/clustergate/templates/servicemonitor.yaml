@@ -1,0 +1,20 @@
+{{- if .Values.monitoring.serviceMonitor.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ .Release.Name }}-backend
+  namespace: {{ .Values.monitoring.serviceMonitor.namespace | default .Release.Namespace }}
+  labels:
+    {{- include "clustergate.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}-backend
+  endpoints:
+    - port: http
+      path: {{ .Values.monitoring.serviceMonitor.path }}
+      interval: {{ .Values.monitoring.serviceMonitor.interval }}
+  namespaceSelector:
+    matchNames:
+      - {{ .Release.Namespace }}
+{{- end }}

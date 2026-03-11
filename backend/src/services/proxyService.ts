@@ -7,6 +7,7 @@ import { Route } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { AppError } from '../lib/errors'
+import { checkRateLimit } from '../lib/rateLimitStore'
 import { proxyRequestsTotal, proxyRequestDuration } from '../lib/metrics'
 import { notifyRouteError } from './notificationService'
 import { v4 as uuid } from 'uuid'
@@ -34,6 +35,22 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     if (!isIpAllowed(clientIp, route.ipAllowlist)) {
       throw AppError.forbidden('Your IP address is not allowed to access this route')
     }
+  }
+
+  // Rate limit check
+  if ((route as any).rateLimitEnabled && (route as any).rateLimitMax > 0) {
+    const rateLimitIp = req.ip || req.socket.remoteAddress || ''
+    const result = checkRateLimit(route.id, rateLimitIp, (route as any).rateLimitMax, (route as any).rateLimitWindow)
+    if (!result.allowed) {
+      res.setHeader('X-RateLimit-Limit', String((route as any).rateLimitMax))
+      res.setHeader('X-RateLimit-Remaining', '0')
+      res.setHeader('X-RateLimit-Reset', String(result.resetAt))
+      res.setHeader('Retry-After', String(Math.ceil((result.resetAt - Date.now()) / 1000)))
+      throw AppError.tooManyRequests('Rate limit exceeded')
+    }
+    res.setHeader('X-RateLimit-Limit', String((route as any).rateLimitMax))
+    res.setHeader('X-RateLimit-Remaining', String(result.remaining))
+    res.setHeader('X-RateLimit-Reset', String(result.resetAt))
   }
 
   // Validate webhook secret (timing-safe comparison)

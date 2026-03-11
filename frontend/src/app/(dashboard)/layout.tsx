@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, Suspense } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
+import { Breadcrumbs } from '@/components/layout/Breadcrumbs'
 import { useAuth } from '@/hooks/useAuth'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Loader2 } from 'lucide-react'
@@ -19,6 +20,21 @@ function PageFallback() {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth()
   const router = useRouter()
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    // Read initial state from localStorage
+    const stored = localStorage.getItem('clustergate-sidebar-collapsed')
+    if (stored === 'true') setSidebarCollapsed(true)
+
+    // Listen for sidebar toggle events
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      setSidebarCollapsed(detail.collapsed)
+    }
+    window.addEventListener('sidebar-toggle', handler)
+    return () => window.removeEventListener('sidebar-toggle', handler)
+  }, [])
 
   useEffect(() => {
     if (!isLoading && !isAuthenticated) {
@@ -45,9 +61,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <div className="flex min-h-screen bg-background">
       <Sidebar />
-      <div className="flex-1 flex flex-col pl-64">
+      <div className={`flex-1 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'pl-16' : 'pl-64'}`}>
         <Header />
         <main className="flex-1 p-6">
+          <Breadcrumbs />
           <Suspense fallback={<PageFallback />}>
             {children}
           </Suspense>

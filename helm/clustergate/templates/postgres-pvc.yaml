@@ -1,0 +1,19 @@
+{{- if and .Values.postgres.enabled .Values.postgres.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ .Release.Name }}-postgres-pvc
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-postgres
+    {{- include "clustergate.labels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.postgres.persistence.accessMode }}
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size }}
+  {{- if .Values.postgres.persistence.storageClass }}
+  storageClassName: {{ .Values.postgres.persistence.storageClass }}
+  {{- end }}
+{{- end }}

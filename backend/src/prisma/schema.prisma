@@ -85,6 +85,12 @@ model Route {
   timeout      Int         @default(30000)   // ms
   retryCount   Int         @default(0)
   retryDelay   Int         @default(1000)    // ms
+
+  // Rate limiting
+  rateLimitEnabled Boolean  @default(false)
+  rateLimitMax     Int      @default(100)     // max requests per window
+  rateLimitWindow  Int      @default(60000)   // window in ms (default 1 min)
+
   stripPrefix  Boolean     @default(false)
   sslVerify    Boolean     @default(true)
   requestBodyLimit String  @default("10mb")

@@ -1,17 +1,17 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "clustergate.name" . }}-backend
+  name: {{ .Release.Name }}-backend
   namespace: {{ .Release.Namespace }}
   labels:
+    app: {{ .Release.Name }}-backend
     {{- include "clustergate.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
   replicas: {{ .Values.backend.replicaCount }}
   selector:
     matchLabels:
-      {{- include "clustergate.selectorLabels" . | nindent 6 }}
-      app.kubernetes.io/component: backend
+      app: {{ .Release.Name }}-backend
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -20,7 +20,7 @@ spec:
   template:
     metadata:
       labels:
-        {{- include "clustergate.selectorLabels" . | nindent 8 }}
+        app: {{ .Release.Name }}-backend
         app.kubernetes.io/component: backend
       annotations:
         prometheus.io/scrape: "true"
@@ -31,15 +31,24 @@ spec:
       serviceAccountName: {{ .Values.serviceAccount.name }}
       {{- end }}
       securityContext:
-        runAsNonRoot: true
+        fsGroup: 1001
         runAsUser: 1001
         runAsGroup: 1001
-        fsGroup: 1001
       terminationGracePeriodSeconds: 60
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: backend
           image: {{ include "clustergate.backend.image" . }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
           ports:
             - containerPort: {{ .Values.backend.service.port }}
               name: http
@@ -47,17 +56,17 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "clustergate.name" . }}-secrets
+                  name: {{ .Release.Name }}-secrets
                   key: DATABASE_URL
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "clustergate.name" . }}-secrets
+                  name: {{ .Release.Name }}-secrets
                   key: JWT_SECRET
             - name: METRICS_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "clustergate.name" . }}-secrets
+                  name: {{ .Release.Name }}-secrets
                   key: METRICS_SECRET
             {{- range $key, $value := .Values.backend.env }}
             - name: {{ $key }}
@@ -81,11 +90,6 @@ spec:
             periodSeconds: 10
             timeoutSeconds: 5
             failureThreshold: 3
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
           volumeMounts:
             - name: logs
               mountPath: /app/logs

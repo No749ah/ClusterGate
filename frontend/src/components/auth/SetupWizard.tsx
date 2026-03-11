@@ -34,10 +34,45 @@ const setupSchema = z.object({
 
 type SetupForm = z.infer<typeof setupSchema>
 
+function getPasswordStrength(password: string) {
+  const checks = [
+    password.length >= 8,
+    /[A-Z]/.test(password),
+    /[a-z]/.test(password),
+    /[0-9]/.test(password),
+    /[^A-Za-z0-9]/.test(password),
+  ]
+  return checks.filter(Boolean).length
+}
+
+const strengthColors = ['bg-red-500', 'bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-green-500']
+const strengthLabels = ['', 'Weak', 'Fair', 'Good', 'Strong', 'Excellent']
+
+function PasswordStrengthMeter({ password }: { password: string }) {
+  const strength = getPasswordStrength(password)
+  if (!password) return null
+  return (
+    <div className="space-y-1">
+      <div className="flex gap-1">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div
+            key={i}
+            className={`h-1 flex-1 rounded-full transition-colors ${
+              i < strength ? (strengthColors[strength - 1] || 'bg-red-500') : 'bg-muted'
+            }`}
+          />
+        ))}
+      </div>
+      <p className="text-[11px] text-muted-foreground">{strengthLabels[strength]}</p>
+    </div>
+  )
+}
+
 export function SetupWizard({ open }: { open: boolean }) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [showPassword, setShowPassword] = useState(false)
+  const [passwordValue, setPasswordValue] = useState('')
 
   const {
     register,
@@ -137,7 +172,9 @@ export function SetupWizard({ open }: { open: boolean }) {
                 className={`w-full h-10 pl-10 pr-10 rounded-md border bg-background text-sm outline-none transition-colors
                   focus:ring-2 focus:ring-primary/30 focus:border-primary
                   ${errors.password ? 'border-destructive focus:ring-destructive/30' : 'border-input'}`}
-                {...register('password')}
+                {...register('password', {
+                  onChange: (e) => setPasswordValue(e.target.value),
+                })}
               />
               <button
                 type="button"
@@ -147,6 +184,7 @@ export function SetupWizard({ open }: { open: boolean }) {
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
             </div>
+            <PasswordStrengthMeter password={passwordValue} />
             {errors.password && (
               <p className="text-xs text-destructive">{errors.password.message}</p>
             )}

@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react'
 import { LogoLarge } from '@/components/common/Logo'
 import { SetupWizard } from '@/components/auth/SetupWizard'
@@ -20,7 +20,16 @@ const loginSchema = z.object({
 type LoginForm = z.infer<typeof loginSchema>
 
 export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginContent />
+    </Suspense>
+  )
+}
+
+function LoginContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const queryClient = useQueryClient()
   const [showPassword, setShowPassword] = useState(false)
   const [showSetup, setShowSetup] = useState(false)
@@ -48,7 +57,8 @@ export default function LoginPage() {
       await api.auth.login(data.email, data.password)
       await queryClient.invalidateQueries({ queryKey: ['auth'] })
       toast.success('Welcome back!')
-      router.push('/dashboard')
+      const redirect = searchParams.get('redirect')
+      router.push(redirect || '/dashboard')
     } catch (err: any) {
       toast.error(err.message || 'Login failed. Please check your credentials.')
     }

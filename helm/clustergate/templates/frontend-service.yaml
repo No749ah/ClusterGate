@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-frontend
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-frontend
+    {{- include "clustergate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: frontend
+spec:
+  selector:
+    app: {{ .Release.Name }}-frontend
+  ports:
+    - port: {{ .Values.frontend.service.port }}
+      targetPort: {{ .Values.frontend.service.port }}
+      name: http
+  type: {{ .Values.frontend.service.type }}

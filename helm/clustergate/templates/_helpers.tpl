@@ -60,5 +60,5 @@ Frontend image
 Database URL
 */}}
 {{- define "clustergate.databaseUrl" -}}
-{{- printf "postgresql://%s:%s@postgres:5432/%s?schema=public" .Values.postgres.credentials.username .Values.postgres.credentials.password .Values.postgres.credentials.database }}
+{{- printf "postgresql://%s:%s@%s-postgres:%s/%s?schema=public" .Values.postgres.credentials.username .Values.postgres.credentials.password (include "clustergate.name" .) (toString .Values.postgres.service.port) .Values.postgres.credentials.database }}
 {{- end }}

@@ -38,6 +38,9 @@ const routeSchema = z.object({
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   authValue: z.string().optional(),
   webhookSecret: z.string().optional(),
+  rateLimitEnabled: z.boolean().default(false),
+  rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
+  rateLimitWindowSeconds: z.coerce.number().int().min(1).max(3600).default(60),
   maintenanceMode: z.boolean().default(false),
   maintenanceMessage: z.string().optional(),
 })
@@ -94,6 +97,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       authType: defaultValues?.authType ?? 'NONE',
       authValue: defaultValues?.authValue ?? '',
       webhookSecret: defaultValues?.webhookSecret ?? '',
+      rateLimitEnabled: defaultValues?.rateLimitEnabled ?? false,
+      rateLimitMax: defaultValues?.rateLimitMax ?? 100,
+      rateLimitWindowSeconds: defaultValues?.rateLimitWindow ? defaultValues.rateLimitWindow / 1000 : 60,
       maintenanceMode: defaultValues?.maintenanceMode ?? false,
       maintenanceMessage: defaultValues?.maintenanceMessage ?? '',
     },
@@ -122,6 +128,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const methods = watch('methods')
   const requireAuth = watch('requireAuth')
   const corsEnabled = watch('corsEnabled')
+  const rateLimitEnabled = watch('rateLimitEnabled')
   const maintenanceMode = watch('maintenanceMode')
   const authType = watch('authType')
   const publicPath = watch('publicPath')
@@ -193,8 +200,10 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   }
 
   const handleFormSubmit = async (data: RouteFormValues) => {
+    const { rateLimitWindowSeconds, ...rest } = data
     const formData: RouteFormData = {
-      ...data,
+      ...rest,
+      rateLimitWindow: rateLimitWindowSeconds * 1000,
       addHeaders: Object.fromEntries(data.addHeaders.map(({ key, value }) => [key, value])),
       removeHeaders: data.removeHeaders
         ? data.removeHeaders.split(',').map((s) => s.trim()).filter(Boolean)
@@ -261,16 +270,16 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         {step === 0 && (
           <div className="space-y-4">
             <Field label="Route Name" error={errors.name?.message} required>
-              <input {...register('name')} placeholder="n8n Webhooks" className={fieldClass(errors.name)} />
+              <input {...register('name')} placeholder="My API Service" className={fieldClass(errors.name)} />
             </Field>
             <Field label="Description" error={errors.description?.message}>
               <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
             </Field>
-            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /api/v1/*)' : 'e.g. /webhook/xyz'}>
+            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /api/v1/*)' : 'e.g. /api/users or /service/health'}>
               <div className="space-y-2">
                 <div className="flex gap-2">
                   <div className="relative flex-1">
-                    <input {...register('publicPath')} placeholder="/webhook/xyz" className={fieldClass(errors.publicPath)} />
+                    <input {...register('publicPath')} placeholder="/api/my-service" className={fieldClass(errors.publicPath)} />
                     {pathStatus === 'checking' && (
                       <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
                     )}
@@ -320,10 +329,10 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 </div>
               </div>
             </Field>
-            <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal Kubernetes service URL">
+            <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal service URL or Kubernetes service address">
               <input
                 {...register('targetUrl')}
-                placeholder="http://n8n.default.svc.cluster.local:5678/webhook"
+                placeholder="http://my-service.default.svc.cluster.local:8080"
                 className={fieldClass(errors.targetUrl)}
               />
             </Field>
@@ -422,6 +431,26 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 onCheckedChange={(v) => setValue('sslVerify', v)}
               />
             </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+              <div>
+                <p className="text-sm font-medium">Rate Limiting</p>
+                <p className="text-xs text-muted-foreground">Limit requests per client IP</p>
+              </div>
+              <Switch
+                checked={rateLimitEnabled}
+                onCheckedChange={(v) => setValue('rateLimitEnabled', v)}
+              />
+            </div>
+            {rateLimitEnabled && (
+              <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
+                <Field label="Max Requests" hint="Per window per IP">
+                  <input type="number" {...register('rateLimitMax')} className={fieldClass()} />
+                </Field>
+                <Field label="Window (seconds)" hint="1–3600">
+                  <input type="number" {...register('rateLimitWindowSeconds')} className={fieldClass()} />
+                </Field>
+              </div>
+            )}
           </div>
         )}
 
@@ -441,8 +470,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               <div className="space-y-2">
                 {headerFields.map((field, i) => (
                   <div key={field.id} className="flex gap-2">
-                    <input {...register(`addHeaders.${i}.key`)} placeholder="Header name" className={cn(fieldClass(), 'flex-1')} />
-                    <input {...register(`addHeaders.${i}.value`)} placeholder="Header value" className={cn(fieldClass(), 'flex-1')} />
+                    <input {...register(`addHeaders.${i}.key`)} placeholder="X-Custom-Header" className={cn(fieldClass(), 'flex-1')} />
+                    <input {...register(`addHeaders.${i}.value`)} placeholder="header-value" className={cn(fieldClass(), 'flex-1')} />
                     <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeHeader(i)}>
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>
@@ -455,7 +484,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             </div>
 
             <Field label="Remove Headers" hint="Comma-separated header names to strip from requests">
-              <input {...register('removeHeaders')} placeholder="X-Internal-Token, X-Debug" className={fieldClass()} />
+              <input {...register('removeHeaders')} placeholder="X-Forwarded-For, X-Real-IP" className={fieldClass()} />
             </Field>
 
             <div>
@@ -471,9 +500,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               <div className="space-y-2">
                 {rewriteFields.map((field, i) => (
                   <div key={field.id} className="flex gap-2 items-center">
-                    <input {...register(`rewriteRules.${i}.from`)} placeholder="^/incoming/(.*)" className={cn(fieldClass(), 'flex-1')} />
+                    <input {...register(`rewriteRules.${i}.from`)} placeholder="^/v1/(.*)" className={cn(fieldClass(), 'flex-1')} />
                     <span className="text-muted-foreground text-sm">→</span>
-                    <input {...register(`rewriteRules.${i}.to`)} placeholder="/webhook/$1" className={cn(fieldClass(), 'flex-1')} />
+                    <input {...register(`rewriteRules.${i}.to`)} placeholder="/api/$1" className={cn(fieldClass(), 'flex-1')} />
                     <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeRewrite(i)}>
                       <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>
@@ -520,11 +549,11 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               )}
 
               <Field label="Webhook Secret" hint="Validate X-Hub-Signature-256 for webhook requests">
-                <input type="password" {...register('webhookSecret')} placeholder="Optional secret" className={fieldClass()} />
+                <input type="password" {...register('webhookSecret')} placeholder="Enter webhook secret" className={fieldClass()} />
               </Field>
 
               <Field label="IP Allowlist" hint="One IP or CIDR per line. Leave empty to allow all.">
-                <Textarea {...register('ipAllowlist')} placeholder="192.168.1.0/24&#10;10.0.0.1" rows={3} />
+                <Textarea {...register('ipAllowlist')} placeholder={"203.0.113.0/24\n198.51.100.42"} rows={3} />
               </Field>
 
               <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
@@ -539,8 +568,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               </div>
 
               {corsEnabled && (
-                <Field label="CORS Origins" hint="One origin per line, e.g. https://app.example.com">
-                  <Textarea {...register('corsOrigins')} placeholder="https://app.example.com" rows={3} />
+                <Field label="CORS Origins" hint="One origin per line">
+                  <Textarea {...register('corsOrigins')} placeholder={"https://app.yourdomain.com\nhttps://admin.yourdomain.com"} rows={3} />
                 </Field>
               )}
             </div>

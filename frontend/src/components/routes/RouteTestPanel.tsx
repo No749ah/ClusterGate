@@ -71,7 +71,7 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods }: RouteTes
           <Input
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            placeholder="/webhook/test"
+            placeholder="/api/test"
             className="flex-1 font-mono text-sm"
           />
         </div>
@@ -93,13 +93,13 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods }: RouteTes
                   <Input
                     value={h.key}
                     onChange={(e) => setHeaders(prev => prev.map((item, idx) => idx === i ? { ...item, key: e.target.value } : item))}
-                    placeholder="Header name"
+                    placeholder="X-Custom-Header"
                     className="flex-1 text-xs"
                   />
                   <Input
                     value={h.value}
                     onChange={(e) => setHeaders(prev => prev.map((item, idx) => idx === i ? { ...item, value: e.target.value } : item))}
-                    placeholder="Value"
+                    placeholder="header-value"
                     className="flex-1 text-xs"
                   />
                   <Button variant="ghost" size="icon-sm" onClick={() => setHeaders(prev => prev.filter((_, idx) => idx !== i))}>
@@ -121,7 +121,7 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods }: RouteTes
             <Textarea
               value={body}
               onChange={(e) => setBody(e.target.value)}
-              placeholder='{"key": "value"}'
+              placeholder='{"message": "Hello, World!"}'
               rows={4}
               className="font-mono text-sm"
             />

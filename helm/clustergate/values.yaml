@@ -12,9 +12,9 @@ global:
 backend:
   replicaCount: 2
   image:
-    repository: your-registry/clustergate-backend
+    repository: ghcr.io/no749ah/clustergate-backend
     tag: "latest"
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   service:
     type: ClusterIP
     port: 3001
@@ -26,7 +26,7 @@ backend:
       memory: "1Gi"
       cpu: "1000m"
   autoscaling:
-    enabled: true
+    enabled: false
     minReplicas: 2
     maxReplicas: 10
     targetCPUUtilizationPercentage: 70
@@ -39,10 +39,10 @@ backend:
     LOG_LEVEL: info
     METRICS_ENABLED: "true"
     LOG_RETENTION_DAYS: "90"
+    ALLOWED_ORIGINS: "https://clustergate.example.com"
   secrets:
-    # Override these values with --set or use external secrets
-    jwtSecret: "CHANGE_ME"
-    metricsSecret: "CHANGE_ME"
+    jwtSecret: "CHANGE_ME_JWT_SECRET"
+    metricsSecret: "CHANGE_ME_METRICS_SECRET"
   logs:
     storageSize: "2Gi"
 
@@ -52,9 +52,9 @@ backend:
 frontend:
   replicaCount: 2
   image:
-    repository: your-registry/clustergate-frontend
+    repository: ghcr.io/no749ah/clustergate-frontend
     tag: "latest"
-    pullPolicy: IfNotPresent
+    pullPolicy: Always
   service:
     type: ClusterIP
     port: 3000
@@ -65,6 +65,9 @@ frontend:
     limits:
       memory: "512Mi"
       cpu: "500m"
+  env:
+    NEXT_PUBLIC_API_URL: "https://clustergate.example.com"
+    NEXT_PUBLIC_APP_NAME: "ClusterGate"
 
 # -----------------------------------------------------------------------------
 # PostgreSQL
@@ -79,7 +82,7 @@ postgres:
     port: 5432
   persistence:
     enabled: true
-    storageClass: ""  # Leave empty for default
+    storageClass: ""
     size: "20Gi"
     accessMode: ReadWriteOnce
   resources:
@@ -91,7 +94,7 @@ postgres:
       cpu: "1000m"
   credentials:
     username: clustergate
-    password: "CHANGE_ME"
+    password: "CHANGE_ME_PG_PASSWORD"
     database: clustergate
 
 # -----------------------------------------------------------------------------
@@ -121,11 +124,17 @@ rbac:
   create: true
 
 # -----------------------------------------------------------------------------
+# Network Policies
+# -----------------------------------------------------------------------------
+networkPolicy:
+  enabled: false
+
+# -----------------------------------------------------------------------------
 # Monitoring
 # -----------------------------------------------------------------------------
 monitoring:
   serviceMonitor:
-    enabled: false  # Enable if using Prometheus Operator
+    enabled: false
     interval: 30s
     path: /metrics
     namespace: monitoring

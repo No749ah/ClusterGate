@@ -123,8 +123,13 @@ export function useTestRoute(id: string) {
 }
 
 export function useRouteHealth(id: string) {
+  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: () => api.routes.health(id),
+    onSuccess: () => {
+      // Refetch route to update the health indicator
+      queryClient.invalidateQueries({ queryKey: ['route', id] })
+    },
     onError: (err: any) => {
       toast.error(err.message || 'Health check failed')
     },
@@ -152,6 +157,14 @@ export function useRestoreRouteVersion(routeId: string) {
     onError: (err: any) => {
       toast.error(err.message || 'Failed to restore version')
     },
+  })
+}
+
+export function useRouteUptime(id: string) {
+  return useQuery({
+    queryKey: ['route-uptime', id],
+    queryFn: () => api.routes.getUptime(id),
+    staleTime: 5 * 60 * 1000,
   })
 }
 

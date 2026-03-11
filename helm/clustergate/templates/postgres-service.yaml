@@ -1,0 +1,19 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-postgres
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}-postgres
+    {{- include "clustergate.labels" . | nindent 4 }}
+    app.kubernetes.io/component: database
+spec:
+  selector:
+    app: {{ .Release.Name }}-postgres
+  ports:
+    - port: {{ .Values.postgres.service.port }}
+      targetPort: {{ .Values.postgres.service.port }}
+      name: postgres
+  type: ClusterIP
+{{- end }}

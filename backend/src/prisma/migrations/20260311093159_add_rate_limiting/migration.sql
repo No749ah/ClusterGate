@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "routes" ADD COLUMN     "rateLimitEnabled" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN     "rateLimitMax" INTEGER NOT NULL DEFAULT 100,
+ADD COLUMN     "rateLimitWindow" INTEGER NOT NULL DEFAULT 60000;

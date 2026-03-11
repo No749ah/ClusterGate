@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { useRoute, useRouteStats, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth } from '@/hooks/useRoutes'
+import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth } from '@/hooks/useRoutes'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
 import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
@@ -15,14 +15,20 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { RequestLog, RouteVersion } from '@/types'
 import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard } from '@/lib/utils'
 
 const PROXY_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
 export default function RouteDetailPage({ params }: { params: { id: string } }) {
   const { id } = params
+  const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
+  const [diffVersion, setDiffVersion] = useState<RouteVersion | null>(null)
+
   const { data: routeData, isLoading } = useRoute(id)
   const { data: statsData } = useRouteStats(id)
+  const { data: uptimeData } = useRouteUptime(id)
   const { data: logsData } = useLogs({ routeId: id, pageSize: 20 })
   const { data: versionsData } = useRouteVersions(id)
 
@@ -35,6 +41,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
 
   const route = routeData?.data
   const stats = statsData?.data
+  const uptime = uptimeData?.data
   const logs = logsData?.data ?? []
   const versions = versionsData?.data ?? []
 
@@ -73,7 +80,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
             <div className="flex items-center gap-3">
               <h1 className="text-2xl font-bold text-foreground">{route.name}</h1>
               <RouteStatusBadge status={route.status} isActive={route.isActive} />
-              <HealthIndicator status={health?.status} responseTime={health?.responseTime} showLabel />
+              <HealthIndicator status={health?.status} responseTime={health?.responseTime} error={health?.error} showLabel />
             </div>
             {route.description && (
               <p className="text-sm text-muted-foreground mt-1">{route.description}</p>
@@ -122,7 +129,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
           <StatsCard icon={Activity} label="Total Requests" value={stats.total.toLocaleString()} />
           <StatsCard
             icon={CheckCircle2}
@@ -135,6 +142,12 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
             icon={Clock}
             label="P95 Duration"
             value={formatDuration(stats.p95Duration)}
+          />
+          <StatsCard
+            icon={CheckCircle2}
+            label="Uptime"
+            value={uptime ? `${uptime.uptimePercent}%` : 'N/A'}
+            valueClass={uptime && uptime.uptimePercent >= 99 ? 'text-green-500' : uptime && uptime.uptimePercent >= 95 ? 'text-yellow-500' : uptime ? 'text-red-500' : undefined}
           />
         </div>
       )}
@@ -242,7 +255,7 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
                     </thead>
                     <tbody className="divide-y divide-border/30">
                       {logs.map((log) => (
-                        <tr key={log.id} className="hover:bg-muted/30">
+                        <tr key={log.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => setSelectedLog(log)}>
                           <td className="py-2 pr-4 text-muted-foreground whitespace-nowrap text-xs">
                             {formatRelativeTime(log.createdAt)}
                           </td>
@@ -298,21 +311,30 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
                         </p>
                       </div>
                       {v.version !== route.version && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={restoreVersion.isPending}
-                          onClick={async () => {
-                            const ok = await confirm({
-                              title: 'Restore Version',
-                              description: `Restore route configuration to version ${v.version}? The current configuration will be saved as a new version.`,
-                              confirmLabel: 'Restore',
-                            })
-                            if (ok) restoreVersion.mutate(v.id)
-                          }}
-                        >
-                          {restoreVersion.isPending ? 'Restoring...' : 'Restore'}
-                        </Button>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setDiffVersion(v)}
+                          >
+                            Compare
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={restoreVersion.isPending}
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: 'Restore Version',
+                                description: `Restore route configuration to version ${v.version}? The current configuration will be saved as a new version.`,
+                                confirmLabel: 'Restore',
+                              })
+                              if (ok) restoreVersion.mutate(v.id)
+                            }}
+                          >
+                            {restoreVersion.isPending ? 'Restoring...' : 'Restore'}
+                          </Button>
+                        </div>
                       )}
                       {v.version === route.version && (
                         <Badge variant="success">Current</Badge>
@@ -325,6 +347,16 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Log Detail Modal */}
+      <LogDetailDialog log={selectedLog} onClose={() => setSelectedLog(null)} />
+
+      {/* Version Diff Dialog */}
+      <VersionDiffDialog
+        oldVersion={diffVersion}
+        currentRoute={route}
+        onClose={() => setDiffVersion(null)}
+      />
     </div>
   )
 }
@@ -379,6 +411,255 @@ function StatsCard({
       </CardContent>
     </Card>
   )
+}
+
+function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: () => void }) {
+  const [curlCopied, setCurlCopied] = useState(false)
+
+  if (!log) return null
+
+  const fullUrl = log.targetUrl || log.path
+  const curlCommand = generateCurl(log)
+
+  return (
+    <Dialog open={!!log} onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Request Detail</DialogTitle>
+          <DialogDescription>
+            {log.method} {log.path} - {log.responseStatus ?? 'ERR'}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          {/* Summary */}
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="text-muted-foreground">Request ID</span>
+              <p className="font-mono text-xs mt-0.5 break-all">{log.requestId}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Route</span>
+              <p className="mt-0.5">{log.route?.name ?? 'Unknown'}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Method</span>
+              <p className="mt-0.5 font-mono">{log.method}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Path</span>
+              <p className="mt-0.5 font-mono text-xs break-all">{log.path}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Full URL</span>
+              <p className="mt-0.5 font-mono text-xs break-all">{fullUrl}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Status Code</span>
+              <p className={`mt-0.5 font-medium ${getStatusColor(log.responseStatus)}`}>
+                {log.responseStatus ?? 'ERR'}
+              </p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Duration</span>
+              <p className="mt-0.5">{formatDuration(log.duration)}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Timestamp</span>
+              <p className="mt-0.5 text-xs">{formatDate(log.createdAt)}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Client IP</span>
+              <p className="mt-0.5 font-mono text-xs">{log.ip ?? 'Unknown'}</p>
+            </div>
+            <div>
+              <span className="text-muted-foreground">User Agent</span>
+              <p className="mt-0.5 text-xs truncate" title={log.userAgent ?? undefined}>{log.userAgent ?? 'Unknown'}</p>
+            </div>
+          </div>
+
+          {/* Error */}
+          {log.error && (
+            <div>
+              <h4 className="text-sm font-medium text-red-500 mb-1">Error</h4>
+              <pre className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-xs text-red-400 whitespace-pre-wrap break-all">
+                {log.error}
+              </pre>
+            </div>
+          )}
+
+          {/* Request Headers */}
+          {log.requestHeaders && Object.keys(log.requestHeaders).length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium mb-1">Request Headers</h4>
+              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">
+                {JSON.stringify(log.requestHeaders, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Request Body */}
+          {log.requestBody && (
+            <div>
+              <h4 className="text-sm font-medium mb-1">Request Body</h4>
+              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">
+                {formatJsonSafe(log.requestBody)}
+              </pre>
+            </div>
+          )}
+
+          {/* Response Headers */}
+          {log.responseHeaders && Object.keys(log.responseHeaders).length > 0 && (
+            <div>
+              <h4 className="text-sm font-medium mb-1">Response Headers</h4>
+              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">
+                {JSON.stringify(log.responseHeaders, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {/* Response Body */}
+          {log.responseBody && (
+            <div>
+              <h4 className="text-sm font-medium mb-1">Response Body</h4>
+              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-[200px]">
+                {formatJsonSafe(log.responseBody)}
+              </pre>
+            </div>
+          )}
+
+          {/* Copy as cURL */}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => {
+              copyToClipboard(curlCommand)
+              setCurlCopied(true)
+              setTimeout(() => setCurlCopied(false), 1500)
+            }}
+          >
+            {curlCopied ? (
+              <><Check className="w-3.5 h-3.5 mr-2" /> Copied!</>
+            ) : (
+              <><Copy className="w-3.5 h-3.5 mr-2" /> Copy as cURL</>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function generateCurl(log: RequestLog): string {
+  const parts = ['curl']
+  parts.push(`-X ${log.method}`)
+  const url = log.targetUrl || log.path
+  parts.push(`'${url}'`)
+
+  if (log.requestHeaders) {
+    for (const [key, value] of Object.entries(log.requestHeaders)) {
+      if (['host', 'content-length', 'transfer-encoding'].includes(key.toLowerCase())) continue
+      parts.push(`-H '${key}: ${value}'`)
+    }
+  }
+
+  if (log.requestBody) {
+    parts.push(`-d '${log.requestBody.replace(/'/g, "'\\''")}'`)
+  }
+
+  return parts.join(' \\\n  ')
+}
+
+function formatJsonSafe(str: string): string {
+  try {
+    return JSON.stringify(JSON.parse(str), null, 2)
+  } catch {
+    return str
+  }
+}
+
+const DIFF_FIELDS = [
+  'name', 'description', 'publicPath', 'targetUrl', 'methods', 'tags',
+  'timeout', 'retryCount', 'retryDelay', 'stripPrefix', 'sslVerify',
+  'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules',
+  'corsEnabled', 'corsOrigins', 'ipAllowlist', 'requireAuth', 'authType',
+  'maintenanceMode', 'maintenanceMessage',
+] as const
+
+function VersionDiffDialog({
+  oldVersion,
+  currentRoute,
+  onClose,
+}: {
+  oldVersion: RouteVersion | null
+  currentRoute: any
+  onClose: () => void
+}) {
+  if (!oldVersion || !currentRoute) return null
+
+  const oldSnap = oldVersion.snapshot as Record<string, any>
+  const current = currentRoute as Record<string, any>
+
+  const diffs: { field: string; old: string; new: string }[] = []
+  for (const field of DIFF_FIELDS) {
+    const oldVal = JSON.stringify(oldSnap[field] ?? null)
+    const newVal = JSON.stringify(current[field] ?? null)
+    if (oldVal !== newVal) {
+      diffs.push({ field, old: oldVal, new: newVal })
+    }
+  }
+
+  return (
+    <Dialog open={!!oldVersion} onOpenChange={() => onClose()}>
+      <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>
+            Version {oldVersion.version} vs Current (v{currentRoute.version})
+          </DialogTitle>
+          <DialogDescription>
+            {diffs.length === 0 ? 'No differences found.' : `${diffs.length} field(s) changed.`}
+          </DialogDescription>
+        </DialogHeader>
+
+        {diffs.length > 0 && (
+          <div className="space-y-3">
+            {diffs.map((d) => (
+              <div key={d.field} className="rounded-lg border border-border/50 overflow-hidden">
+                <div className="px-3 py-1.5 bg-muted text-xs font-medium">{d.field}</div>
+                <div className="grid grid-cols-2 divide-x divide-border/50">
+                  <div className="p-3">
+                    <p className="text-[10px] text-muted-foreground mb-1">v{oldVersion.version}</p>
+                    <pre className="text-xs bg-red-500/10 text-red-400 rounded p-2 whitespace-pre-wrap break-all">
+                      {formatJsonValue(d.old)}
+                    </pre>
+                  </div>
+                  <div className="p-3">
+                    <p className="text-[10px] text-muted-foreground mb-1">Current (v{currentRoute.version})</p>
+                    <pre className="text-xs bg-green-500/10 text-green-400 rounded p-2 whitespace-pre-wrap break-all">
+                      {formatJsonValue(d.new)}
+                    </pre>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function formatJsonValue(str: string): string {
+  try {
+    const parsed = JSON.parse(str)
+    if (typeof parsed === 'object' && parsed !== null) {
+      return JSON.stringify(parsed, null, 2)
+    }
+    return String(parsed)
+  } catch {
+    return str
+  }
 }
 
 function InfoRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {

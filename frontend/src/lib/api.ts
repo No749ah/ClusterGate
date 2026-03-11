@@ -189,6 +189,9 @@ class ApiClient {
     getStats: (id: string) =>
       this.get<ApiResponse<RouteStats>>(`/api/routes/${id}/stats`),
 
+    getUptime: (id: string, days = 7) =>
+      this.get<ApiResponse<{ uptimePercent: number; totalChecks: number; healthyChecks: number } | null>>(`/api/routes/${id}/uptime?days=${days}`),
+
     export: () =>
       this.get<{ success: boolean; data: Partial<Route>[]; exportedAt: string }>('/api/routes/export'),
 

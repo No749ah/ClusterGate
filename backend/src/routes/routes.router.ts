@@ -38,6 +38,9 @@ const routeBodySchema = z.object({
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   authValue: z.string().optional(),
   webhookSecret: z.string().optional(),
+  rateLimitEnabled: z.boolean().default(false),
+  rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
+  rateLimitWindow: z.coerce.number().int().min(1000).max(3600000).default(60000),
   maintenanceMode: z.boolean().default(false),
   maintenanceMessage: z.string().optional(),
 })
@@ -114,6 +117,22 @@ router.post('/import', authenticate, authorize([Role.ADMIN]), async (req, res, n
   try {
     const { routes } = z.object({ routes: z.array(routeBodySchema) }).parse(req.body)
     const result = await routeService.importRoutes(routes as any[], req.user!.userId)
+    res.json({ success: true, data: result })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// GET /api/routes/:id/uptime
+router.get('/:id/uptime', authenticate, async (req, res, next) => {
+  try {
+    const days = parseInt(String(req.query.days)) || 7
+    const route = await prisma.route.findUnique({
+      where: { id: req.params.id, deletedAt: null },
+    })
+    if (!route) throw AppError.notFound('Route')
+
+    const result = await healthService.getRouteUptime(req.params.id, days)
     res.json({ success: true, data: result })
   } catch (err) {
     next(err)
