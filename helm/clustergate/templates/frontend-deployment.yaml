@@ -31,6 +31,15 @@ spec:
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
+      initContainers:
+        - name: wait-for-backend
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-backend {{ .Values.backend.service.port }}; do echo "Waiting for Backend..."; sleep 2; done']
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
       containers:
         - name: frontend
           image: {{ include "clustergate.frontend.image" . }}

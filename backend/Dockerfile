@@ -47,6 +47,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder /app/src/prisma/schema.prisma ./prisma/schema.prisma
+COPY --from=builder /app/src/prisma/migrations ./prisma/migrations
 
 RUN chown -R clustergate:nodejs /app
 USER clustergate

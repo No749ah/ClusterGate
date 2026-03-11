@@ -40,10 +40,18 @@ spec:
         {{- toYaml . | nindent 8 }}
       {{- end }}
       initContainers:
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command: ['sh', '-c', 'until nc -z {{ .Release.Name }}-postgres {{ .Values.postgres.service.port }}; do echo "Waiting for PostgreSQL..."; sleep 2; done']
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+            runAsGroup: 1001
+            allowPrivilegeEscalation: false
         - name: migrate
           image: {{ include "clustergate.backend.image" . }}
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
-          command: ["npx", "prisma", "migrate", "deploy"]
+          command: ["npx", "prisma", "migrate", "deploy", "--schema", "./prisma/schema.prisma"]
           env:
             - name: DATABASE_URL
               valueFrom:
