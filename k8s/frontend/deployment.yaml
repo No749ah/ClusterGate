@@ -29,7 +29,7 @@ spec:
         runAsUser: 1001
       containers:
         - name: frontend
-          image: your-registry/clustergate-frontend:latest  # Replace with your image
+          image: ghcr.io/no749ah/clustergate-frontend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 3000

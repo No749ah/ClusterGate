@@ -54,8 +54,8 @@ app.set('trust proxy', 1) // Trust first proxy (for correct IP in k8s)
 // ============================================================================
 
 app.use(cookieParser())
-app.use(express.json({ limit: '50mb' }))
-app.use(express.urlencoded({ extended: true, limit: '50mb' }))
+app.use(express.json({ limit: '5mb' }))
+app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 app.use(compression())
 
 // ============================================================================
@@ -96,7 +96,7 @@ app.use('/api/routes', auditLogger, routesRouter)
 app.use('/api/users', auditLogger, usersRouter)
 app.use('/api/logs', logsRouter)
 app.use('/api/audit', auditRouter)
-app.use('/api/routes', apikeysRouter)
+app.use('/api/routes', auditLogger, apikeysRouter)
 app.use('/api/notifications', notificationsRouter)
 app.use('/api/system', systemRouter)
 

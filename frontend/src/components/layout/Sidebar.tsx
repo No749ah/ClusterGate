@@ -13,10 +13,11 @@ import {
   Shield,
   PanelLeftClose,
   PanelLeftOpen,
+  LogOut,
 } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
-import { useAuth } from '@/hooks/useAuth'
+import { useAuth, useLogout } from '@/hooks/useAuth'
 
 const COLLAPSED_KEY = 'clustergate-sidebar-collapsed'
 
@@ -59,6 +60,7 @@ const navItems = [
 export function Sidebar() {
   const pathname = usePathname()
   const { user } = useAuth()
+  const logoutMutation = useLogout()
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -86,22 +88,43 @@ export function Sidebar() {
         collapsed ? 'w-16' : 'w-64'
       )}
     >
-      {/* Logo */}
+      {/* Logo + collapse toggle */}
       <div className={cn(
         'flex items-center border-b border-sidebar-border transition-all duration-200',
-        collapsed ? 'justify-center px-2 py-5' : 'gap-3 px-4 py-5'
+        collapsed ? 'justify-center px-2 py-5' : 'px-4 py-5'
       )}>
-        <Logo size={36} />
+        <div className={cn('flex items-center', collapsed ? '' : 'gap-3 flex-1')}>
+          <Logo size={36} />
+          {!collapsed && (
+            <div className="overflow-hidden">
+              <h1 className="text-sm font-semibold text-sidebar-foreground whitespace-nowrap">ClusterGate</h1>
+              <p className="text-xs text-muted-foreground whitespace-nowrap">Routing Gateway</p>
+            </div>
+          )}
+        </div>
         {!collapsed && (
-          <div className="overflow-hidden">
-            <h1 className="text-sm font-semibold text-sidebar-foreground whitespace-nowrap">ClusterGate</h1>
-            <p className="text-xs text-muted-foreground whitespace-nowrap">Routing Gateway</p>
-          </div>
+          <button
+            onClick={() => setCollapsed(true)}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-colors"
+            title="Collapse sidebar"
+          >
+            <PanelLeftClose className="w-4 h-4" />
+          </button>
         )}
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+        {collapsed && (
+          <button
+            onClick={() => setCollapsed(false)}
+            className="flex items-center justify-center w-full px-2 py-2 mb-2 rounded-lg text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-colors"
+            title="Expand sidebar"
+          >
+            <PanelLeftOpen className="w-4 h-4" />
+          </button>
+        )}
+
         {!collapsed && (
           <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
             Management
@@ -140,44 +163,49 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* User info */}
-      {user && !collapsed && (
-        <div className="p-3 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5">
-            <div className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary text-xs font-semibold flex-shrink-0">
-              {user.name.charAt(0).toUpperCase()}
+      {/* User info — always visible at bottom-left */}
+      {user && (
+        <div className={cn('border-t border-sidebar-border', collapsed ? 'p-2' : 'p-3')}>
+          {collapsed ? (
+            <div className="flex flex-col items-center gap-2">
+              <Link
+                href="/settings"
+                title={`${user.name} (${user.role})`}
+                className="flex items-center justify-center w-9 h-9 rounded-full bg-primary/20 text-primary text-xs font-semibold hover:bg-primary/30 transition-colors"
+              >
+                {user.name.charAt(0).toUpperCase()}
+              </Link>
+              <button
+                onClick={() => logoutMutation.mutate()}
+                title="Logout"
+                className="flex items-center justify-center w-9 h-9 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-white/5 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium text-sidebar-foreground truncate">{user.name}</p>
-              <p className="text-xs text-muted-foreground truncate">{user.role}</p>
+          ) : (
+            <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5">
+              <Link
+                href="/settings"
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary text-xs font-semibold flex-shrink-0 hover:bg-primary/30 transition-colors"
+              >
+                {user.name.charAt(0).toUpperCase()}
+              </Link>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs font-medium text-sidebar-foreground truncate">{user.name}</p>
+                <p className="text-xs text-muted-foreground truncate">{user.role}</p>
+              </div>
+              <button
+                onClick={() => logoutMutation.mutate()}
+                title="Logout"
+                className="p-1.5 rounded-md text-muted-foreground hover:text-red-400 hover:bg-white/5 transition-colors"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
             </div>
-          </div>
+          )}
         </div>
       )}
-
-      {/* Collapse toggle */}
-      <div className={cn(
-        'border-t border-sidebar-border',
-        collapsed ? 'p-2' : 'p-3'
-      )}>
-        <button
-          onClick={() => setCollapsed(!collapsed)}
-          className={cn(
-            'flex items-center rounded-lg text-sm text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-all w-full',
-            collapsed ? 'justify-center px-2 py-2' : 'gap-3 px-3 py-2'
-          )}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-        >
-          {collapsed ? (
-            <PanelLeftOpen className="w-4 h-4 flex-shrink-0" />
-          ) : (
-            <>
-              <PanelLeftClose className="w-4 h-4 flex-shrink-0" />
-              <span className="text-xs">Collapse</span>
-            </>
-          )}
-        </button>
-      </div>
     </aside>
   )
 }

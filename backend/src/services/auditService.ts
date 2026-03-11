@@ -1,5 +1,32 @@
 import { Prisma } from '@prisma/client'
 import { prisma } from '../lib/prisma'
+import { logger } from '../lib/logger'
+
+export async function createAuditLog(params: {
+  userId?: string | null
+  action: string
+  resource: string
+  resourceId?: string
+  details?: Record<string, unknown>
+  ip?: string
+  userAgent?: string
+}) {
+  try {
+    await prisma.auditLog.create({
+      data: {
+        userId: params.userId ?? undefined,
+        action: params.action,
+        resource: params.resource,
+        resourceId: params.resourceId,
+        details: params.details ? JSON.parse(JSON.stringify(params.details)) : {},
+        ip: params.ip,
+        userAgent: params.userAgent,
+      },
+    })
+  } catch (err) {
+    logger.warn('Failed to write audit log', { error: (err as Error).message })
+  }
+}
 
 export interface AuditLogFilters {
   userId?: string

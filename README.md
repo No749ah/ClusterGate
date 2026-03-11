@@ -41,7 +41,7 @@ api.example.com/api/v1        →  http://myservice.production.svc.cluster.local
 
 - 🔀 **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services
 - 🗂️ **Route Management** — Create, test, publish, version, and manage routes via UI
-- 🔒 **Security** — JWT auth (7-day sessions), bcrypt, rate limiting, IP allowlists, webhook secrets, CORS
+- 🔒 **Security** — JWT auth (7-day sessions), bcrypt, per-route auth (API key / Basic / Bearer), rate limiting, IP allowlists, webhook secrets, CORS
 - 📊 **Monitoring** — Request logs, error tracking, Prometheus metrics
 - 💓 **Health Checks** — Automated health checks for all proxy targets
 - 🌙 **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui
@@ -174,6 +174,8 @@ Public Request
         ├── Check: isActive, status=PUBLISHED
         ├── Check: maintenance mode
         ├── Check: IP allowlist
+        ├── Check: rate limit (if enabled)
+        ├── Enforce: route-level auth (API key / Basic / Bearer)
         ├── Validate: webhook secret (if configured)
         ├── Apply: header add/remove rules
         ├── Apply: path rewrite rules
@@ -377,7 +379,7 @@ kubectl wait --for=condition=ready pod -l app=postgres -n clustergate --timeout=
 
 # 5. Run database migrations (one-time job)
 kubectl run migrate \
-  --image=your-registry/clustergate-backend:latest \
+  --image=ghcr.io/no749ah/clustergate-backend:latest \
   --namespace=clustergate \
   --env="DATABASE_URL=$(kubectl get secret clustergate-secrets -n clustergate -o jsonpath='{.data.DATABASE_URL}' | base64 -d)" \
   --command -- npm run db:migrate
@@ -431,6 +433,7 @@ helm status clustergate -n clustergate
 - [ ] Enable audit logging (enabled by default)
 - [ ] Set up monitoring alerts on error rate metrics
 - [ ] Review IP allowlists for sensitive routes
+- [ ] Enable route-level auth (API key / Basic / Bearer) for sensitive endpoints
 - [ ] Enable webhook secrets for webhook routes
 
 ### Secret Management Recommendations
@@ -559,14 +562,14 @@ cd frontend && npm run build
 
 ```bash
 # Backend
-docker build -t your-registry/clustergate-backend:latest ./backend --target production
+docker build -t ghcr.io/no749ah/clustergate-backend:latest ./backend --target production
 
 # Frontend
-docker build -t your-registry/clustergate-frontend:latest ./frontend --target production
+docker build -t ghcr.io/no749ah/clustergate-frontend:latest ./frontend --target production
 
 # Push
-docker push your-registry/clustergate-backend:latest
-docker push your-registry/clustergate-frontend:latest
+docker push ghcr.io/no749ah/clustergate-backend:latest
+docker push ghcr.io/no749ah/clustergate-frontend:latest
 ```
 
 ---

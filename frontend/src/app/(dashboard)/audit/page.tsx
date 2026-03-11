@@ -18,6 +18,12 @@ const ACTION_COLORS: Record<string, string> = {
   DELETE: 'text-red-500 bg-red-500/10',
   PUBLISH: 'text-purple-500 bg-purple-500/10',
   LOGIN: 'text-yellow-500 bg-yellow-500/10',
+  LOGIN_FAILED: 'text-red-500 bg-red-500/10',
+  LOGOUT: 'text-gray-500 bg-gray-500/10',
+  SETUP: 'text-emerald-500 bg-emerald-500/10',
+  CHANGE_PASSWORD: 'text-orange-500 bg-orange-500/10',
+  ACCEPT_INVITE: 'text-teal-500 bg-teal-500/10',
+  REVOKE: 'text-red-500 bg-red-500/10',
 }
 
 function getActionColor(action: string): string {
@@ -73,6 +79,7 @@ export default function AuditPage() {
             <SelectItem value="routes">Routes</SelectItem>
             <SelectItem value="users">Users</SelectItem>
             <SelectItem value="auth">Auth</SelectItem>
+            <SelectItem value="api-keys">API Keys</SelectItem>
           </SelectContent>
         </Select>
       </div>

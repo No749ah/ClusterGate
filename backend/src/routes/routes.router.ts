@@ -65,6 +65,7 @@ router.get('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR, Role.VIEWER]
       }
     )
 
+    result.data = result.data.map((r: any) => stripSensitiveRouteFields(r))
     res.json({ success: true, ...result })
   } catch (err) {
     next(err)
@@ -143,10 +144,7 @@ router.get('/:id/uptime', authenticate, async (req, res, next) => {
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const route = await routeService.getRouteById(req.params.id)
-    // Strip sensitive fields for non-admin users
-    const data = req.user?.role === Role.VIEWER
-      ? stripSensitiveRouteFields(route as any)
-      : route
+    const data = stripSensitiveRouteFields(route as any)
     res.json({ success: true, data })
   } catch (err) {
     next(err)

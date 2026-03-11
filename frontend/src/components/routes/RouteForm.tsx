@@ -520,7 +520,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
                 <div>
                   <p className="text-sm font-medium">Require Auth</p>
-                  <p className="text-xs text-muted-foreground">Add authentication to this route</p>
+                  <p className="text-xs text-muted-foreground">Require callers to authenticate at ClusterGate level</p>
                 </div>
                 <Switch
                   checked={requireAuth}
@@ -542,7 +542,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Auth Value" hint="Token or credentials to inject">
+                  <Field label="Auth Value" hint="API key, Base64 credentials, or bearer token that callers must provide">
                     <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
                   </Field>
                 </div>

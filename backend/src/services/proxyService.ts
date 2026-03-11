@@ -1,7 +1,7 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios'
 import https from 'https'
 import { Request, Response } from 'express'
-import { createHmac } from 'crypto'
+import { createHmac, timingSafeEqual } from 'crypto'
 import { validateWebhookSignature, isSafeRegex } from '../lib/security'
 import { Route } from '@prisma/client'
 import { prisma } from '../lib/prisma'
@@ -51,6 +51,11 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     res.setHeader('X-RateLimit-Limit', String((route as any).rateLimitMax))
     res.setHeader('X-RateLimit-Remaining', String(result.remaining))
     res.setHeader('X-RateLimit-Reset', String(result.resetAt))
+  }
+
+  // Enforce ClusterGate-level authentication
+  if ((route as any).requireAuth && (route as any).authType !== 'NONE') {
+    validateRouteAuth(route, req)
   }
 
   // Validate webhook secret (timing-safe comparison)
@@ -271,6 +276,63 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     throw AppError.serviceUnavailable(
       `Proxy error: ${error || 'Target service unavailable'}`
     )
+  }
+}
+
+function safeEqual(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) {
+    // Compare against itself to keep constant time, then return false
+    timingSafeEqual(bufA, bufA)
+    return false
+  }
+  return timingSafeEqual(bufA, bufB)
+}
+
+function validateRouteAuth(route: Route, req: Request): void {
+  const authType = (route as any).authType as string
+  const authValue = (route as any).authValue as string | null
+
+  if (!authValue) {
+    throw AppError.internal('Route requires authentication but no auth value is configured')
+  }
+
+  switch (authType) {
+    case 'API_KEY': {
+      const apiKey = req.get('X-API-Key') || req.query.api_key as string
+      if (!apiKey) {
+        throw AppError.unauthorized('API key required — provide via X-API-Key header or api_key query parameter')
+      }
+      if (!safeEqual(apiKey, authValue)) {
+        throw AppError.unauthorized('Invalid API key')
+      }
+      break
+    }
+    case 'BASIC': {
+      const authHeader = req.get('Authorization')
+      if (!authHeader || !authHeader.startsWith('Basic ')) {
+        throw AppError.unauthorized('Basic authentication required')
+      }
+      const credentials = authHeader.slice(6) // strip "Basic "
+      if (!safeEqual(credentials, authValue)) {
+        throw AppError.unauthorized('Invalid credentials')
+      }
+      break
+    }
+    case 'BEARER': {
+      const authHeader = req.get('Authorization')
+      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+        throw AppError.unauthorized('Bearer token required')
+      }
+      const token = authHeader.slice(7) // strip "Bearer "
+      if (!safeEqual(token, authValue)) {
+        throw AppError.unauthorized('Invalid bearer token')
+      }
+      break
+    }
+    default:
+      throw AppError.internal(`Unknown auth type: ${authType}`)
   }
 }
 

@@ -69,7 +69,7 @@ Feature requests are welcome! Please open an issue using the **Feature Request**
 
 ### Submitting a Pull Request
 
-1. **Create a branch** from `main` for your change:
+1. **Create a branch** from `master` for your change:
    ```bash
    git checkout -b feat/my-new-feature
    # or
@@ -78,7 +78,7 @@ Feature requests are welcome! Please open an issue using the **Feature Request**
 2. **Make your changes** (see [Development Setup](#development-setup) below).
 3. **Write / update tests** if applicable.
 4. **Commit** your changes following the [commit conventions](#branch--commit-conventions).
-5. **Push** your branch and open a Pull Request against `main`.
+5. **Push** your branch and open a Pull Request against `master`.
 6. Fill in the PR description explaining *what* changed and *why*.
 7. Ensure CI checks pass before requesting a review.
 

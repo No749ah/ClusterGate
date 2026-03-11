@@ -5,6 +5,7 @@ import { validateInvite, acceptInvite } from '../services/inviteService'
 import { authenticate } from '../middleware/authenticate'
 import { authLimiter } from '../middleware/rateLimiter'
 import { config } from '../config'
+import { createAuditLog } from '../services/auditService'
 
 const router = Router()
 
@@ -40,6 +41,15 @@ router.post('/setup', authLimiter, async (req: Request, res: Response, next: Nex
 
     res.cookie('token', result.token, COOKIE_OPTIONS)
 
+    createAuditLog({
+      userId: result.user.id,
+      action: 'auth.setup',
+      resource: 'auth',
+      details: { email: data.email, name: data.name },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
     res.json({
       success: true,
       data: { user: result.user },
@@ -72,6 +82,17 @@ router.post('/accept-invite', authLimiter, async (req: Request, res: Response, n
     const result = await acceptInvite(data.token, { name: data.name, password: data.password })
 
     res.cookie('token', result.token, COOKIE_OPTIONS)
+
+    createAuditLog({
+      userId: result.user.id,
+      action: 'auth.accept_invite',
+      resource: 'auth',
+      resourceId: result.user.id,
+      details: { name: data.name, email: result.user.email },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
     res.json({ success: true, data: { user: result.user } })
   } catch (err) {
     next(err)
@@ -91,17 +112,47 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
 
     res.cookie('token', result.token, COOKIE_OPTIONS)
 
+    createAuditLog({
+      userId: result.user.id,
+      action: 'auth.login',
+      resource: 'auth',
+      resourceId: result.user.id,
+      details: { email },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
     res.json({
       success: true,
       data: { user: result.user },
     })
   } catch (err) {
+    // Log failed login attempt
+    const attemptEmail = req.body?.email
+    if (attemptEmail) {
+      createAuditLog({
+        action: 'auth.login_failed',
+        resource: 'auth',
+        details: { email: attemptEmail },
+        ip: req.ip || req.socket.remoteAddress,
+        userAgent: req.get('user-agent'),
+      })
+    }
     next(err)
   }
 })
 
 // POST /api/auth/logout
 router.post('/logout', authenticate, (req: Request, res: Response) => {
+  createAuditLog({
+    userId: req.user!.userId,
+    action: 'auth.logout',
+    resource: 'auth',
+    resourceId: req.user!.userId,
+    ip: req.ip || req.socket.remoteAddress,
+    userAgent: req.get('user-agent'),
+  })
+
   res.clearCookie('token', { path: '/' })
   res.json({ success: true, message: 'Logged out successfully' })
 })
@@ -126,6 +177,15 @@ router.post('/change-password', authenticate, async (req: Request, res: Response
 
     const { currentPassword, newPassword } = schema.parse(req.body)
     await changePassword(req.user!.userId, currentPassword, newPassword)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'auth.change_password',
+      resource: 'auth',
+      resourceId: req.user!.userId,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
 
     // Invalidate session by clearing cookie
     res.clearCookie('token', { path: '/' })
