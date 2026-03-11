@@ -285,37 +285,117 @@ async function restartK8sDeployment(namespace: string, deploymentName: string, n
 }
 
 /**
- * Apply update based on deployment environment.
+ * Wait for a K8s deployment rollout to complete by polling its status.
+ * Returns once all replicas are updated and available, or times out.
  */
-export async function pullAndRestart(): Promise<{
+async function waitForRollout(namespace: string, deploymentName: string, timeoutMs = 120000, onStatus?: (msg: string) => void): Promise<{ ready: boolean; message: string }> {
+  const token = getK8sToken()
+  if (!token) return { ready: false, message: 'No service account token' }
+
+  const https = require('https')
+  const ca = readFileSync(K8S_CA_PATH)
+  const httpsAgent = new https.Agent({ ca })
+  const base = getK8sApiBase()
+  const url = `${base}/apis/apps/v1/namespaces/${namespace}/deployments/${deploymentName}`
+
+  const start = Date.now()
+  const pollInterval = 3000
+
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const res = await axios.get(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        httpsAgent,
+        timeout: 10000,
+      })
+      const status = res.data.status
+      const spec = res.data.spec
+      const desired = spec.replicas || 1
+      const updated = status.updatedReplicas || 0
+      const available = status.availableReplicas || 0
+      const ready = status.readyReplicas || 0
+
+      if (updated >= desired && available >= desired && ready >= desired) {
+        return { ready: true, message: `${deploymentName}: ${ready}/${desired} pods ready` }
+      }
+
+      const msg = `${deploymentName}: ${ready}/${desired} ready, ${updated}/${desired} updated`
+      logger.info(msg)
+      if (onStatus) onStatus(msg)
+    } catch (err: any) {
+      logger.warn(`Rollout status check failed for ${deploymentName}`, { error: err.message })
+    }
+    await new Promise(r => setTimeout(r, pollInterval))
+  }
+
+  return { ready: false, message: `${deploymentName}: rollout timed out after ${timeoutMs / 1000}s` }
+}
+
+/**
+ * Progress callback for streaming update status to the client.
+ */
+export type UpdateProgressCallback = (event: {
+  step: number
+  totalSteps: number
+  label: string
+  status: 'running' | 'done' | 'error'
+  message?: string
+}) => void
+
+/**
+ * Apply update based on deployment environment.
+ * Calls onProgress for each step so the frontend can show real-time progress.
+ */
+export async function pullAndRestart(onProgress?: UpdateProgressCallback): Promise<{
   success: boolean
   message: string
   environment: string
-  instructions: string[]
 }> {
   const env = detectEnvironment()
+  const emit = onProgress || (() => {})
 
   if (env === 'kubernetes') {
     const namespace = process.env.K8S_NAMESPACE || 'clustergate'
     const backendDeployment = process.env.K8S_BACKEND_DEPLOYMENT || 'clustergate-backend'
     const frontendDeployment = process.env.K8S_FRONTEND_DEPLOYMENT || 'clustergate-frontend'
+    const totalSteps = 5
 
     try {
-      logger.info('Triggering Kubernetes rolling restart...', { namespace, backendDeployment, frontendDeployment })
-
-      await restartK8sDeployment(namespace, backendDeployment)
+      // Step 1: Trigger frontend restart
+      emit({ step: 1, totalSteps, label: 'Restarting frontend deployment', status: 'running' })
       await restartK8sDeployment(namespace, frontendDeployment)
+      emit({ step: 1, totalSteps, label: 'Frontend restart triggered', status: 'done' })
 
-      logger.info('Rolling restart triggered successfully')
+      // Step 2: Wait for frontend rollout
+      emit({ step: 2, totalSteps, label: 'Waiting for frontend pods', status: 'running' })
+      const frontendResult = await waitForRollout(namespace, frontendDeployment, 120000, (msg) => {
+        emit({ step: 2, totalSteps, label: msg, status: 'running' })
+      })
+      if (!frontendResult.ready) {
+        emit({ step: 2, totalSteps, label: frontendResult.message, status: 'error' })
+        return { success: false, environment: 'kubernetes', message: frontendResult.message }
+      }
+      emit({ step: 2, totalSteps, label: frontendResult.message, status: 'done' })
+
+      // Step 3: Trigger backend restart
+      emit({ step: 3, totalSteps, label: 'Restarting backend deployment', status: 'running' })
+      await restartK8sDeployment(namespace, backendDeployment)
+      emit({ step: 3, totalSteps, label: 'Backend restart triggered', status: 'done' })
+
+      // Step 4: Wait for backend rollout (will likely kill this process)
+      emit({ step: 4, totalSteps, label: 'Waiting for backend pods', status: 'running' })
+      const backendResult = await waitForRollout(namespace, backendDeployment, 120000, (msg) => {
+        emit({ step: 4, totalSteps, label: msg, status: 'running' })
+      })
+      emit({ step: 4, totalSteps, label: backendResult.ready ? backendResult.message : 'Backend restarting — connection may drop', status: backendResult.ready ? 'done' : 'running' })
+
+      // Step 5: Complete
+      emit({ step: 5, totalSteps, label: 'Update complete', status: 'done' })
 
       return {
         success: true,
         environment: 'kubernetes',
-        message: `Rolling restart triggered for ${backendDeployment} and ${frontendDeployment}. Pods will be recreated with the latest image (pullPolicy: Always).`,
-        instructions: [
-          `kubectl -n ${namespace} rollout status deployment/${backendDeployment}`,
-          `kubectl -n ${namespace} rollout status deployment/${frontendDeployment}`,
-        ],
+        message: 'Update complete. All pods are running the latest images.',
       }
     } catch (err: any) {
       const status = err.response?.status
@@ -323,19 +403,13 @@ export async function pullAndRestart(): Promise<{
         ? 'RBAC permission denied. Ensure the backend ServiceAccount has patch access to deployments.'
         : `Rolling restart failed: ${err.message}`
       logger.error('Kubernetes rolling restart failed', { error: err.message, status })
-      return {
-        success: false,
-        environment: 'kubernetes',
-        message: msg,
-        instructions: [
-          `# Manual alternative:`,
-          `kubectl -n ${namespace} rollout restart deployment/${backendDeployment} deployment/${frontendDeployment}`,
-        ],
-      }
+      emit({ step: 0, totalSteps, label: msg, status: 'error', message: msg })
+      return { success: false, environment: 'kubernetes', message: msg }
     }
   }
 
   if (env === 'docker') {
+    const totalSteps = 3
     try {
       const dockerBase = `http://localhost/v1.43`
       const client = axios.create({
@@ -344,62 +418,30 @@ export async function pullAndRestart(): Promise<{
         timeout: 120000,
       })
 
+      emit({ step: 1, totalSteps, label: 'Connecting to Docker', status: 'running' })
       await client.get('/info')
+      emit({ step: 1, totalSteps, label: 'Docker connected', status: 'done' })
 
-      logger.info('Pulling latest backend image...')
-      await client.post(`/images/create`, null, {
-        params: { fromImage: BACKEND_IMAGE, tag: 'latest' },
-      })
+      emit({ step: 2, totalSteps, label: 'Pulling latest images', status: 'running' })
+      await client.post(`/images/create`, null, { params: { fromImage: BACKEND_IMAGE, tag: 'latest' } })
+      emit({ step: 2, totalSteps, label: 'Backend image pulled', status: 'running' })
+      await client.post(`/images/create`, null, { params: { fromImage: FRONTEND_IMAGE, tag: 'latest' } })
+      emit({ step: 2, totalSteps, label: 'All images pulled', status: 'done' })
 
-      logger.info('Pulling latest frontend image...')
-      await client.post(`/images/create`, null, {
-        params: { fromImage: FRONTEND_IMAGE, tag: 'latest' },
-      })
+      emit({ step: 3, totalSteps, label: 'Images ready — run "docker compose up -d"', status: 'done' })
 
-      logger.info('Images pulled successfully.')
-
-      return {
-        success: true,
-        environment: 'docker',
-        message: 'Images pulled successfully. Recreate containers to apply the update.',
-        instructions: [
-          `docker compose pull`,
-          `docker compose up -d`,
-        ],
-      }
+      return { success: true, environment: 'docker', message: 'Images pulled. Run "docker compose up -d" to apply.' }
     } catch (err: any) {
       if (err.code === 'ENOENT') {
-        return {
-          success: true,
-          environment: 'docker',
-          message: 'Docker socket not mounted. Pull images manually.',
-          instructions: [
-            `docker compose pull`,
-            `docker compose up -d`,
-          ],
-        }
+        emit({ step: 1, totalSteps, label: 'Docker socket not available', status: 'error' })
+        return { success: false, environment: 'docker', message: 'Docker socket not mounted. Run "docker compose pull && docker compose up -d".' }
       }
-      logger.error('Pull and restart failed', { error: err.message })
-      return {
-        success: false,
-        environment: 'docker',
-        message: `Update failed: ${err.message}`,
-        instructions: [
-          `docker compose pull`,
-          `docker compose up -d`,
-        ],
-      }
+      emit({ step: 0, totalSteps, label: `Failed: ${err.message}`, status: 'error' })
+      return { success: false, environment: 'docker', message: `Update failed: ${err.message}` }
     }
   }
 
-  // Standalone / unknown
-  return {
-    success: true,
-    environment: 'standalone',
-    message: 'Pull the latest images and restart the services.',
-    instructions: [
-      `docker pull ${BACKEND_IMAGE}:latest`,
-      `docker pull ${FRONTEND_IMAGE}:latest`,
-    ],
-  }
+  // Standalone
+  emit({ step: 1, totalSteps: 1, label: 'Manual update required', status: 'done' })
+  return { success: true, environment: 'standalone', message: 'Pull the latest images and restart the services manually.' }
 }

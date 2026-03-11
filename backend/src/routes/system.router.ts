@@ -51,17 +51,28 @@ router.get('/update-check', async (_req, res, next) => {
 
 /**
  * POST /api/system/update
- * Pull latest images via Docker socket.
+ * Trigger update with SSE progress stream.
  */
-router.post('/update', async (_req, res, next) => {
+router.post('/update', async (_req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream')
+  res.setHeader('Cache-Control', 'no-cache')
+  res.setHeader('Connection', 'keep-alive')
+  res.setHeader('X-Accel-Buffering', 'no') // disable nginx/istio buffering
+  res.flushHeaders()
+
+  const sendEvent = (data: unknown) => {
+    res.write(`data: ${JSON.stringify(data)}\n\n`)
+  }
+
   try {
-    const result = await pullAndRestart()
-    res.json({
-      success: result.success,
-      data: result,
+    const result = await pullAndRestart((event) => {
+      sendEvent({ type: 'progress', ...event })
     })
-  } catch (err) {
-    next(err)
+    sendEvent({ type: 'complete', ...result })
+  } catch (err: any) {
+    sendEvent({ type: 'error', message: err.message })
+  } finally {
+    res.end()
   }
 })
 

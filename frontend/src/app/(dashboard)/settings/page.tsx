@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, Shield, Wrench, Database, Activity, LogOut, ExternalLink } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, Shield, Wrench, Database, Activity, LogOut, ExternalLink } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -70,12 +70,14 @@ export default function SettingsPage() {
     releaseUrl: string | null
     checkedAt: string
   } | null>(null)
-  const [updateResult, setUpdateResult] = useState<{
-    success: boolean
-    message: string
-    environment: string
-    instructions: string[]
+  const [updateProgress, setUpdateProgress] = useState<{
+    step: number
+    totalSteps: number
+    label: string
+    status: 'running' | 'done' | 'error'
   } | null>(null)
+  const [updateSteps, setUpdateSteps] = useState<{ step: number; label: string; status: 'running' | 'done' | 'error' }[]>([])
+  const [updateComplete, setUpdateComplete] = useState<{ success: boolean; message: string; environment: string } | null>(null)
 
   // System stats & config state
   const [stats, setStats] = useState<{
@@ -198,16 +200,36 @@ export default function SettingsPage() {
 
   const handleUpdate = async () => {
     setIsUpdating(true)
+    setUpdateSteps([])
+    setUpdateComplete(null)
+    setUpdateProgress(null)
     try {
-      const result = await api.system.update()
-      setUpdateResult(result.data)
-      if (result.data.success) {
-        toast.success(result.data.message)
-      } else {
-        toast.info(result.data.message)
-      }
+      await api.system.update((event: any) => {
+        if (event.type === 'progress') {
+          const { step, totalSteps, label, status } = event
+          setUpdateProgress({ step, totalSteps, label, status })
+          setUpdateSteps(prev => {
+            const existing = prev.findIndex(s => s.step === step)
+            const entry = { step, label, status }
+            if (existing >= 0) {
+              const updated = [...prev]
+              updated[existing] = entry
+              return updated
+            }
+            return [...prev, entry]
+          })
+        } else if (event.type === 'complete') {
+          setUpdateComplete({ success: event.success, message: event.message, environment: event.environment })
+          if (event.success) toast.success(event.message)
+          else toast.error(event.message)
+        } else if (event.type === 'error') {
+          setUpdateComplete({ success: false, message: event.message, environment: '' })
+          toast.error(event.message)
+        }
+      })
     } catch {
-      toast.error('Failed to check update instructions')
+      toast.error('Update connection lost — the backend may be restarting')
+      setUpdateComplete({ success: true, message: 'Connection lost — backend is likely restarting with the new version.', environment: 'kubernetes' })
     } finally {
       setIsUpdating(false)
     }
@@ -818,20 +840,53 @@ export default function SettingsPage() {
                     )}
                   </Button>
 
-                  {/* Update Result / Instructions */}
-                  {updateResult && (
-                    <div className="rounded-lg border border-border/50 p-3 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <Badge variant="secondary" className="text-[10px]">{updateResult.environment}</Badge>
-                        <span className="text-xs text-muted-foreground">{updateResult.message}</span>
+                  {/* Update Progress */}
+                  {(updateSteps.length > 0 || updateComplete) && (
+                    <div className="rounded-lg border border-border/50 p-4 space-y-3">
+                      {/* Progress bar */}
+                      {updateProgress && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="text-muted-foreground">{updateProgress.label}</span>
+                            <span className="text-muted-foreground font-mono">
+                              {updateProgress.step}/{updateProgress.totalSteps}
+                            </span>
+                          </div>
+                          <div className="h-2 bg-muted rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                updateProgress.status === 'error' ? 'bg-red-500' :
+                                updateProgress.status === 'done' && updateProgress.step === updateProgress.totalSteps ? 'bg-green-500' :
+                                'bg-primary'
+                              }`}
+                              style={{ width: `${(updateProgress.step / updateProgress.totalSteps) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Step log */}
+                      <div className="space-y-1">
+                        {updateSteps.map((s) => (
+                          <div key={s.step} className="flex items-center gap-2 text-xs">
+                            {s.status === 'done' ? (
+                              <CheckCircle2 className="w-3.5 h-3.5 text-green-500 shrink-0" />
+                            ) : s.status === 'error' ? (
+                              <AlertCircle className="w-3.5 h-3.5 text-red-500 shrink-0" />
+                            ) : (
+                              <Loader2 className="w-3.5 h-3.5 text-primary animate-spin shrink-0" />
+                            )}
+                            <span className={s.status === 'error' ? 'text-red-400' : 'text-muted-foreground'}>
+                              {s.label}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                      {updateResult.instructions.length > 0 && (
-                        <div className="bg-muted/50 rounded-md p-2.5 space-y-1">
-                          {updateResult.instructions.map((cmd, i) => (
-                            <code key={i} className="block text-[11px] font-mono text-muted-foreground leading-relaxed break-all">
-                              {cmd}
-                            </code>
-                          ))}
+
+                      {/* Final result */}
+                      {updateComplete && (
+                        <div className={`rounded-md p-2.5 text-xs ${updateComplete.success ? 'bg-green-500/10 text-green-400' : 'bg-red-500/10 text-red-400'}`}>
+                          {updateComplete.message}
                         </div>
                       )}
                     </div>

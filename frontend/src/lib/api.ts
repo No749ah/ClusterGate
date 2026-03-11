@@ -355,8 +355,37 @@ class ApiClient {
         checkedAt: string
       }>>('/api/system/update-check'),
 
-    update: () =>
-      this.post<{ success: boolean; data: { success: boolean; message: string; environment: string; instructions: string[] } }>('/api/system/update'),
+    update: (onEvent: (event: any) => void): Promise<void> => {
+      return new Promise((resolve, reject) => {
+        fetch(`${this.baseUrl}/api/system/update`, {
+          method: 'POST',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+        }).then(response => {
+          if (!response.ok || !response.body) {
+            reject(new Error(`Update failed with status ${response.status}`))
+            return
+          }
+          const reader = response.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ''
+
+          const read = (): Promise<void> => reader.read().then(({ done, value }) => {
+            if (done) { resolve(); return }
+            buffer += decoder.decode(value, { stream: true })
+            const lines = buffer.split('\n')
+            buffer = lines.pop() || ''
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                try { onEvent(JSON.parse(line.slice(6))) } catch {}
+              }
+            }
+            return read()
+          })
+          read().catch(reject)
+        }).catch(reject)
+      })
+    },
 
     config: () =>
       this.get<ApiResponse<{
