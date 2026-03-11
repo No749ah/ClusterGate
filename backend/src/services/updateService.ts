@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { readFileSync } from 'fs'
 import { logger } from '../lib/logger'
 import { getVersion } from '../lib/version'
 
@@ -184,7 +185,6 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
  */
 function detectEnvironment(): 'kubernetes' | 'docker' | 'standalone' {
   if (process.env.KUBERNETES_SERVICE_HOST) return 'kubernetes'
-  // Check if running inside Docker (cgroup or .dockerenv)
   try {
     const fs = require('fs')
     if (fs.existsSync('/.dockerenv') || fs.existsSync('/run/.containerenv')) return 'docker'
@@ -193,7 +193,70 @@ function detectEnvironment(): 'kubernetes' | 'docker' | 'standalone' {
 }
 
 /**
- * Get update instructions based on deployment environment.
+ * Read the in-cluster Kubernetes service account token.
+ */
+function getK8sToken(): string | null {
+  try {
+    return readFileSync('/var/run/secrets/kubernetes.io/serviceaccount/token', 'utf-8').trim()
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Get the in-cluster Kubernetes CA cert path.
+ */
+const K8S_CA_PATH = '/var/run/secrets/kubernetes.io/serviceaccount/ca.crt'
+
+/**
+ * Build Kubernetes API base URL from in-cluster env vars.
+ */
+function getK8sApiBase(): string {
+  const host = process.env.KUBERNETES_SERVICE_HOST
+  const port = process.env.KUBERNETES_SERVICE_PORT || '443'
+  return `https://${host}:${port}`
+}
+
+/**
+ * Trigger a rolling restart of a Kubernetes deployment by patching
+ * the pod template annotation with the current timestamp.
+ */
+async function restartK8sDeployment(namespace: string, deploymentName: string, newTag?: string): Promise<void> {
+  const token = getK8sToken()
+  if (!token) throw new Error('Kubernetes service account token not found')
+
+  const https = require('https')
+  const ca = readFileSync(K8S_CA_PATH)
+  const httpsAgent = new https.Agent({ ca })
+
+  const base = getK8sApiBase()
+  const url = `${base}/apis/apps/v1/namespaces/${namespace}/deployments/${deploymentName}`
+
+  // Strategic merge patch to update the restart annotation and optionally the image tag
+  const patch: any = {
+    spec: {
+      template: {
+        metadata: {
+          annotations: {
+            'kubectl.kubernetes.io/restartedAt': new Date().toISOString(),
+          },
+        },
+      },
+    },
+  }
+
+  await axios.patch(url, patch, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/strategic-merge-patch+json',
+    },
+    httpsAgent,
+    timeout: 15000,
+  })
+}
+
+/**
+ * Apply update based on deployment environment.
  */
 export async function pullAndRestart(): Promise<{
   success: boolean
@@ -202,18 +265,44 @@ export async function pullAndRestart(): Promise<{
   instructions: string[]
 }> {
   const env = detectEnvironment()
-  const latestTag = CURRENT_VERSION // Will be compared by the frontend
 
   if (env === 'kubernetes') {
-    return {
-      success: true,
-      environment: 'kubernetes',
-      message: 'Running in Kubernetes. Update your Helm values or deployment manifests to use the new image tag, then roll out.',
-      instructions: [
-        `helm upgrade clustergate ./helm/clustergate --set backend.image.tag=<new-version> --set frontend.image.tag=<new-version>`,
-        `# Or update values.yaml and run: helm upgrade clustergate ./helm/clustergate -f values.yaml`,
-        `# Or for a rolling restart with latest tag: kubectl rollout restart deployment/clustergate-backend deployment/clustergate-frontend`,
-      ],
+    const namespace = process.env.K8S_NAMESPACE || 'clustergate'
+    const backendDeployment = process.env.K8S_BACKEND_DEPLOYMENT || 'clustergate-backend'
+    const frontendDeployment = process.env.K8S_FRONTEND_DEPLOYMENT || 'clustergate-frontend'
+
+    try {
+      logger.info('Triggering Kubernetes rolling restart...', { namespace, backendDeployment, frontendDeployment })
+
+      await restartK8sDeployment(namespace, backendDeployment)
+      await restartK8sDeployment(namespace, frontendDeployment)
+
+      logger.info('Rolling restart triggered successfully')
+
+      return {
+        success: true,
+        environment: 'kubernetes',
+        message: `Rolling restart triggered for ${backendDeployment} and ${frontendDeployment}. Pods will be recreated with the latest image (pullPolicy: Always).`,
+        instructions: [
+          `kubectl -n ${namespace} rollout status deployment/${backendDeployment}`,
+          `kubectl -n ${namespace} rollout status deployment/${frontendDeployment}`,
+        ],
+      }
+    } catch (err: any) {
+      const status = err.response?.status
+      const msg = status === 403
+        ? 'RBAC permission denied. Ensure the backend ServiceAccount has patch access to deployments.'
+        : `Rolling restart failed: ${err.message}`
+      logger.error('Kubernetes rolling restart failed', { error: err.message, status })
+      return {
+        success: false,
+        environment: 'kubernetes',
+        message: msg,
+        instructions: [
+          `# Manual alternative:`,
+          `kubectl -n ${namespace} rollout restart deployment/${backendDeployment} deployment/${frontendDeployment}`,
+        ],
+      }
     }
   }
 
