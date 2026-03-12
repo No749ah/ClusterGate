@@ -229,6 +229,30 @@ export async function deleteBackup(filename: string): Promise<void> {
 /**
  * Returns the absolute file path for a backup file (for streaming download).
  */
+/**
+ * Enforce retention policy by deleting oldest backups beyond the limit.
+ * Returns the number of backups deleted.
+ */
+export async function enforceRetentionPolicy(maxBackups: number): Promise<number> {
+  const backups = await listBackups()
+  if (backups.length <= maxBackups) return 0
+
+  // Sort newest first (by createdAt descending)
+  const sorted = backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+  const toDelete = sorted.slice(maxBackups)
+
+  let deleted = 0
+  for (const backup of toDelete) {
+    try {
+      await deleteBackup(backup.filename)
+      deleted++
+    } catch (err) {
+      console.error(`Failed to delete old backup ${backup.filename}:`, err)
+    }
+  }
+  return deleted
+}
+
 export async function downloadBackup(filename: string): Promise<string> {
   // Accept both .json and .sql for download
   if (!filename || (!/^[a-zA-Z0-9_\-]+\.json$/.test(filename) && !/^[a-zA-Z0-9_\-]+\.sql$/.test(filename))) {

@@ -349,6 +349,30 @@ export async function importRoutes(
   return { created, errors }
 }
 
+export async function bulkPublish(ids: string[], userId: string) {
+  const result = await prisma.route.updateMany({
+    where: { id: { in: ids }, deletedAt: null },
+    data: { status: 'PUBLISHED', isActive: true, updatedById: userId },
+  })
+  return result.count
+}
+
+export async function bulkDeactivate(ids: string[], userId: string) {
+  const result = await prisma.route.updateMany({
+    where: { id: { in: ids }, deletedAt: null },
+    data: { isActive: false, updatedById: userId },
+  })
+  return result.count
+}
+
+export async function bulkDelete(ids: string[]) {
+  const result = await prisma.route.updateMany({
+    where: { id: { in: ids }, deletedAt: null },
+    data: { deletedAt: new Date() },
+  })
+  return result.count
+}
+
 async function updateActiveRoutesMetric() {
   const count = await prisma.route.count({
     where: { isActive: true, status: RouteStatus.PUBLISHED, deletedAt: null },

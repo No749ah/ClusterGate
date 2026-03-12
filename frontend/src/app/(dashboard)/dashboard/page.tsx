@@ -1,12 +1,14 @@
 'use client'
 
 import Link from 'next/link'
-import { Route, Activity, CheckCircle2, AlertCircle, Plus, ScrollText, ArrowRight } from 'lucide-react'
+import { Route, Activity, CheckCircle2, AlertCircle, Plus, ScrollText, ArrowRight, Clock } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { StatsCard } from '@/components/dashboard/StatsCard'
 import { RequestsChart } from '@/components/dashboard/RequestsChart'
 import { SystemHealth } from '@/components/dashboard/SystemHealth'
 import { useRoutes } from '@/hooks/useRoutes'
 import { useLogs, useRecentErrors } from '@/hooks/useLogs'
+import { api } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
@@ -14,21 +16,46 @@ import { HealthIndicator } from '@/components/routes/HealthIndicator'
 import { formatRelativeTime, formatDuration, getStatusColor } from '@/lib/utils'
 import { Skeleton } from '@/components/ui/skeleton'
 
+function calcTrend(current: number, previous: number): { value: number; label: string } | undefined {
+  if (previous === 0 && current === 0) return undefined
+  if (previous === 0) return { value: 100, label: 'vs previous period' }
+  const pct = Math.round(((current - previous) / previous) * 100)
+  return { value: pct, label: 'vs previous period' }
+}
+
 export default function DashboardPage() {
   const { data: routesData, isLoading: routesLoading } = useRoutes({ pageSize: 100 })
   const { data: logsData, isLoading: logsLoading } = useLogs({ pageSize: 10 })
   const { data: errorsData } = useRecentErrors(undefined, 5)
 
+  const { data: summaryData, isLoading: summaryLoading } = useQuery({
+    queryKey: ['dashboard-summary'],
+    queryFn: () => api.analytics.dashboardSummary(7),
+    staleTime: 60 * 1000,
+    refetchInterval: 60 * 1000,
+  })
+
+  // Daily data for sparklines
+  const { data: dailyData } = useQuery({
+    queryKey: ['logs-daily-dashboard'],
+    queryFn: () => api.logs.getDaily(undefined, 7),
+    staleTime: 60 * 1000,
+  })
+
   const routes = routesData?.data ?? []
   const logs = logsData?.data ?? []
   const recentErrors = errorsData?.data ?? []
+  const summary = summaryData?.data
 
   const totalRoutes = routesData?.total ?? 0
   const publishedRoutes = routes.filter((r) => r.status === 'PUBLISHED' && r.isActive).length
-  const totalRequests = logsData?.total ?? 0
-  const errorCount = recentErrors.length
   const healthyRoutes = routes.filter(r => r.isActive && r.healthChecks?.[0]?.status === 'HEALTHY').length
   const unhealthyRoutes = routes.filter(r => r.isActive && r.healthChecks?.[0]?.status === 'UNHEALTHY').length
+
+  const dailyTotals = (dailyData?.data ?? []).map(d => d.total)
+  const dailyErrors = (dailyData?.data ?? []).map(d => d.errors)
+
+  const statsLoading = routesLoading || summaryLoading
 
   return (
     <div className="space-y-6">
@@ -53,32 +80,48 @@ export default function DashboardPage() {
         <StatsCard
           title="Total Routes"
           value={totalRoutes}
-          description="All configured routes"
+          description={`${publishedRoutes} active`}
           icon={Route}
-          isLoading={routesLoading}
+          isLoading={statsLoading}
           colorClass="text-blue-500 bg-blue-500/10"
         />
         <StatsCard
-          title="Active Routes"
-          value={publishedRoutes}
-          description="Published and active"
-          icon={CheckCircle2}
-          isLoading={routesLoading}
-          colorClass="text-green-500 bg-green-500/10"
-        />
-        <StatsCard
           title="Total Requests"
-          value={totalRequests.toLocaleString()}
-          description="All time proxy requests"
+          value={summary?.totalRequests?.toLocaleString() ?? '—'}
+          description="Last 7 days"
           icon={Activity}
-          isLoading={logsLoading}
+          trend={summary ? calcTrend(summary.totalRequests, summary.previousTotalRequests) : undefined}
+          sparklineData={dailyTotals.length > 1 ? dailyTotals : undefined}
+          sparklineColor="#8b5cf6"
+          isLoading={statsLoading}
           colorClass="text-purple-500 bg-purple-500/10"
         />
         <StatsCard
-          title="Recent Errors"
-          value={errorCount}
-          description="In the last 100 requests"
+          title="Avg Response Time"
+          value={summary ? `${summary.avgResponseTime}ms` : '—'}
+          description="Last 7 days"
+          icon={Clock}
+          trend={summary ? (() => {
+            const t = calcTrend(summary.avgResponseTime, summary.previousAvgResponseTime)
+            // For response time, lower is better — invert the color
+            return t ? { value: -t.value, label: t.label } : undefined
+          })() : undefined}
+          isLoading={statsLoading}
+          colorClass="text-amber-500 bg-amber-500/10"
+        />
+        <StatsCard
+          title="Error Rate"
+          value={summary ? `${summary.errorRate}%` : '—'}
+          description="Last 7 days"
           icon={AlertCircle}
+          trend={summary ? (() => {
+            const t = calcTrend(summary.errorRate, summary.previousErrorRate)
+            // For error rate, lower is better — invert the color
+            return t ? { value: -t.value, label: t.label } : undefined
+          })() : undefined}
+          sparklineData={dailyErrors.length > 1 ? dailyErrors : undefined}
+          sparklineColor="#ef4444"
+          isLoading={statsLoading}
           colorClass="text-red-500 bg-red-500/10"
         />
       </div>

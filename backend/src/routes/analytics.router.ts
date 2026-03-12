@@ -7,12 +7,64 @@ import {
   getTrafficHeatmap,
   getSlowestRoutes,
   getStatusDistribution,
+  getDashboardSummary,
 } from '../services/analyticsService'
 
 const router = Router()
 
 // All analytics routes require authentication
 router.use(authenticate)
+
+/**
+ * @openapi
+ * /api/analytics/dashboard-summary:
+ *   get:
+ *     tags: [Analytics]
+ *     summary: Dashboard summary
+ *     description: Returns current and previous period totals for requests, avg response time, and error rate.
+ *     parameters:
+ *       - in: query
+ *         name: days
+ *         schema:
+ *           type: integer
+ *           default: 7
+ *     responses:
+ *       200:
+ *         description: Dashboard summary data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     totalRequests:
+ *                       type: integer
+ *                     avgResponseTime:
+ *                       type: number
+ *                     errorRate:
+ *                       type: number
+ *                     previousTotalRequests:
+ *                       type: integer
+ *                     previousAvgResponseTime:
+ *                       type: number
+ *                     previousErrorRate:
+ *                       type: number
+ *       401:
+ *         description: Not authenticated
+ */
+router.get('/dashboard-summary', async (req, res, next) => {
+  try {
+    const days = req.query.days ? parseInt(req.query.days as string, 10) : 7
+    const data = await getDashboardSummary(days)
+    res.json({ success: true, data })
+  } catch (err) {
+    next(err)
+  }
+})
 
 /**
  * @openapi

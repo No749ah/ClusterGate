@@ -16,6 +16,9 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().default(100),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().default(10),
   LOG_RETENTION_DAYS: z.coerce.number().default(90),
+  BACKUP_CRON_ENABLED: z.coerce.boolean().default(false),
+  BACKUP_CRON_SCHEDULE: z.string().default('0 3 * * *'),
+  BACKUP_RETENTION_COUNT: z.coerce.number().default(10),
 })
 
 const parsed = envSchema.safeParse(process.env)

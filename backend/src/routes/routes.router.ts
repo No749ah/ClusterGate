@@ -6,6 +6,7 @@ import * as routeService from '../services/routeService'
 import * as healthService from '../services/healthService'
 import * as logService from '../services/logService'
 import { proxyRequest } from '../services/proxyService'
+import { createAuditLog } from '../services/auditService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync } from '../lib/security'
@@ -301,6 +302,155 @@ router.post('/import', authenticate, authorize([Role.ADMIN]), async (req, res, n
     const { routes } = z.object({ routes: z.array(routeBodySchema) }).parse(req.body)
     const result = await routeService.importRoutes(routes as any[], req.user!.userId)
     res.json({ success: true, data: result })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// =============================================================================
+// Bulk operations (must be before /:id to avoid param capture)
+// =============================================================================
+
+const bulkIdsSchema = z.object({
+  ids: z.array(z.string()).min(1).max(100),
+})
+
+/**
+ * @openapi
+ * /api/routes/bulk/publish:
+ *   post:
+ *     tags: [Routes]
+ *     summary: Bulk publish routes
+ *     description: Publishes multiple routes at once. Requires ADMIN or OPERATOR role.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *                 maxItems: 100
+ *     responses:
+ *       200:
+ *         description: Routes published
+ *       400:
+ *         description: Validation error
+ */
+router.post('/bulk/publish', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+  try {
+    const { ids } = bulkIdsSchema.parse(req.body)
+    const count = await routeService.bulkPublish(ids, req.user!.userId)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'route.bulk_publish',
+      resource: 'route',
+      details: { ids, count },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({ success: true, data: { count } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
+ * /api/routes/bulk/deactivate:
+ *   post:
+ *     tags: [Routes]
+ *     summary: Bulk deactivate routes
+ *     description: Deactivates multiple routes at once. Requires ADMIN or OPERATOR role.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *                 maxItems: 100
+ *     responses:
+ *       200:
+ *         description: Routes deactivated
+ *       400:
+ *         description: Validation error
+ */
+router.post('/bulk/deactivate', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+  try {
+    const { ids } = bulkIdsSchema.parse(req.body)
+    const count = await routeService.bulkDeactivate(ids, req.user!.userId)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'route.bulk_deactivate',
+      resource: 'route',
+      details: { ids, count },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({ success: true, data: { count } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
+ * /api/routes/bulk/delete:
+ *   post:
+ *     tags: [Routes]
+ *     summary: Bulk delete routes
+ *     description: Soft-deletes multiple routes at once. Requires ADMIN role.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [ids]
+ *             properties:
+ *               ids:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 minItems: 1
+ *                 maxItems: 100
+ *     responses:
+ *       200:
+ *         description: Routes deleted
+ *       400:
+ *         description: Validation error
+ */
+router.post('/bulk/delete', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    const { ids } = bulkIdsSchema.parse(req.body)
+    const count = await routeService.bulkDelete(ids)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'route.bulk_delete',
+      resource: 'route',
+      details: { ids, count },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({ success: true, data: { count } })
   } catch (err) {
     next(err)
   }

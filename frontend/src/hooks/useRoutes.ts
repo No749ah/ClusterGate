@@ -179,3 +179,45 @@ export function useRouteStats(id: string) {
     refetchInterval: 30 * 1000,
   })
 }
+
+export function useBulkPublish() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => api.routes.bulkPublish(ids),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['routes'] })
+      toast.success(`${res.data.count} route(s) published`)
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Bulk publish failed')
+    },
+  })
+}
+
+export function useBulkDeactivate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => api.routes.bulkDeactivate(ids),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['routes'] })
+      toast.success(`${res.data.count} route(s) deactivated`)
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Bulk deactivate failed')
+    },
+  })
+}
+
+export function useBulkDelete() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (ids: string[]) => api.routes.bulkDelete(ids),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['routes'] })
+      toast.success(`${res.data.count} route(s) deleted`)
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Bulk delete failed')
+    },
+  })
+}

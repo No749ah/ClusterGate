@@ -2,6 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { authenticate } from '../middleware/authenticate'
 import { authorize } from '../middleware/authenticate'
 import { createAuditLog } from '../services/auditService'
+import { config } from '../config'
 import {
   createBackup,
   listBackups,
@@ -15,6 +16,44 @@ const router = Router()
 // All backup routes require admin authentication
 router.use(authenticate)
 router.use(authorize(['ADMIN']))
+
+/**
+ * @openapi
+ * /api/backups/schedule:
+ *   get:
+ *     tags: [Backups]
+ *     summary: Get backup schedule
+ *     description: Returns the current backup schedule configuration. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Backup schedule config
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     enabled:
+ *                       type: boolean
+ *                     schedule:
+ *                       type: string
+ *                     retentionCount:
+ *                       type: integer
+ */
+router.get('/schedule', (_req: Request, res: Response) => {
+  res.json({
+    success: true,
+    data: {
+      enabled: config.BACKUP_CRON_ENABLED,
+      schedule: config.BACKUP_CRON_SCHEDULE,
+      retentionCount: config.BACKUP_RETENTION_COUNT,
+    },
+  })
+})
 
 /**
  * @openapi

@@ -2,6 +2,7 @@ import cron from 'node-cron'
 import { runAllHealthChecks } from '../services/healthService'
 import { cleanOldLogs } from '../services/logService'
 import { runScheduledUpdateCheck } from '../services/updateService'
+import { createBackup, enforceRetentionPolicy } from '../services/backupService'
 import { logger } from '../lib/logger'
 import { config } from '../config'
 
@@ -40,6 +41,24 @@ export function startCronJobs() {
   })
   jobs.push(updateCheckJob)
   logger.info('Update check cron started (every 6 hours)')
+
+  // Scheduled backup (if enabled)
+  if (config.BACKUP_CRON_ENABLED) {
+    const backupJob = cron.schedule(config.BACKUP_CRON_SCHEDULE, async () => {
+      try {
+        const backup = await createBackup()
+        logger.info('Scheduled backup created', { filename: backup.filename, size: backup.size })
+        const deleted = await enforceRetentionPolicy(config.BACKUP_RETENTION_COUNT)
+        if (deleted > 0) {
+          logger.info('Backup retention enforced', { deleted, maxBackups: config.BACKUP_RETENTION_COUNT })
+        }
+      } catch (err) {
+        logger.error('Scheduled backup cron failed', { error: (err as Error).message })
+      }
+    })
+    jobs.push(backupJob)
+    logger.info(`Scheduled backup cron started (${config.BACKUP_CRON_SCHEDULE}), retention: ${config.BACKUP_RETENTION_COUNT}`)
+  }
 
   // Run initial update check after 30 seconds (let the server start up first)
   setTimeout(() => {

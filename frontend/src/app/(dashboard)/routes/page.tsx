@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
 import {
   Plus,
@@ -15,14 +15,18 @@ import {
   Edit,
   Eye,
   Filter,
+  Power,
+  PowerOff,
 } from 'lucide-react'
-import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute } from '@/hooks/useRoutes'
+import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkDelete } from '@/hooks/useRoutes'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
 import { HealthIndicator } from '@/components/routes/HealthIndicator'
+import { CircuitBreakerBadge } from '@/components/routes/CircuitBreakerBadge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Checkbox } from '@/components/ui/checkbox'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -64,6 +68,7 @@ export default function RoutesPage() {
   const [statusFilter, setStatusFilter] = useState<RouteStatus | 'ALL'>('ALL')
   const [tagFilter, setTagFilter] = useState<string>('ALL')
   const [page, setPage] = useState(1)
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
 
   // Fetch all routes (no tag filter) to extract unique tags for the filter dropdown
   const { data: allRoutesData } = useRoutes({ pageSize: 200 })
@@ -84,10 +89,48 @@ export default function RoutesPage() {
   const deactivate = useDeactivateRoute()
   const duplicate = useDuplicateRoute()
   const deleteRoute = useDeleteRoute()
+  const bulkPublish = useBulkPublish()
+  const bulkDeactivate = useBulkDeactivate()
+  const bulkDelete = useBulkDelete()
 
   const routes = data?.data ?? []
   const total = data?.total ?? 0
   const totalPages = data?.totalPages ?? 1
+
+  const allSelected = routes.length > 0 && routes.every(r => selectedIds.has(r.id))
+  const someSelected = selectedIds.size > 0
+
+  function toggleAll() {
+    if (allSelected) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(routes.map(r => r.id)))
+    }
+  }
+
+  function toggleOne(id: string) {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleBulkDelete() {
+    const ids = Array.from(selectedIds)
+    const ok = await confirm({
+      title: 'Delete Routes',
+      description: `Are you sure you want to delete ${ids.length} route(s)? This action cannot be undone.`,
+      confirmLabel: 'Delete All',
+      variant: 'destructive',
+    })
+    if (ok) {
+      bulkDelete.mutate(ids, { onSuccess: () => setSelectedIds(new Set()) })
+    }
+  }
+
+  const bulkPending = bulkPublish.isPending || bulkDeactivate.isPending || bulkDelete.isPending
 
   return (
     <div className="space-y-6">
@@ -106,6 +149,55 @@ export default function RoutesPage() {
           </Link>
         </Button>
       </div>
+
+      {/* Bulk Toolbar */}
+      {someSelected && (
+        <div className="flex items-center gap-3 bg-muted/50 border border-border/50 rounded-lg px-4 py-2">
+          <span className="text-sm font-medium text-foreground">
+            {selectedIds.size} selected
+          </span>
+          <div className="flex items-center gap-2 ml-auto">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                bulkPublish.mutate(Array.from(selectedIds), { onSuccess: () => setSelectedIds(new Set()) })
+              }}
+              disabled={bulkPending}
+            >
+              <Power className="w-3.5 h-3.5 mr-1.5" />
+              Publish
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                bulkDeactivate.mutate(Array.from(selectedIds), { onSuccess: () => setSelectedIds(new Set()) })
+              }}
+              disabled={bulkPending}
+            >
+              <PowerOff className="w-3.5 h-3.5 mr-1.5" />
+              Deactivate
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={handleBulkDelete}
+              disabled={bulkPending}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1.5" />
+              Delete
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -150,6 +242,13 @@ export default function RoutesPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b border-border/50">
               <tr>
+                <th className="px-3 py-3 text-left w-10">
+                  <Checkbox
+                    checked={allSelected}
+                    onCheckedChange={toggleAll}
+                    aria-label="Select all"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Route
                 </th>
@@ -166,6 +265,9 @@ export default function RoutesPage() {
                   Health
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                  Features
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Updated
                 </th>
                 <th className="px-4 py-3 text-right text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -177,18 +279,20 @@ export default function RoutesPage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <tr key={i}>
+                    <td className="px-3 py-3"><Skeleton className="h-4 w-4" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-10 w-full" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-40" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-5 w-20" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-8" /></td>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-16" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-4 w-24" /></td>
                     <td className="px-4 py-3"><Skeleton className="h-8 w-8 ml-auto" /></td>
                   </tr>
                 ))
               ) : routes.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-16 text-center">
+                  <td colSpan={9} className="px-4 py-16 text-center">
                     <div className="flex flex-col items-center gap-3 text-muted-foreground">
                       <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
                         <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -217,6 +321,8 @@ export default function RoutesPage() {
                   <RouteRow
                     key={route.id}
                     route={route}
+                    selected={selectedIds.has(route.id)}
+                    onToggle={() => toggleOne(route.id)}
                     onPublish={() => publish.mutate(route.id)}
                     onDeactivate={() => deactivate.mutate(route.id)}
                     onDuplicate={() => duplicate.mutate(route.id)}
@@ -298,6 +404,8 @@ function CopyUrlButton({ path }: { path: string }) {
 
 function RouteRow({
   route,
+  selected,
+  onToggle,
   onPublish,
   onDeactivate,
   onDuplicate,
@@ -305,6 +413,8 @@ function RouteRow({
   isLoading,
 }: {
   route: Route
+  selected: boolean
+  onToggle: () => void
   onPublish: () => void
   onDeactivate: () => void
   onDuplicate: () => void
@@ -315,6 +425,13 @@ function RouteRow({
 
   return (
     <tr className="hover:bg-muted/20 transition-colors group">
+      <td className="px-3 py-3">
+        <Checkbox
+          checked={selected}
+          onCheckedChange={onToggle}
+          aria-label={`Select ${route.name}`}
+        />
+      </td>
       <td className="px-4 py-3">
         <div>
           <Link
@@ -359,6 +476,18 @@ function RouteRow({
           responseTime={health?.responseTime}
           showLabel
         />
+      </td>
+      <td className="px-4 py-3">
+        <div className="flex gap-1 flex-wrap">
+          {route.wsEnabled && (
+            <Badge variant="outline" className="text-xs py-0 px-1.5">WS</Badge>
+          )}
+          <CircuitBreakerBadge
+            enabled={route.circuitBreakerEnabled}
+            state={route.cbState}
+            failureCount={route.cbFailureCount}
+          />
+        </div>
       </td>
       <td className="px-4 py-3 text-xs text-muted-foreground whitespace-nowrap">
         {formatRelativeTime(route.updatedAt)}

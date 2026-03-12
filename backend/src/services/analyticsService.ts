@@ -277,6 +277,43 @@ export async function getSlowestRoutes(limit = 10): Promise<SlowestRoute[]> {
   }))
 }
 
+export async function getDashboardSummary(days = 7) {
+  const since = new Date(Date.now() - days * 86400000)
+  const prevSince = new Date(Date.now() - days * 2 * 86400000)
+
+  // Current period
+  const current = await prisma.$queryRawUnsafe<any[]>(`
+    SELECT
+      COUNT(*)::int as "totalRequests",
+      AVG(duration)::float as "avgResponseTime",
+      (COUNT(*) FILTER (WHERE "responseStatus" >= 400 OR error IS NOT NULL)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
+    FROM request_logs
+    WHERE "createdAt" >= $1
+  `, since)
+
+  // Previous period
+  const previous = await prisma.$queryRawUnsafe<any[]>(`
+    SELECT
+      COUNT(*)::int as "totalRequests",
+      AVG(duration)::float as "avgResponseTime",
+      (COUNT(*) FILTER (WHERE "responseStatus" >= 400 OR error IS NOT NULL)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
+    FROM request_logs
+    WHERE "createdAt" >= $1 AND "createdAt" < $2
+  `, prevSince, since)
+
+  const c = current[0] || { totalRequests: 0, avgResponseTime: 0, errorRate: 0 }
+  const p = previous[0] || { totalRequests: 0, avgResponseTime: 0, errorRate: 0 }
+
+  return {
+    totalRequests: c.totalRequests || 0,
+    avgResponseTime: Math.round((c.avgResponseTime || 0) * 100) / 100,
+    errorRate: Math.round((c.errorRate || 0) * 100) / 100,
+    previousTotalRequests: p.totalRequests || 0,
+    previousAvgResponseTime: Math.round((p.avgResponseTime || 0) * 100) / 100,
+    previousErrorRate: Math.round((p.errorRate || 0) * 100) / 100,
+  }
+}
+
 export async function getStatusDistribution(routeId?: string, days = 7): Promise<StatusBucket[]> {
   const since = buildDateFilter(days)
 

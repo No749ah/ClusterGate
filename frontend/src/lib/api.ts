@@ -223,6 +223,15 @@ class ApiClient {
         `/api/routes/check-path?${params.toString()}`
       )
     },
+
+    bulkPublish: (ids: string[]) =>
+      this.post<ApiResponse<{ count: number }>>('/api/routes/bulk/publish', { ids }),
+
+    bulkDeactivate: (ids: string[]) =>
+      this.post<ApiResponse<{ count: number }>>('/api/routes/bulk/deactivate', { ids }),
+
+    bulkDelete: (ids: string[]) =>
+      this.post<ApiResponse<{ count: number }>>('/api/routes/bulk/delete', { ids }),
   }
 
   // ============================================================================
@@ -527,6 +536,20 @@ class ApiClient {
         bucket: string
         count: number
       }[]>>(`/api/analytics/status-distribution${qs ? `?${qs}` : ''}`)
+    },
+
+    dashboardSummary: (days?: number) => {
+      const params = new URLSearchParams()
+      if (days) params.set('days', String(days))
+      const qs = params.toString()
+      return this.get<ApiResponse<{
+        totalRequests: number
+        avgResponseTime: number
+        errorRate: number
+        previousTotalRequests: number
+        previousAvgResponseTime: number
+        previousErrorRate: number
+      }>>(`/api/analytics/dashboard-summary${qs ? `?${qs}` : ''}`)
     },
   }
 

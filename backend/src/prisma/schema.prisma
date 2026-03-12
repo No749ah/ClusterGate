@@ -355,9 +355,10 @@ model RequestLog {
   userAgent       String?
   createdAt       DateTime @default(now())
 
-  @@index([routeId, createdAt])
+  @@index([routeId, createdAt, duration])
   @@index([createdAt])
-  @@index([responseStatus])
+  @@index([createdAt, responseStatus])
+  @@index([routeId, createdAt, responseStatus])
   @@map("request_logs")
 }
 
