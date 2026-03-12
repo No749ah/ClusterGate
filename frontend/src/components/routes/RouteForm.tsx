@@ -43,11 +43,18 @@ const routeSchema = z.object({
   rateLimitWindowSeconds: z.coerce.number().int().min(1).max(3600).default(60),
   maintenanceMode: z.boolean().default(false),
   maintenanceMessage: z.string().optional(),
+  wsEnabled: z.boolean().default(false),
+  circuitBreakerEnabled: z.boolean().default(false),
+  cbFailureThreshold: z.coerce.number().int().min(1).max(100).default(5),
+  cbRecoveryTimeout: z.coerce.number().int().min(1000).max(300000).default(30000),
+  lbStrategy: z.enum(['ROUND_ROBIN', 'WEIGHTED', 'FAILOVER']).default('ROUND_ROBIN'),
+  routeGroupId: z.string().nullable().optional(),
+  organizationId: z.string().nullable().optional(),
 })
 
 type RouteFormValues = z.infer<typeof routeSchema>
 
-const STEPS = ['Basic Info', 'Advanced', 'Headers', 'Security', 'Maintenance']
+const STEPS = ['Basic Info', 'Advanced', 'Features', 'Headers', 'Security', 'Maintenance']
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
 function generateRandomPath(): string {
@@ -103,6 +110,13 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       rateLimitWindowSeconds: defaultValues?.rateLimitWindow ? defaultValues.rateLimitWindow / 1000 : 60,
       maintenanceMode: defaultValues?.maintenanceMode ?? false,
       maintenanceMessage: defaultValues?.maintenanceMessage ?? '',
+      wsEnabled: defaultValues?.wsEnabled ?? false,
+      circuitBreakerEnabled: defaultValues?.circuitBreakerEnabled ?? false,
+      cbFailureThreshold: defaultValues?.cbFailureThreshold ?? 5,
+      cbRecoveryTimeout: defaultValues?.cbRecoveryTimeout ?? 30000,
+      lbStrategy: defaultValues?.lbStrategy ?? 'ROUND_ROBIN',
+      routeGroupId: defaultValues?.routeGroupId ?? null,
+      organizationId: defaultValues?.organizationId ?? null,
     },
   })
 
@@ -131,6 +145,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const corsEnabled = watch('corsEnabled')
   const rateLimitEnabled = watch('rateLimitEnabled')
   const maintenanceMode = watch('maintenanceMode')
+  const circuitBreakerEnabled = watch('circuitBreakerEnabled')
   const authType = watch('authType')
   const publicPath = watch('publicPath')
   const [wildcardEnabled, setWildcardEnabled] = useState(
@@ -192,9 +207,10 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
     const stepFields: (keyof RouteFormValues)[][] = [
       ['name', 'publicPath', 'targetUrl', 'methods'],
       ['timeout', 'retryCount', 'retryDelay'],
-      [],
-      [],
-      [],
+      [], // Features step - no required validation
+      [], // Headers
+      [], // Security
+      [], // Maintenance
     ]
     const valid = await trigger(stepFields[step])
     if (valid) setStep((s) => s + 1)
@@ -216,6 +232,13 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         ? data.ipAllowlist.split('\n').map((s) => s.trim()).filter(Boolean)
         : [],
     }
+    formData.wsEnabled = data.wsEnabled
+    formData.circuitBreakerEnabled = data.circuitBreakerEnabled
+    formData.cbFailureThreshold = data.cbFailureThreshold
+    formData.cbRecoveryTimeout = data.cbRecoveryTimeout
+    formData.lbStrategy = data.lbStrategy
+    formData.routeGroupId = data.routeGroupId || null
+    formData.organizationId = data.organizationId || null
     await onSubmit(formData)
   }
 
@@ -480,8 +503,58 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
           </div>
         )}
 
-        {/* Step 2: Headers */}
+        {/* Step 2: Features */}
         {step === 2 && (
+          <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+              <div>
+                <p className="text-sm font-medium">WebSocket Support</p>
+                <p className="text-xs text-muted-foreground">Enable WebSocket upgrade handling for this route</p>
+              </div>
+              <Switch
+                checked={watch('wsEnabled')}
+                onCheckedChange={(v) => setValue('wsEnabled', v)}
+              />
+            </div>
+
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+              <div>
+                <p className="text-sm font-medium">Circuit Breaker</p>
+                <p className="text-xs text-muted-foreground">Stop forwarding after consecutive failures</p>
+              </div>
+              <Switch
+                checked={circuitBreakerEnabled}
+                onCheckedChange={(v) => setValue('circuitBreakerEnabled', v)}
+              />
+            </div>
+            {circuitBreakerEnabled && (
+              <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
+                <Field label="Failure Threshold" hint="Failures before opening circuit">
+                  <input type="number" {...register('cbFailureThreshold')} className={fieldClass()} />
+                </Field>
+                <Field label="Recovery Timeout (ms)" hint="Time before half-open retry">
+                  <input type="number" {...register('cbRecoveryTimeout')} className={fieldClass()} />
+                </Field>
+              </div>
+            )}
+
+            <Field label="Load Balancing Strategy" hint="How to distribute traffic across targets">
+              <Select value={watch('lbStrategy')} onValueChange={(v) => setValue('lbStrategy', v as any)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ROUND_ROBIN">Round Robin</SelectItem>
+                  <SelectItem value="WEIGHTED">Weighted</SelectItem>
+                  <SelectItem value="FAILOVER">Failover</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+        )}
+
+        {/* Step 3: Headers */}
+        {step === 3 && (
           <div className="space-y-6">
             <div>
               <div className="flex items-center justify-between mb-2">
@@ -539,8 +612,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
           </div>
         )}
 
-        {/* Step 3: Security */}
-        {step === 3 && (
+        {/* Step 4: Security */}
+        {step === 4 && (
           <div className="space-y-4">
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
@@ -602,8 +675,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
           </div>
         )}
 
-        {/* Step 4: Maintenance */}
-        {step === 4 && (
+        {/* Step 5: Maintenance */}
+        {step === 5 && (
           <div className="space-y-4">
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
               <div>
