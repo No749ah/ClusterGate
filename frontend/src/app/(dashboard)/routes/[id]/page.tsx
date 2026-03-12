@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw } from 'lucide-react'
+import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth } from '@/hooks/useRoutes'
 import { useLogs } from '@/hooks/useLogs'
@@ -16,8 +16,14 @@ import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { RequestLog, RouteVersion } from '@/types'
+import { RequestLog, RouteVersion, RouteTarget, TransformRule, TransformPhase, TransformType, LBStrategy } from '@/types'
 import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard } from '@/lib/utils'
+import { api } from '@/lib/api'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
 
 // Removed PROXY_BASE - using window.location.origin instead
 
@@ -159,6 +165,8 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
           <TabsTrigger value="test">Test</TabsTrigger>
           <TabsTrigger value="logs">Logs</TabsTrigger>
           <TabsTrigger value="api-keys">API Keys</TabsTrigger>
+          <TabsTrigger value="targets">Targets</TabsTrigger>
+          <TabsTrigger value="transforms">Transforms</TabsTrigger>
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
@@ -217,6 +225,27 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
                 <InfoRow label="Updated By" value={route.updatedBy?.name ?? '—'} />
                 <InfoRow label="Created" value={formatDate(route.createdAt)} />
                 <InfoRow label="Updated" value={formatDate(route.updatedAt)} />
+              </CardContent>
+            </Card>
+
+            {/* WebSocket & Circuit Breaker */}
+            <Card>
+              <CardHeader><CardTitle className="text-sm">Features</CardTitle></CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <InfoRow label="WebSocket" value={route.wsEnabled ? 'Enabled' : 'Disabled'} />
+                <InfoRow label="Circuit Breaker" value={route.circuitBreakerEnabled ? 'Enabled' : 'Disabled'} />
+                {route.circuitBreakerEnabled && (
+                  <>
+                    <InfoRow label="CB State" value={route.cbState || 'CLOSED'} />
+                    <InfoRow label="Failure Threshold" value={String(route.cbFailureThreshold)} />
+                    <InfoRow label="Recovery Timeout" value={`${route.cbRecoveryTimeout}ms`} />
+                    <InfoRow label="Failure Count" value={String(route.cbFailureCount)} />
+                  </>
+                )}
+                <InfoRow label="LB Strategy" value={route.lbStrategy?.replace('_', ' ') || 'Round Robin'} />
+                {route.routeGroup && (
+                  <InfoRow label="Route Group" value={route.routeGroup.name} />
+                )}
               </CardContent>
             </Card>
           </div>
@@ -292,6 +321,14 @@ export default function RouteDetailPage({ params }: { params: { id: string } }) 
               <ApiKeysPanel routeId={id} />
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="targets" className="mt-4">
+          <TargetsPanel routeId={id} lbStrategy={route.lbStrategy} />
+        </TabsContent>
+
+        <TabsContent value="transforms" className="mt-4">
+          <TransformsPanel routeId={id} />
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">
@@ -679,5 +716,319 @@ function InfoRow({ label, value, mono }: { label: string; value: React.ReactNode
         <div className="flex justify-end">{value}</div>
       )}
     </div>
+  )
+}
+
+function TargetsPanel({ routeId, lbStrategy }: { routeId: string; lbStrategy: LBStrategy }) {
+  const queryClient = useQueryClient()
+  const [showAdd, setShowAdd] = useState(false)
+  const [newUrl, setNewUrl] = useState('')
+  const [newWeight, setNewWeight] = useState(1)
+  const [newPriority, setNewPriority] = useState(0)
+
+  const { data: targetsData, isLoading } = useQuery({
+    queryKey: ['targets', routeId],
+    queryFn: () => api.targets.list(routeId),
+  })
+
+  const createTarget = useMutation({
+    mutationFn: (data: { url: string; weight: number; priority: number }) =>
+      api.targets.create(routeId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['targets', routeId] })
+      toast.success('Target added')
+      setShowAdd(false)
+      setNewUrl('')
+      setNewWeight(1)
+      setNewPriority(0)
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add target'),
+  })
+
+  const deleteTarget = useMutation({
+    mutationFn: (targetId: string) => api.targets.delete(routeId, targetId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['targets', routeId] })
+      toast.success('Target removed')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to remove target'),
+  })
+
+  const toggleHealth = useMutation({
+    mutationFn: ({ targetId, isHealthy }: { targetId: string; isHealthy: boolean }) =>
+      api.targets.update(routeId, targetId, { isHealthy }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['targets', routeId] })
+    },
+  })
+
+  const targets = targetsData?.data ?? []
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle>Load Balancer Targets</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">
+              Strategy: <Badge variant="secondary">{lbStrategy?.replace('_', ' ') || 'Round Robin'}</Badge>
+            </p>
+          </div>
+          <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+            <Plus className="w-3.5 h-3.5 mr-2" />
+            Add Target
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {showAdd && (
+          <div className="flex gap-2 mb-4 p-3 rounded-lg border border-border/50 bg-muted/30">
+            <Input
+              placeholder="http://backend:8080"
+              value={newUrl}
+              onChange={(e) => setNewUrl(e.target.value)}
+              className="flex-1"
+            />
+            <Input
+              type="number"
+              placeholder="Weight"
+              value={newWeight}
+              onChange={(e) => setNewWeight(Number(e.target.value))}
+              className="w-24"
+            />
+            <Input
+              type="number"
+              placeholder="Priority"
+              value={newPriority}
+              onChange={(e) => setNewPriority(Number(e.target.value))}
+              className="w-24"
+            />
+            <Button
+              size="sm"
+              disabled={!newUrl || createTarget.isPending}
+              onClick={() => createTarget.mutate({ url: newUrl, weight: newWeight, priority: newPriority })}
+            >
+              {createTarget.isPending ? 'Adding...' : 'Add'}
+            </Button>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="py-8 text-center text-muted-foreground text-sm">Loading targets...</div>
+        ) : targets.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground">
+            <p className="text-sm">No targets configured</p>
+            <p className="text-xs mt-1">Add backend targets for load balancing. Without targets, the route uses the primary target URL.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {targets.map((target) => (
+              <div key={target.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <div className={`w-2 h-2 rounded-full ${target.isHealthy ? 'bg-green-500' : 'bg-red-500'}`} />
+                  <div>
+                    <p className="text-sm font-mono">{target.url}</p>
+                    <p className="text-xs text-muted-foreground">
+                      Weight: {target.weight} · Priority: {target.priority}
+                      {target.lastError && <span className="text-red-400 ml-2">Last error: {target.lastError}</span>}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => toggleHealth.mutate({ targetId: target.id, isHealthy: !target.isHealthy })}
+                    title={target.isHealthy ? 'Mark unhealthy' : 'Mark healthy'}
+                  >
+                    {target.isHealthy ? <Power className="w-3.5 h-3.5 text-green-500" /> : <PowerOff className="w-3.5 h-3.5 text-red-500" />}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteTarget.mutate(target.id)}
+                    disabled={deleteTarget.isPending}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function TransformsPanel({ routeId }: { routeId: string }) {
+  const queryClient = useQueryClient()
+  const [showAdd, setShowAdd] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newPhase, setNewPhase] = useState<string>('REQUEST')
+  const [newType, setNewType] = useState<string>('SET_HEADER')
+  const [newConfigKey, setNewConfigKey] = useState('')
+  const [newConfigValue, setNewConfigValue] = useState('')
+
+  const { data: transformsData, isLoading } = useQuery({
+    queryKey: ['transforms', routeId],
+    queryFn: () => api.transforms.list(routeId),
+  })
+
+  const createTransform = useMutation({
+    mutationFn: (data: { phase: string; type: string; name: string; config: Record<string, any> }) =>
+      api.transforms.create(routeId, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transforms', routeId] })
+      toast.success('Transform rule added')
+      setShowAdd(false)
+      setNewName('')
+      setNewConfigKey('')
+      setNewConfigValue('')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add transform'),
+  })
+
+  const deleteTransform = useMutation({
+    mutationFn: (ruleId: string) => api.transforms.delete(routeId, ruleId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transforms', routeId] })
+      toast.success('Transform rule removed')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to remove transform'),
+  })
+
+  const toggleActive = useMutation({
+    mutationFn: ({ ruleId, isActive }: { ruleId: string; isActive: boolean }) =>
+      api.transforms.update(routeId, ruleId, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['transforms', routeId] })
+    },
+  })
+
+  const transforms = transformsData?.data ?? []
+
+  const buildConfig = () => {
+    if (newType === 'SET_HEADER') return { headerName: newConfigKey, headerValue: newConfigValue }
+    if (newType === 'REMOVE_HEADER') return { headerName: newConfigKey }
+    if (newType === 'SET_QUERY_PARAM') return { paramName: newConfigKey, paramValue: newConfigValue }
+    if (newType === 'REMOVE_QUERY_PARAM') return { paramName: newConfigKey }
+    if (newType === 'MAP_STATUS_CODE') return { from: Number(newConfigKey), to: Number(newConfigValue) }
+    if (newType === 'REWRITE_BODY_JSON') return { path: newConfigKey, value: newConfigValue }
+    return {}
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <CardTitle>Transform Rules</CardTitle>
+          <Button size="sm" onClick={() => setShowAdd(!showAdd)}>
+            <Plus className="w-3.5 h-3.5 mr-2" />
+            Add Rule
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {showAdd && (
+          <div className="mb-4 p-3 rounded-lg border border-border/50 bg-muted/30 space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <Input
+                placeholder="Rule name"
+                value={newName}
+                onChange={(e) => setNewName(e.target.value)}
+              />
+              <Select value={newPhase} onValueChange={setNewPhase}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="REQUEST">Request</SelectItem>
+                  <SelectItem value="RESPONSE">Response</SelectItem>
+                </SelectContent>
+              </Select>
+              <Select value={newType} onValueChange={setNewType}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SET_HEADER">Set Header</SelectItem>
+                  <SelectItem value="REMOVE_HEADER">Remove Header</SelectItem>
+                  <SelectItem value="SET_QUERY_PARAM">Set Query Param</SelectItem>
+                  <SelectItem value="REMOVE_QUERY_PARAM">Remove Query Param</SelectItem>
+                  <SelectItem value="MAP_STATUS_CODE">Map Status Code</SelectItem>
+                  <SelectItem value="REWRITE_BODY_JSON">Rewrite Body JSON</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex gap-2">
+              <Input
+                placeholder={newType.includes('HEADER') ? 'Header name' : newType.includes('PARAM') ? 'Param name' : newType === 'MAP_STATUS_CODE' ? 'From status' : 'JSON path'}
+                value={newConfigKey}
+                onChange={(e) => setNewConfigKey(e.target.value)}
+                className="flex-1"
+              />
+              {!['REMOVE_HEADER', 'REMOVE_QUERY_PARAM'].includes(newType) && (
+                <Input
+                  placeholder={newType === 'MAP_STATUS_CODE' ? 'To status' : 'Value'}
+                  value={newConfigValue}
+                  onChange={(e) => setNewConfigValue(e.target.value)}
+                  className="flex-1"
+                />
+              )}
+              <Button
+                size="sm"
+                disabled={!newName || !newConfigKey || createTransform.isPending}
+                onClick={() => createTransform.mutate({ phase: newPhase, type: newType, name: newName, config: buildConfig() })}
+              >
+                {createTransform.isPending ? 'Adding...' : 'Add'}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {isLoading ? (
+          <div className="py-8 text-center text-muted-foreground text-sm">Loading transforms...</div>
+        ) : transforms.length === 0 ? (
+          <div className="py-8 text-center text-muted-foreground">
+            <p className="text-sm">No transform rules configured</p>
+            <p className="text-xs mt-1">Add rules to modify requests or responses passing through this route.</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {transforms.map((rule) => (
+              <div key={rule.id} className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-muted/30">
+                <div className="flex items-center gap-3">
+                  <Badge variant={rule.phase === 'REQUEST' ? 'default' : 'secondary'}>
+                    {rule.phase}
+                  </Badge>
+                  <div>
+                    <p className="text-sm font-medium">{rule.name}</p>
+                    <p className="text-xs text-muted-foreground font-mono">
+                      {rule.type.replace(/_/g, ' ')} · Order: {rule.order}
+                      {rule.config && Object.keys(rule.config).length > 0 && (
+                        <span className="ml-2">
+                          {Object.entries(rule.config).map(([k, v]) => `${k}=${v}`).join(', ')}
+                        </span>
+                      )}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Switch
+                    checked={rule.isActive}
+                    onCheckedChange={(v) => toggleActive.mutate({ ruleId: rule.id, isActive: v })}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteTransform.mutate(rule.id)}
+                    disabled={deleteTransform.isPending}
+                  >
+                    <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
