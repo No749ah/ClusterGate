@@ -156,12 +156,12 @@ export default function AnalyticsPage() {
             Route performance metrics and traffic patterns
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <Select
             value={routeId ?? 'all'}
             onValueChange={(v) => setRouteId(v === 'all' ? undefined : v)}
           >
-            <SelectTrigger className="w-[200px]">
+            <SelectTrigger className="w-full sm:w-[200px]">
               <SelectValue placeholder="All routes" />
             </SelectTrigger>
             <SelectContent>
@@ -178,7 +178,7 @@ export default function AnalyticsPage() {
             value={String(days)}
             onValueChange={(v) => setDays(parseInt(v, 10))}
           >
-            <SelectTrigger className="w-[120px]">
+            <SelectTrigger className="w-28 sm:w-[120px]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

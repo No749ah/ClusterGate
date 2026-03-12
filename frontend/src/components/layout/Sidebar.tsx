@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -18,6 +18,7 @@ import {
   HardDrive,
   FolderOpen,
   Building2,
+  X,
 } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
@@ -73,6 +74,7 @@ export function Sidebar() {
   const { user } = useAuth()
   const logoutMutation = useLogout()
   const [collapsed, setCollapsed] = useState(false)
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
   const partyMode = usePartyMode()
 
@@ -92,6 +94,28 @@ export function Sidebar() {
     window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed } }))
   }, [collapsed, mounted])
 
+  // Close mobile drawer on route change
+  useEffect(() => {
+    setMobileOpen(false)
+  }, [pathname])
+
+  // Listen for mobile menu toggle from Header
+  useEffect(() => {
+    const handler = () => setMobileOpen((prev) => !prev)
+    window.addEventListener('toggle-mobile-sidebar', handler)
+    return () => window.removeEventListener('toggle-mobile-sidebar', handler)
+  }, [])
+
+  // Prevent body scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden'
+    } else {
+      document.body.style.overflow = ''
+    }
+    return () => { document.body.style.overflow = '' }
+  }, [mobileOpen])
+
   const isActive = (href: string, exact?: boolean) => {
     if (exact) return pathname === href
     return pathname.startsWith(href)
@@ -102,15 +126,16 @@ export function Sidebar() {
 
     const active = isActive(item.href, item.exact)
     const Icon = item.icon
+    const isMobileOrExpanded = mobileOpen || !collapsed
 
     return (
       <Link
         key={item.href}
         href={item.href}
-        title={collapsed ? item.label : undefined}
+        title={!isMobileOrExpanded ? item.label : undefined}
         className={cn(
           'flex items-center rounded-lg text-sm font-medium transition-all group',
-          collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
+          !isMobileOrExpanded ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2.5',
           active
             ? 'bg-primary/15 text-primary'
             : 'text-muted-foreground hover:bg-white/5 hover:text-sidebar-foreground'
@@ -122,37 +147,42 @@ export function Sidebar() {
             active ? 'text-primary' : 'text-muted-foreground group-hover:text-sidebar-foreground'
           )}
         />
-        {!collapsed && <span className="flex-1">{item.label}</span>}
-        {!collapsed && active && <ChevronRight className="w-3 h-3 text-primary opacity-60" />}
+        {isMobileOrExpanded && <span className="flex-1">{item.label}</span>}
+        {isMobileOrExpanded && active && <ChevronRight className="w-3 h-3 text-primary opacity-60" />}
       </Link>
     )
   }
 
-  return (
-    <aside
-      className={cn(
-        'fixed left-0 top-0 z-40 h-screen flex flex-col bg-sidebar border-r border-sidebar-border transition-all duration-200',
-        collapsed ? 'w-16' : 'w-64'
-      )}
-    >
+  const sidebarContent = (
+    <>
       {/* Logo + collapse toggle */}
       <div className={cn(
         'flex items-center border-b border-sidebar-border transition-all duration-200',
-        collapsed ? 'justify-center px-2 py-5' : 'px-4 py-5'
+        !mobileOpen && collapsed ? 'justify-center px-2 py-5' : 'px-4 py-5'
       )}>
-        <div className={cn('flex items-center', collapsed ? '' : 'gap-3 flex-1')}>
+        <div className={cn('flex items-center', !mobileOpen && collapsed ? '' : 'gap-3 flex-1')}>
           <Logo size={36} className="party-logo" onSecretClick={partyMode.activate} />
-          {!collapsed && (
+          {(mobileOpen || !collapsed) && (
             <div className="overflow-hidden">
               <h1 className="text-sm font-semibold text-sidebar-foreground whitespace-nowrap">ClusterGate</h1>
               <p className="text-xs text-muted-foreground whitespace-nowrap">Routing Gateway</p>
             </div>
           )}
         </div>
-        {!collapsed && (
+        {/* Mobile close button */}
+        {mobileOpen && (
+          <button
+            onClick={() => setMobileOpen(false)}
+            className="p-1.5 rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-colors md:hidden"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        )}
+        {/* Desktop collapse button */}
+        {!mobileOpen && !collapsed && (
           <button
             onClick={() => setCollapsed(true)}
-            className="p-1.5 rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-colors"
+            className="p-1.5 rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-colors hidden md:block"
             title="Collapse sidebar"
           >
             <PanelLeftClose className="w-4 h-4" />
@@ -162,10 +192,10 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 p-3 overflow-y-auto">
-        {collapsed && (
+        {!mobileOpen && collapsed && (
           <button
             onClick={() => setCollapsed(false)}
-            className="flex items-center justify-center w-full px-2 py-2 mb-2 rounded-lg text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-colors"
+            className="flex items-center justify-center w-full px-2 py-2 mb-2 rounded-lg text-muted-foreground hover:text-sidebar-foreground hover:bg-white/5 transition-colors hidden md:flex"
             title="Expand sidebar"
           >
             <PanelLeftOpen className="w-4 h-4" />
@@ -173,20 +203,21 @@ export function Sidebar() {
         )}
 
         {navSections.map((section, idx) => {
-          // Filter visible items in this section
           const visibleItems = section.items.filter(
             (item) => !item.adminOnly || user?.role === 'ADMIN'
           )
           if (visibleItems.length === 0) return null
 
+          const isMobileOrExpanded = mobileOpen || !collapsed
+
           return (
             <div key={section.title} className={cn(idx > 0 && 'mt-4')}>
-              {!collapsed && (
+              {isMobileOrExpanded && (
                 <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   {section.title}
                 </p>
               )}
-              {collapsed && idx > 0 && (
+              {!isMobileOrExpanded && idx > 0 && (
                 <div className="mx-2 my-2 border-t border-sidebar-border" />
               )}
               <div className="space-y-1">
@@ -197,10 +228,10 @@ export function Sidebar() {
         })}
       </nav>
 
-      {/* User info — always visible at bottom-left */}
+      {/* User info */}
       {user && (
-        <div className={cn('border-t border-sidebar-border', collapsed ? 'p-2' : 'p-3')}>
-          {collapsed ? (
+        <div className={cn('border-t border-sidebar-border', !mobileOpen && collapsed ? 'p-2' : 'p-3')}>
+          {!mobileOpen && collapsed ? (
             <div className="flex flex-col items-center gap-2">
               <Link
                 href="/settings"
@@ -240,6 +271,38 @@ export function Sidebar() {
           )}
         </div>
       )}
-    </aside>
+    </>
+  )
+
+  return (
+    <>
+      {/* Mobile backdrop */}
+      {mobileOpen && (
+        <div
+          className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+
+      {/* Desktop sidebar — hidden on mobile */}
+      <aside
+        className={cn(
+          'fixed left-0 top-0 z-40 h-screen flex-col bg-sidebar border-r border-sidebar-border transition-all duration-200 hidden md:flex',
+          collapsed ? 'w-16' : 'w-64'
+        )}
+      >
+        {sidebarContent}
+      </aside>
+
+      {/* Mobile drawer — slides in from left */}
+      <aside
+        className={cn(
+          'fixed left-0 top-0 z-50 h-screen w-72 flex flex-col bg-sidebar border-r border-sidebar-border transition-transform duration-200 md:hidden',
+          mobileOpen ? 'translate-x-0' : '-translate-x-full'
+        )}
+      >
+        {sidebarContent}
+      </aside>
+    </>
   )
 }

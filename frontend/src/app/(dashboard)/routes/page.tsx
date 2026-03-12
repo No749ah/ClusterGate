@@ -135,7 +135,7 @@ export default function RoutesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Routes</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -152,11 +152,11 @@ export default function RoutesPage() {
 
       {/* Bulk Toolbar */}
       {someSelected && (
-        <div className="flex items-center gap-3 bg-muted/50 border border-border/50 rounded-lg px-4 py-2">
+        <div className="flex flex-wrap items-center gap-3 bg-muted/50 border border-border/50 rounded-lg px-4 py-2">
           <span className="text-sm font-medium text-foreground">
             {selectedIds.size} selected
           </span>
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="flex flex-wrap items-center gap-2 ml-auto">
             <Button
               size="sm"
               variant="outline"
