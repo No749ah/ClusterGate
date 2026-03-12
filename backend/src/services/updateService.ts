@@ -276,8 +276,9 @@ function getK8sApiBase(): string {
 /**
  * Update a Kubernetes deployment by setting the new image tag on all containers
  * and adding a restart annotation. This forces K8s to pull the new image.
+ * Returns the new metadata.generation so we can track when the rollout starts.
  */
-async function updateK8sDeployment(namespace: string, deploymentName: string, newImage: string, newTag: string): Promise<void> {
+async function updateK8sDeployment(namespace: string, deploymentName: string, newImage: string, newTag: string): Promise<number> {
   const token = getK8sToken()
   if (!token) throw new Error('Kubernetes service account token not found')
 
@@ -318,7 +319,7 @@ async function updateK8sDeployment(namespace: string, deploymentName: string, ne
     },
   }
 
-  await axios.patch(url, patch, {
+  const patchRes = await axios.patch(url, patch, {
     headers: {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/strategic-merge-patch+json',
@@ -326,13 +327,29 @@ async function updateK8sDeployment(namespace: string, deploymentName: string, ne
     httpsAgent,
     timeout: 15000,
   })
+
+  // Return the new generation — K8s increments this on every spec change
+  return patchRes.data.metadata.generation
 }
 
 /**
  * Wait for a K8s deployment rollout to complete by polling its status.
- * Returns once all replicas are updated and available, or times out.
+ * Uses the deployment generation to ensure we're tracking the NEW rollout,
+ * not the old pods that are still running.
+ *
+ * The logic mirrors `kubectl rollout status`:
+ *  1. Wait for observedGeneration >= targetGeneration (controller acknowledged change)
+ *  2. Wait for updatedReplicas == desired (all pods running new image)
+ *  3. Wait for availableReplicas == desired (new pods passed readiness)
+ *  4. Wait for status.replicas == desired (old pods fully terminated)
  */
-async function waitForRollout(namespace: string, deploymentName: string, timeoutMs = 120000, onStatus?: (msg: string) => void): Promise<{ ready: boolean; message: string }> {
+async function waitForRollout(
+  namespace: string,
+  deploymentName: string,
+  targetGeneration: number,
+  timeoutMs = 180000,
+  onStatus?: (msg: string) => void
+): Promise<{ ready: boolean; message: string }> {
   const token = getK8sToken()
   if (!token) return { ready: false, message: 'No service account token' }
 
@@ -352,22 +369,53 @@ async function waitForRollout(namespace: string, deploymentName: string, timeout
         httpsAgent,
         timeout: 10000,
       })
-      const status = res.data.status
-      const spec = res.data.spec
+      const dep = res.data
+      const status = dep.status
+      const spec = dep.spec
       const desired = spec.replicas || 1
+      const observedGeneration = status.observedGeneration || 0
       const updated = status.updatedReplicas || 0
       const available = status.availableReplicas || 0
       const ready = status.readyReplicas || 0
+      const totalReplicas = status.replicas || 0
+      const unavailable = status.unavailableReplicas || 0
 
-      if (updated >= desired && available >= desired && ready >= desired) {
-        return { ready: true, message: `${deploymentName}: ${ready}/${desired} pods ready` }
+      // Check if the controller has seen our change yet
+      if (observedGeneration < targetGeneration) {
+        const msg = `${deploymentName}: waiting for controller to pick up changes...`
+        logger.info(msg)
+        if (onStatus) onStatus(msg)
+        await new Promise(r => setTimeout(r, pollInterval))
+        continue
       }
 
-      const msg = `${deploymentName}: ${ready}/${desired} ready, ${updated}/${desired} updated`
+      // All conditions met: new pods updated, available, ready, and old pods gone
+      if (
+        updated >= desired &&
+        available >= desired &&
+        ready >= desired &&
+        totalReplicas <= desired &&
+        unavailable === 0
+      ) {
+        return { ready: true, message: `${deploymentName}: ${ready}/${desired} new pods ready` }
+      }
+
+      // Report detailed progress
+      let msg: string
+      if (updated < desired) {
+        msg = `${deploymentName}: ${updated}/${desired} new pods created`
+      } else if (totalReplicas > desired) {
+        msg = `${deploymentName}: ${totalReplicas - desired} old pod(s) terminating`
+      } else if (available < desired) {
+        msg = `${deploymentName}: ${available}/${desired} new pods available (waiting for readiness)`
+      } else {
+        msg = `${deploymentName}: ${ready}/${desired} ready, ${unavailable} unavailable`
+      }
       logger.info(msg)
       if (onStatus) onStatus(msg)
     } catch (err: any) {
       logger.warn(`Rollout status check failed for ${deploymentName}`, { error: err.message })
+      if (onStatus) onStatus(`${deploymentName}: checking status...`)
     }
     await new Promise(r => setTimeout(r, pollInterval))
   }
@@ -418,12 +466,12 @@ export async function pullAndRestart(onProgress?: UpdateProgressCallback): Promi
 
       // Step 2: Update frontend deployment image tag
       emit({ step: 2, totalSteps, label: `Updating frontend image to ${frontendTag}`, status: 'running' })
-      await updateK8sDeployment(namespace, frontendDeployment, FRONTEND_IMAGE, frontendTag)
+      const frontendGeneration = await updateK8sDeployment(namespace, frontendDeployment, FRONTEND_IMAGE, frontendTag)
       emit({ step: 2, totalSteps, label: `Frontend image set to ${frontendTag}`, status: 'done' })
 
-      // Step 3: Wait for frontend rollout
-      emit({ step: 3, totalSteps, label: 'Waiting for frontend pods', status: 'running' })
-      const frontendResult = await waitForRollout(namespace, frontendDeployment, 120000, (msg) => {
+      // Step 3: Wait for frontend rollout (track new generation to avoid false-positive from old pods)
+      emit({ step: 3, totalSteps, label: 'Waiting for frontend pods to roll out', status: 'running' })
+      const frontendResult = await waitForRollout(namespace, frontendDeployment, frontendGeneration, 180000, (msg) => {
         emit({ step: 3, totalSteps, label: msg, status: 'running' })
       })
       if (!frontendResult.ready) {
@@ -434,12 +482,12 @@ export async function pullAndRestart(onProgress?: UpdateProgressCallback): Promi
 
       // Step 4: Update backend deployment image tag
       emit({ step: 4, totalSteps, label: `Updating backend image to ${backendTag}`, status: 'running' })
-      await updateK8sDeployment(namespace, backendDeployment, BACKEND_IMAGE, backendTag)
+      const backendGeneration = await updateK8sDeployment(namespace, backendDeployment, BACKEND_IMAGE, backendTag)
       emit({ step: 4, totalSteps, label: `Backend image set to ${backendTag}`, status: 'done' })
 
       // Step 5: Wait for backend rollout (will likely kill this process as the pod gets replaced)
       emit({ step: 5, totalSteps, label: 'Waiting for backend pods — connection may drop', status: 'running' })
-      const backendResult = await waitForRollout(namespace, backendDeployment, 120000, (msg) => {
+      const backendResult = await waitForRollout(namespace, backendDeployment, backendGeneration, 180000, (msg) => {
         emit({ step: 5, totalSteps, label: msg, status: 'running' })
       })
       emit({ step: 5, totalSteps, label: backendResult.ready ? backendResult.message : 'Backend restarting — connection may drop', status: backendResult.ready ? 'done' : 'running' })

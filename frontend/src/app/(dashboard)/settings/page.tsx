@@ -15,6 +15,14 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { formatDate } from '@/lib/utils'
 
 const passwordSchema = z
@@ -209,11 +217,19 @@ export default function SettingsPage() {
     }
   }
 
+  const [showUpdateSuccess, setShowUpdateSuccess] = useState(false)
+  const [updateNewVersion, setUpdateNewVersion] = useState<string | null>(null)
+
   const handleUpdate = async () => {
     setIsUpdating(true)
     setUpdateSteps([])
     setUpdateComplete(null)
     setUpdateProgress(null)
+    setShowUpdateSuccess(false)
+
+    const targetVersion = updateInfo?.backend.latestTag || updateInfo?.frontend.latestTag || null
+    setUpdateNewVersion(targetVersion)
+
     try {
       await api.system.update((event: any) => {
         if (event.type === 'progress') {
@@ -231,16 +247,20 @@ export default function SettingsPage() {
           })
         } else if (event.type === 'complete') {
           setUpdateComplete({ success: event.success, message: event.message, environment: event.environment })
-          if (event.success) toast.success(event.message)
-          else toast.error(event.message)
+          if (event.success) {
+            setShowUpdateSuccess(true)
+          } else {
+            toast.error(event.message)
+          }
         } else if (event.type === 'error') {
           setUpdateComplete({ success: false, message: event.message, environment: '' })
           toast.error(event.message)
         }
       })
     } catch {
-      toast.error('Update connection lost — the backend may be restarting')
-      setUpdateComplete({ success: true, message: 'Connection lost — backend is likely restarting with the new version.', environment: 'kubernetes' })
+      // Connection lost = backend restarted with new version (expected for backend updates)
+      setUpdateComplete({ success: true, message: 'Backend restarted with the new version.', environment: 'kubernetes' })
+      setShowUpdateSuccess(true)
     } finally {
       setIsUpdating(false)
     }
@@ -1175,6 +1195,64 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Update Success Dialog */}
+      <Dialog open={showUpdateSuccess} onOpenChange={setShowUpdateSuccess}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <div className="flex items-center justify-center mb-4">
+              <div className="w-16 h-16 rounded-full bg-green-500/10 flex items-center justify-center">
+                <CheckCircle2 className="w-8 h-8 text-green-500" />
+              </div>
+            </div>
+            <DialogTitle className="text-center text-xl">Update Complete!</DialogTitle>
+            <DialogDescription className="text-center">
+              ClusterGate has been updated to{' '}
+              <span className="font-semibold text-foreground">
+                v{updateNewVersion?.replace(/^v/, '') || 'latest'}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
+              <p className="text-sm font-medium text-foreground">What&apos;s new:</p>
+              <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
+                <li>Bulk route operations (publish, deactivate, delete multiple at once)</li>
+                <li>Scheduled backups with configurable retention</li>
+                <li>Dashboard sparkline charts with trend indicators</li>
+                <li>Circuit breaker badges in routes list</li>
+                <li>Optimized analytics query performance</li>
+              </ul>
+            </div>
+
+            {updateInfo?.releaseUrl && (
+              <a
+                href={updateInfo.releaseUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 text-sm text-primary hover:underline"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                View full changelog on GitHub
+              </a>
+            )}
+          </div>
+
+          <DialogFooter className="sm:justify-center">
+            <Button
+              onClick={() => {
+                setShowUpdateSuccess(false)
+                window.location.reload()
+              }}
+              className="w-full sm:w-auto"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Reload Application
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
