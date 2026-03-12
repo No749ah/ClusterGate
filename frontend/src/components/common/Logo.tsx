@@ -1,9 +1,33 @@
+'use client'
+
+import { useRef, useCallback } from 'react'
+import { toast } from 'sonner'
+
 interface LogoProps {
   size?: number
   className?: string
+  onSecretClick?: () => void
 }
 
-export function Logo({ size = 32, className }: LogoProps) {
+export function Logo({ size = 32, className, onSecretClick }: LogoProps) {
+  const clickCount = useRef(0)
+  const clickTimer = useRef<ReturnType<typeof setTimeout>>()
+
+  const handleClick = useCallback(() => {
+    clickCount.current++
+    if (clickTimer.current) clearTimeout(clickTimer.current)
+
+    if (clickCount.current >= 7) {
+      clickCount.current = 0
+      onSecretClick?.()
+      toast('You found a secret!', { description: 'Try the Konami code next... ↑↑↓↓←→←→BA' })
+    } else if (clickCount.current >= 3) {
+      clickTimer.current = setTimeout(() => { clickCount.current = 0 }, 1500)
+    } else {
+      clickTimer.current = setTimeout(() => { clickCount.current = 0 }, 1500)
+    }
+  }, [onSecretClick])
+
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"
@@ -12,6 +36,8 @@ export function Logo({ size = 32, className }: LogoProps) {
       width={size}
       height={size}
       className={className}
+      onClick={handleClick}
+      style={{ cursor: 'pointer' }}
     >
       <defs>
         <linearGradient id="logo-g" x1="0%" y1="0%" x2="100%" y2="100%">

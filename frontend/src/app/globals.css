@@ -101,3 +101,86 @@
   60% { transform: translateX(-3px); }
   80% { transform: translateX(2px); }
 }
+
+/* Party mode! (Konami code / secret command) */
+@keyframes rainbow-border {
+  0% { border-color: #ef4444; }
+  14% { border-color: #f97316; }
+  28% { border-color: #eab308; }
+  42% { border-color: #22c55e; }
+  57% { border-color: #06b6d4; }
+  71% { border-color: #6366f1; }
+  85% { border-color: #a855f7; }
+  100% { border-color: #ef4444; }
+}
+
+@keyframes rainbow-text {
+  0% { color: #ef4444; }
+  14% { color: #f97316; }
+  28% { color: #eab308; }
+  42% { color: #22c55e; }
+  57% { color: #06b6d4; }
+  71% { color: #6366f1; }
+  85% { color: #a855f7; }
+  100% { color: #ef4444; }
+}
+
+@keyframes party-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes party-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+@keyframes disco-bg {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.party-mode aside {
+  animation: rainbow-border 3s linear infinite;
+}
+
+.party-mode aside .party-logo {
+  animation: party-spin 2s linear infinite;
+}
+
+.party-mode aside h1 {
+  animation: rainbow-text 3s linear infinite;
+}
+
+.party-mode aside nav a.bg-primary\/15 {
+  animation: party-bounce 0.6s ease-in-out infinite;
+}
+
+/* Nyan mode — rainbow trail on cursor */
+.nyan-mode {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='24' height='24'%3E%3Ctext y='18' font-size='18'%3E%F0%9F%90%B1%3C/text%3E%3C/svg%3E") 12 12, auto;
+}
+
+/* Matrix mode */
+@keyframes matrix-fall {
+  0% { transform: translateY(-100%); opacity: 1; }
+  100% { transform: translateY(100vh); opacity: 0.3; }
+}
+
+.matrix-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.matrix-char {
+  position: absolute;
+  color: #00ff00;
+  font-family: monospace;
+  font-size: 14px;
+  animation: matrix-fall linear forwards;
+  text-shadow: 0 0 8px #00ff00;
+}

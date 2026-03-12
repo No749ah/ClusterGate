@@ -24,6 +24,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { formatDate } from '@/lib/utils'
+import { Confetti } from '@/components/fun/Confetti'
 
 const passwordSchema = z
   .object({
@@ -1197,6 +1198,7 @@ export default function SettingsPage() {
       )}
 
       {/* Update Success Dialog */}
+      {showUpdateSuccess && <Confetti />}
       <Dialog open={showUpdateSuccess} onOpenChange={setShowUpdateSuccess}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -1218,11 +1220,10 @@ export default function SettingsPage() {
             <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
               <p className="text-sm font-medium text-foreground">What&apos;s new:</p>
               <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                <li>Bulk route operations (publish, deactivate, delete multiple at once)</li>
-                <li>Scheduled backups with configurable retention</li>
-                <li>Dashboard sparkline charts with trend indicators</li>
-                <li>Circuit breaker badges in routes list</li>
-                <li>Optimized analytics query performance</li>
+                <li>Easter eggs and fun surprises hidden throughout the UI</li>
+                <li>Confetti celebration on successful updates</li>
+                <li>Fun 404 page with glitch effect</li>
+                <li>Secret commands in the command palette (Ctrl+K)</li>
               </ul>
             </div>
 

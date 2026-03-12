@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive } from 'lucide-react'
+import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive, Sparkles, Cat, Binary } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
+import { toast } from 'sonner'
+import { usePartyMode } from '@/hooks/usePartyMode'
 
 interface CommandItem {
   id: string
@@ -29,6 +31,40 @@ const PAGES: CommandItem[] = [
   { id: 'settings', label: 'Settings', description: 'Account & system', icon: Settings, href: '/settings' },
 ]
 
+interface SecretCommand {
+  id: string
+  trigger: string
+  label: string
+  description: string
+  icon: typeof Search
+  action: () => void
+}
+
+function spawnMatrixRain() {
+  const overlay = document.createElement('div')
+  overlay.className = 'matrix-overlay'
+  document.body.appendChild(overlay)
+
+  const chars = 'アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン0123456789ABCDEF'
+  for (let i = 0; i < 60; i++) {
+    const span = document.createElement('span')
+    span.className = 'matrix-char'
+    span.textContent = chars[Math.floor(Math.random() * chars.length)]
+    span.style.left = `${Math.random() * 100}%`
+    span.style.animationDuration = `${1.5 + Math.random() * 3}s`
+    span.style.animationDelay = `${Math.random() * 2}s`
+    span.style.fontSize = `${10 + Math.random() * 14}px`
+    overlay.appendChild(span)
+  }
+
+  setTimeout(() => overlay.remove(), 6000)
+}
+
+function activateNyanMode() {
+  document.documentElement.classList.add('nyan-mode')
+  setTimeout(() => document.documentElement.classList.remove('nyan-mode'), 10000)
+}
+
 export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
@@ -38,6 +74,34 @@ export function CommandPalette() {
   const { user } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
   const searchTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const partyMode = usePartyMode()
+
+  const secretCommands: SecretCommand[] = [
+    {
+      id: 'party',
+      trigger: 'party',
+      label: 'Party Mode',
+      description: partyMode.active ? 'Disable party mode' : 'Enable party mode',
+      icon: Sparkles,
+      action: () => { partyMode.toggle(); toast(partyMode.active ? 'Party over!' : 'Party mode activated!') },
+    },
+    {
+      id: 'matrix',
+      trigger: 'matrix',
+      label: 'Enter the Matrix',
+      description: 'You take the red pill...',
+      icon: Binary,
+      action: () => { spawnMatrixRain(); toast('Wake up, Neo...') },
+    },
+    {
+      id: 'nyan',
+      trigger: 'nyan',
+      label: 'Nyan Mode',
+      description: 'Meow meow meow meow',
+      icon: Cat,
+      action: () => { activateNyanMode(); toast('Nyan nyan nyan~') },
+    },
+  ]
 
   // Ctrl+K to open
   useEffect(() => {
@@ -75,7 +139,12 @@ export function CommandPalette() {
            p.description?.toLowerCase().includes(query.toLowerCase())
   })
 
+  const matchedSecrets = query.length >= 3 ? secretCommands.filter((s) =>
+    s.trigger.toLowerCase().startsWith(query.toLowerCase())
+  ) : []
+
   const allItems = [
+    ...matchedSecrets.map((s) => ({ type: 'secret' as const, ...s, href: '' })),
     ...filteredPages.map((p) => ({ type: 'page' as const, ...p })),
     ...routeResults.map((r) => ({
       type: 'route' as const,
@@ -86,6 +155,17 @@ export function CommandPalette() {
       href: `/routes/${r.id}`,
     })),
   ]
+
+  const executeItem = useCallback((item: typeof allItems[number]) => {
+    setOpen(false)
+    setQuery('')
+    if (item.type === 'secret') {
+      const secret = secretCommands.find((s) => s.id === item.id)
+      secret?.action()
+    } else {
+      router.push(item.href)
+    }
+  }, [router, secretCommands])
 
   const navigate = useCallback((href: string) => {
     router.push(href)
@@ -101,7 +181,7 @@ export function CommandPalette() {
       e.preventDefault()
       setActiveIndex((i) => Math.max(i - 1, 0))
     } else if (e.key === 'Enter' && allItems[activeIndex]) {
-      navigate(allItems[activeIndex].href)
+      executeItem(allItems[activeIndex])
     }
   }
 
@@ -135,19 +215,44 @@ export function CommandPalette() {
             </div>
           ) : (
             <>
+              {matchedSecrets.length > 0 && (
+                <div className="mb-1">
+                  <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Secret Commands</p>
+                  {matchedSecrets.map((item, i) => {
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => executeItem({ type: 'secret' as const, ...item, href: '' })}
+                        onMouseEnter={() => setActiveIndex(i)}
+                        className={cn(
+                          'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm transition-colors',
+                          activeIndex === i ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted/50'
+                        )}
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="font-medium">{item.label}</span>
+                        <span className="text-xs text-muted-foreground ml-auto">{item.description}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
               {filteredPages.length > 0 && (
                 <div className="mb-1">
                   <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Pages</p>
                   {filteredPages.map((item, i) => {
+                    const idx = matchedSecrets.length + i
                     const Icon = item.icon
                     return (
                       <button
                         key={item.id}
                         onClick={() => navigate(item.href)}
-                        onMouseEnter={() => setActiveIndex(i)}
+                        onMouseEnter={() => setActiveIndex(idx)}
                         className={cn(
                           'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm transition-colors',
-                          activeIndex === i ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted/50'
+                          activeIndex === idx ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted/50'
                         )}
                       >
                         <Icon className="w-4 h-4 flex-shrink-0" />
@@ -165,7 +270,7 @@ export function CommandPalette() {
                 <div>
                   <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Routes</p>
                   {routeResults.map((item, i) => {
-                    const idx = filteredPages.length + i
+                    const idx = matchedSecrets.length + filteredPages.length + i
                     return (
                       <button
                         key={item.id}

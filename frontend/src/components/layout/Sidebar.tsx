@@ -22,6 +22,8 @@ import {
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
 import { useAuth, useLogout } from '@/hooks/useAuth'
+import { useKonamiCode } from '@/hooks/useKonamiCode'
+import { usePartyMode } from '@/hooks/usePartyMode'
 
 const COLLAPSED_KEY = 'clustergate-sidebar-collapsed'
 
@@ -72,6 +74,11 @@ export function Sidebar() {
   const logoutMutation = useLogout()
   const [collapsed, setCollapsed] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const partyMode = usePartyMode()
+
+  useKonamiCode(() => {
+    partyMode.toggle()
+  })
 
   useEffect(() => {
     const stored = localStorage.getItem(COLLAPSED_KEY)
@@ -134,7 +141,7 @@ export function Sidebar() {
         collapsed ? 'justify-center px-2 py-5' : 'px-4 py-5'
       )}>
         <div className={cn('flex items-center', collapsed ? '' : 'gap-3 flex-1')}>
-          <Logo size={36} />
+          <Logo size={36} className="party-logo" onSecretClick={partyMode.activate} />
           {!collapsed && (
             <div className="overflow-hidden">
               <h1 className="text-sm font-semibold text-sidebar-foreground whitespace-nowrap">ClusterGate</h1>
