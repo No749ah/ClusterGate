@@ -141,10 +141,6 @@
   100% { background-position: 0% 50%; }
 }
 
-.party-mode aside {
-  animation: rainbow-border 3s linear infinite;
-}
-
 .party-mode aside .party-logo {
   animation: party-spin 2s linear infinite;
 }
