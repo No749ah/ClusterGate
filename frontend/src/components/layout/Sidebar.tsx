@@ -16,6 +16,8 @@ import {
   LogOut,
   BarChart3,
   HardDrive,
+  FolderOpen,
+  Building2,
 } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
@@ -48,12 +50,14 @@ const navSections: NavSection[] = [
     title: 'Traffic',
     items: [
       { href: '/routes', icon: Route, label: 'Routes' },
+      { href: '/groups', icon: FolderOpen, label: 'Route Groups' },
       { href: '/activity', icon: ScrollText, label: 'Logs' },
     ],
   },
   {
     title: 'Administration',
     items: [
+      { href: '/organizations', icon: Building2, label: 'Organizations', adminOnly: true },
       { href: '/users', icon: Users, label: 'Users', adminOnly: true },
       { href: '/audit', icon: Shield, label: 'Audit Log', adminOnly: true },
       { href: '/backups', icon: HardDrive, label: 'Backups', adminOnly: true },

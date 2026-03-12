@@ -7,6 +7,10 @@ export type RouteStatus = 'DRAFT' | 'PUBLISHED'
 export type AuthType = 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
 export type HealthStatus = 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN'
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
+export type LBStrategy = 'ROUND_ROBIN' | 'WEIGHTED' | 'FAILOVER'
+export type TransformPhase = 'REQUEST' | 'RESPONSE'
+export type TransformType = 'SET_HEADER' | 'REMOVE_HEADER' | 'REWRITE_BODY_JSON' | 'SET_QUERY_PARAM' | 'REMOVE_QUERY_PARAM' | 'MAP_STATUS_CODE'
+export type OrgRole = 'OWNER' | 'ADMIN' | 'MEMBER'
 
 export interface User {
   id: string
@@ -70,6 +74,25 @@ export interface Route {
   maintenanceMode: boolean
   maintenanceMessage: string | null
 
+  // WebSocket
+  wsEnabled: boolean
+
+  // Circuit Breaker
+  circuitBreakerEnabled: boolean
+  cbFailureThreshold: number
+  cbRecoveryTimeout: number
+  cbState: string
+  cbFailureCount: number
+  cbLastFailureAt: string | null
+  cbOpenedAt: string | null
+
+  // Load Balancing
+  lbStrategy: LBStrategy
+
+  // Group & Org
+  routeGroupId: string | null
+  organizationId: string | null
+
   deletedAt: string | null
   createdAt: string
   updatedAt: string
@@ -77,8 +100,11 @@ export interface Route {
   // Relations
   createdBy: { id: string; name: string; email: string } | null
   updatedBy: { id: string; name: string; email: string } | null
+  routeGroup?: RouteGroup | null
   healthChecks?: HealthCheck[]
   apiKeys?: ApiKey[]
+  targets?: RouteTarget[]
+  transformRules?: TransformRule[]
   _count?: { requestLogs: number; versions?: number }
 }
 
@@ -199,6 +225,17 @@ export interface RouteFormData {
   rateLimitWindow: number
   maintenanceMode: boolean
   maintenanceMessage?: string
+  // WebSocket
+  wsEnabled?: boolean
+  // Circuit Breaker
+  circuitBreakerEnabled?: boolean
+  cbFailureThreshold?: number
+  cbRecoveryTimeout?: number
+  // Load Balancing
+  lbStrategy?: LBStrategy
+  // Group & Org
+  routeGroupId?: string | null
+  organizationId?: string | null
 }
 
 // Filter types
@@ -267,5 +304,113 @@ export interface Notification {
   isRead: boolean
   routeId: string | null
   route: { id: string; name: string } | null
+  createdAt: string
+}
+
+// ============================================================================
+// Route Targets (Load Balancing)
+// ============================================================================
+
+export interface RouteTarget {
+  id: string
+  routeId: string
+  url: string
+  weight: number
+  priority: number
+  isHealthy: boolean
+  lastError: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// ============================================================================
+// Transform Rules
+// ============================================================================
+
+export interface TransformRule {
+  id: string
+  routeId: string
+  phase: TransformPhase
+  type: TransformType
+  name: string
+  config: Record<string, any>
+  order: number
+  isActive: boolean
+  condition: Record<string, any> | null
+  createdAt: string
+  updatedAt: string
+}
+
+// ============================================================================
+// Route Groups
+// ============================================================================
+
+export interface RouteGroup {
+  id: string
+  name: string
+  description: string | null
+  pathPrefix: string
+  teamId: string | null
+  team?: { id: string; name: string } | null
+  isActive: boolean
+  defaultTimeout: number | null
+  defaultRetryCount: number | null
+  defaultRateLimitEnabled: boolean | null
+  defaultRateLimitMax: number | null
+  defaultRateLimitWindow: number | null
+  defaultAuthType: AuthType | null
+  defaultCorsEnabled: boolean | null
+  defaultCorsOrigins: string[]
+  defaultIpAllowlist: string[]
+  routes?: { id: string; name: string; publicPath: string; status: RouteStatus; isActive: boolean }[]
+  _count?: { routes: number }
+  createdAt: string
+  updatedAt: string
+}
+
+// ============================================================================
+// Organizations & Teams
+// ============================================================================
+
+export interface Organization {
+  id: string
+  name: string
+  slug: string
+  description: string | null
+  isActive: boolean
+  memberships?: OrgMembership[]
+  teams?: Team[]
+  _count?: { memberships: number; teams: number; routes: number }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OrgMembership {
+  id: string
+  userId: string
+  organizationId: string
+  role: OrgRole
+  user?: { id: string; name: string; email: string; role: Role }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface Team {
+  id: string
+  organizationId: string
+  name: string
+  description: string | null
+  members?: TeamMembership[]
+  routeGroups?: RouteGroup[]
+  _count?: { members: number; routeGroups: number }
+  createdAt: string
+  updatedAt: string
+}
+
+export interface TeamMembership {
+  id: string
+  userId: string
+  teamId: string
+  user?: { id: string; name: string; email: string }
   createdAt: string
 }

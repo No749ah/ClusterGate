@@ -3,16 +3,25 @@ import https from 'https'
 import { Request, Response } from 'express'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { validateWebhookSignature, isSafeRegex } from '../lib/security'
-import { Route } from '@prisma/client'
+import { Route, RouteTarget, TransformRule } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { AppError } from '../lib/errors'
 import { checkRateLimit } from '../lib/rateLimitStore'
 import { proxyRequestsTotal, proxyRequestDuration } from '../lib/metrics'
 import { notifyRouteError } from './notificationService'
+import { checkCircuitBreaker, recordSuccess, recordFailure } from './circuitBreakerService'
+import { selectTarget, markTargetUnhealthy, markTargetHealthy } from './loadBalancerService'
+import { applyRequestTransforms, applyResponseTransforms } from './transformService'
 import { v4 as uuid } from 'uuid'
 
-// Headers to never forward to target
+// Extended route type with relations loaded by proxyHandler
+type RouteWithRelations = Route & {
+  targets?: RouteTarget[]
+  transformRules?: TransformRule[]
+}
+
+// Headers to never forward to target — 'upgrade' removed to support WebSocket
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
   'keep-alive',
@@ -21,13 +30,23 @@ const HOP_BY_HOP_HEADERS = new Set([
   'te',
   'trailers',
   'transfer-encoding',
-  'upgrade',
   'host',
 ])
 
-export async function proxyRequest(route: Route, req: Request, res: Response): Promise<void> {
+export async function proxyRequest(route: RouteWithRelations | Route, req: Request, res: Response): Promise<void> {
   const start = Date.now()
   const requestId = uuid()
+  const routeExt = route as RouteWithRelations
+
+  // ---- Circuit Breaker check ----
+  if (route.circuitBreakerEnabled) {
+    const cbResult = await checkCircuitBreaker(route)
+    if (!cbResult.allowed) {
+      res.setHeader('X-CircuitBreaker-State', cbResult.state)
+      throw AppError.serviceUnavailable('Circuit breaker is OPEN — requests are temporarily blocked')
+    }
+    res.setHeader('X-CircuitBreaker-State', cbResult.state)
+  }
 
   // Validate IP allowlist
   if (route.ipAllowlist.length > 0) {
@@ -98,13 +117,27 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     targetPath = '/'
   }
 
+  // ---- Load Balancing: select target URL ----
+  let selectedTargetUrl = route.targetUrl
+  let selectedTargetId: string | null = null
+  const targets = routeExt.targets
+  if (targets && targets.length > 0) {
+    const selected = await selectTarget(route.id, route.lbStrategy, targets)
+    if (!selected) {
+      throw AppError.serviceUnavailable('No healthy targets available')
+    }
+    selectedTargetUrl = selected.url
+    selectedTargetId = selected.targetId
+  }
+
   // Build full target URL
-  const targetBase = route.targetUrl.replace(/\/$/, '')
+  const targetBase = selectedTargetUrl.replace(/\/$/, '')
   const fullTargetUrl = `${targetBase}${targetPath}`
 
   // Build query string
-  const queryString = Object.keys(req.query).length
-    ? `?${new URLSearchParams(req.query as Record<string, string>).toString()}`
+  let queryParams = { ...(req.query as Record<string, string>) }
+  const queryString = Object.keys(queryParams).length
+    ? `?${new URLSearchParams(queryParams).toString()}`
     : ''
 
   const finalUrl = `${fullTargetUrl}${queryString}`
@@ -139,14 +172,31 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
   forwardHeaders['X-Request-ID'] = requestId
 
   // Get request body
-  let requestBody: string | undefined
+  let requestBody: any = undefined
   if (req.body && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
     requestBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
   }
 
+  // ---- Apply request transforms ----
+  const transformRules = routeExt.transformRules
+  if (transformRules && transformRules.length > 0) {
+    const transformed = applyRequestTransforms(transformRules, forwardHeaders, queryParams, requestBody ? JSON.parse(typeof requestBody === 'string' ? requestBody : '{}') : undefined)
+    Object.assign(forwardHeaders, transformed.headers)
+    queryParams = transformed.queryParams
+    if (transformed.body !== undefined) {
+      requestBody = typeof transformed.body === 'string' ? transformed.body : JSON.stringify(transformed.body)
+    }
+  }
+
+  // Rebuild URL with potentially transformed query params
+  const transformedQs = Object.keys(queryParams).length
+    ? `?${new URLSearchParams(queryParams).toString()}`
+    : ''
+  const resolvedUrl = `${fullTargetUrl.split('?')[0]}${transformedQs}`
+
   const axiosConfig: AxiosRequestConfig = {
     method: req.method as AxiosRequestConfig['method'],
-    url: finalUrl,
+    url: resolvedUrl,
     headers: forwardHeaders,
     data: requestBody,
     timeout: route.timeout,
@@ -197,17 +247,33 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     responseStatus = response.status
 
     // Forward response headers (excluding hop-by-hop)
+    const respHeaders: Record<string, string> = {}
     for (const [key, value] of Object.entries(response.headers as Record<string, string>)) {
       const lowerKey = key.toLowerCase()
       if (!HOP_BY_HOP_HEADERS.has(lowerKey) && lowerKey !== 'content-encoding') {
-        res.setHeader(key, value)
+        respHeaders[key] = value
       }
+    }
+
+    let responseBuffer = Buffer.from(response.data)
+
+    // ---- Apply response transforms ----
+    if (transformRules && transformRules.length > 0) {
+      const transformed = applyResponseTransforms(transformRules, responseStatus ?? 502, respHeaders, responseBuffer)
+      responseStatus = transformed.statusCode
+      responseBuffer = transformed.body
+      Object.keys(respHeaders).forEach((k) => delete respHeaders[k])
+      Object.assign(respHeaders, transformed.headers)
+    }
+
+    // Set response headers
+    for (const [key, value] of Object.entries(respHeaders)) {
+      res.setHeader(key, value)
     }
 
     res.setHeader('X-Request-ID', requestId)
     res.setHeader('X-ClusterGate-Duration', String(duration))
 
-    const responseBuffer = Buffer.from(response.data)
     responseBody = responseBuffer.toString('utf8').slice(0, 10000) // Cap logged body
 
     proxyRequestsTotal.inc({
@@ -217,6 +283,16 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
     })
     proxyRequestDuration.observe({ route_id: route.id }, duration / 1000)
 
+    // Circuit breaker: record success
+    if (route.circuitBreakerEnabled) {
+      recordSuccess(route.id).catch(() => {})
+    }
+
+    // Load balancer: mark target healthy on success
+    if (selectedTargetId) {
+      markTargetHealthy(selectedTargetId).catch(() => {})
+    }
+
     // Log request
     logRequest({
       routeId: route.id,
@@ -225,12 +301,12 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
       path: req.path,
       queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
-      requestBody: requestBody?.slice(0, 5000),
+      requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
       responseStatus,
-      responseHeaders: sanitizeHeaders(response.headers as Record<string, string>),
+      responseHeaders: sanitizeHeaders(respHeaders),
       responseBody: responseBody?.slice(0, 5000),
       duration,
-      targetUrl: finalUrl,
+      targetUrl: resolvedUrl,
       ip: req.ip,
       userAgent: req.get('user-agent'),
     })
@@ -242,10 +318,20 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
 
     logger.error('Proxy request failed', {
       routeId: route.id,
-      targetUrl: finalUrl,
+      targetUrl: resolvedUrl,
       error: error,
       duration,
     })
+
+    // Circuit breaker: record failure
+    if (route.circuitBreakerEnabled) {
+      recordFailure(route.id).catch(() => {})
+    }
+
+    // Load balancer: mark target unhealthy on failure
+    if (selectedTargetId) {
+      markTargetUnhealthy(selectedTargetId, error || 'Proxy error').catch(() => {})
+    }
 
     // Notify admins about proxy error
     notifyRouteError(route.id, route.name, error || 'Unknown error')
@@ -263,11 +349,11 @@ export async function proxyRequest(route: Route, req: Request, res: Response): P
       path: req.path,
       queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
-      requestBody: requestBody?.slice(0, 5000),
+      requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
       responseStatus,
       responseHeaders: {},
       duration,
-      targetUrl: finalUrl,
+      targetUrl: resolvedUrl,
       error: error,
       ip: req.ip,
       userAgent: req.get('user-agent'),

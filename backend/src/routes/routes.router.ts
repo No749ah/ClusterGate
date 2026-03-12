@@ -43,6 +43,17 @@ const routeBodySchema = z.object({
   rateLimitWindow: z.coerce.number().int().min(1000).max(3600000).default(60000),
   maintenanceMode: z.boolean().default(false),
   maintenanceMessage: z.string().optional(),
+  // WebSocket
+  wsEnabled: z.boolean().default(false),
+  // Circuit Breaker
+  circuitBreakerEnabled: z.boolean().default(false),
+  cbFailureThreshold: z.number().int().min(1).max(100).default(5),
+  cbRecoveryTimeout: z.number().int().min(1000).max(300000).default(30000),
+  // Load Balancing
+  lbStrategy: z.enum(['ROUND_ROBIN', 'WEIGHTED', 'FAILOVER']).default('ROUND_ROBIN'),
+  // Group & Org
+  routeGroupId: z.string().nullable().optional(),
+  organizationId: z.string().nullable().optional(),
 })
 
 /**

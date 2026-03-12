@@ -21,7 +21,14 @@ interface BackupMeta {
 // All models to export, in dependency order (parents before children)
 const BACKUP_MODELS = [
   'user',
+  'organization',
+  'orgMembership',
+  'team',
+  'teamMembership',
+  'routeGroup',
   'route',
+  'routeTarget',
+  'transformRule',
   'routeVersion',
   'requestLog',
   'apiKey',

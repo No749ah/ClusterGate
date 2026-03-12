@@ -14,12 +14,17 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
   try {
     const path = req.path // already has /r stripped by Express mount
 
-    // Find matching route by path prefix
+    // Find matching route by path prefix — include targets, transforms, routeGroup
     const routes = await prisma.route.findMany({
       where: {
         isActive: true,
         deletedAt: null,
         status: 'PUBLISHED',
+      },
+      include: {
+        targets: true,
+        transformRules: { where: { isActive: true }, orderBy: { order: 'asc' } },
+        routeGroup: true,
       },
       orderBy: [
         // More specific paths first (longer path = more specific)

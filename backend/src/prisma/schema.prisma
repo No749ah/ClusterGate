@@ -40,6 +40,32 @@ enum HealthStatus {
   UNKNOWN
 }
 
+enum LBStrategy {
+  ROUND_ROBIN
+  WEIGHTED
+  FAILOVER
+}
+
+enum TransformPhase {
+  REQUEST
+  RESPONSE
+}
+
+enum TransformType {
+  SET_HEADER
+  REMOVE_HEADER
+  REWRITE_BODY_JSON
+  SET_QUERY_PARAM
+  REMOVE_QUERY_PARAM
+  MAP_STATUS_CODE
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
 // =============================================================================
 // Models
 // =============================================================================
@@ -59,15 +85,109 @@ model User {
   updatedAt        DateTime  @updatedAt
 
   // Relations
-  createdRoutes  Route[]        @relation("RouteCreatedBy")
-  updatedRoutes  Route[]        @relation("RouteUpdatedBy")
-  routeVersions  RouteVersion[]
-  auditLogs      AuditLog[]
-  notifications  Notification[]
-  inviteTokens   InviteToken[]  @relation("InviteCreatedBy")
+  createdRoutes    Route[]          @relation("RouteCreatedBy")
+  updatedRoutes    Route[]          @relation("RouteUpdatedBy")
+  routeVersions    RouteVersion[]
+  auditLogs        AuditLog[]
+  notifications    Notification[]
+  inviteTokens     InviteToken[]    @relation("InviteCreatedBy")
+  orgMemberships   OrgMembership[]
+  teamMemberships  TeamMembership[]
 
   @@index([email])
   @@map("users")
+}
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teams       Team[]
+  memberships OrgMembership[]
+  routes      Route[]
+
+  @@map("organizations")
+}
+
+model OrgMembership {
+  id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role           OrgRole      @default(MEMBER)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([userId, organizationId])
+  @@index([organizationId])
+  @@map("org_memberships")
+}
+
+model Team {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  members     TeamMembership[]
+  routeGroups RouteGroup[]
+
+  @@unique([organizationId, name])
+  @@map("teams")
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, teamId])
+  @@map("team_memberships")
+}
+
+model RouteGroup {
+  id          String  @id @default(cuid())
+  name        String
+  description String?
+  pathPrefix  String  @unique // e.g. "/r/payments"
+
+  // Inherited defaults
+  defaultTimeout           Int?
+  defaultRetryCount        Int?
+  defaultRateLimitEnabled  Boolean?
+  defaultRateLimitMax      Int?
+  defaultRateLimitWindow   Int?
+  defaultAuthType          AuthType?
+  defaultAuthValue         String?
+  defaultAddHeaders        Json?       // Record<string,string>
+  defaultRemoveHeaders     String[]    @default([])
+  defaultCorsEnabled       Boolean?
+  defaultCorsOrigins       String[]    @default([])
+  defaultIpAllowlist       String[]    @default([])
+
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Team scoping
+  teamId      String?
+  team        Team?    @relation(fields: [teamId], references: [id], onDelete: SetNull)
+
+  routes      Route[]
+
+  @@map("route_groups")
 }
 
 model Route {
@@ -89,19 +209,19 @@ model Route {
 
   // Rate limiting
   rateLimitEnabled Boolean  @default(false)
-  rateLimitMax     Int      @default(100)     // max requests per window
-  rateLimitWindow  Int      @default(60000)   // window in ms (default 1 min)
+  rateLimitMax     Int      @default(100)
+  rateLimitWindow  Int      @default(60000)
 
   stripPrefix  Boolean     @default(false)
   sslVerify    Boolean     @default(true)
   requestBodyLimit String  @default("10mb")
 
   // Header rules
-  addHeaders    Json        @default("{}")    // Record<string, string>
+  addHeaders    Json        @default("{}")
   removeHeaders String[]    @default([])
 
   // Path rewrite
-  rewriteRules  Json        @default("[]")   // Array<{from: string, to: string}>
+  rewriteRules  Json        @default("[]")
 
   // CORS
   corsEnabled  Boolean      @default(false)
@@ -118,6 +238,21 @@ model Route {
   maintenanceMode    Boolean @default(false)
   maintenanceMessage String? @default("This service is temporarily unavailable.")
 
+  // WebSocket support
+  wsEnabled    Boolean     @default(false)
+
+  // Circuit breaker
+  circuitBreakerEnabled Boolean   @default(false)
+  cbFailureThreshold    Int       @default(5)
+  cbRecoveryTimeout     Int       @default(30000)  // ms
+  cbState               String    @default("CLOSED") // CLOSED | OPEN | HALF_OPEN
+  cbFailureCount        Int       @default(0)
+  cbLastFailureAt       DateTime?
+  cbOpenedAt            DateTime?
+
+  // Load balancing
+  lbStrategy   LBStrategy  @default(ROUND_ROBIN)
+
   // Soft delete
   deletedAt    DateTime?
 
@@ -130,16 +265,60 @@ model Route {
   updatedById  String?
   updatedBy    User?        @relation("RouteUpdatedBy", fields: [updatedById], references: [id])
 
-  versions     RouteVersion[]
-  requestLogs  RequestLog[]
-  apiKeys      ApiKey[]
-  healthChecks HealthCheck[]
-  notifications Notification[]
+  routeGroupId String?
+  routeGroup   RouteGroup?  @relation(fields: [routeGroupId], references: [id], onDelete: SetNull)
+
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  versions       RouteVersion[]
+  requestLogs    RequestLog[]
+  apiKeys        ApiKey[]
+  healthChecks   HealthCheck[]
+  notifications  Notification[]
+  targets        RouteTarget[]
+  transformRules TransformRule[]
 
   @@unique([publicPath])
   @@index([status, isActive])
   @@index([deletedAt])
+  @@index([routeGroupId])
+  @@index([organizationId])
   @@map("routes")
+}
+
+model RouteTarget {
+  id        String   @id @default(cuid())
+  routeId   String
+  route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  url       String
+  weight    Int      @default(100)   // 1-100 for WEIGHTED
+  priority  Int      @default(0)     // lower = higher priority for FAILOVER
+  isHealthy Boolean  @default(true)
+  lastError String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([routeId])
+  @@map("route_targets")
+}
+
+model TransformRule {
+  id        String         @id @default(cuid())
+  routeId   String
+  route     Route          @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  phase     TransformPhase
+  type      TransformType
+  name      String
+  config    Json           // type-specific config
+  order     Int            @default(0)
+  isActive  Boolean        @default(true)
+  condition Json?          // optional condition
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([routeId, phase, order])
+  @@map("transform_rules")
 }
 
 model RouteVersion {
@@ -147,7 +326,7 @@ model RouteVersion {
   routeId   String
   route     Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
   version   Int
-  snapshot  Json     // Full route snapshot
+  snapshot  Json
   createdById String?
   createdBy User?    @relation(fields: [createdById], references: [id])
   createdAt DateTime @default(now())
@@ -202,8 +381,8 @@ model AuditLog {
   id         String   @id @default(cuid())
   userId     String?
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  action     String   // e.g. "route.create", "route.publish", "user.login"
-  resource   String   // e.g. "route", "user"
+  action     String
+  resource   String
   resourceId String?
   details    Json     @default("{}")
   ip         String?
@@ -234,7 +413,7 @@ model Notification {
   id        String   @id @default(cuid())
   userId    String?
   user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  type      String   // "route.error", "health.down", "route.published"
+  type      String
   title     String
   message   String
   isRead    Boolean  @default(false)

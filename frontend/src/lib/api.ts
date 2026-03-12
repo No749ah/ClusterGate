@@ -13,6 +13,11 @@ import {
   AuditLog,
   ApiKey,
   Notification,
+  RouteTarget,
+  TransformRule,
+  RouteGroup,
+  Organization,
+  Team,
   ApiResponse,
   PaginatedResponse,
 } from '@/types'
@@ -562,6 +567,126 @@ class ApiClient {
 
     downloadUrl: (filename: string) =>
       `${this.baseUrl}/api/backups/${encodeURIComponent(filename)}/download`,
+  }
+
+  // ============================================================================
+  // Route Targets (Load Balancing)
+  // ============================================================================
+
+  targets = {
+    list: (routeId: string) =>
+      this.get<ApiResponse<RouteTarget[]>>(`/api/routes/${routeId}/targets`),
+
+    create: (routeId: string, data: { url: string; weight?: number; priority?: number }) =>
+      this.post<ApiResponse<RouteTarget>>(`/api/routes/${routeId}/targets`, data),
+
+    update: (routeId: string, targetId: string, data: { url?: string; weight?: number; priority?: number; isHealthy?: boolean }) =>
+      this.put<ApiResponse<RouteTarget>>(`/api/routes/${routeId}/targets/${targetId}`, data),
+
+    delete: (routeId: string, targetId: string) =>
+      this.delete<ApiResponse<null>>(`/api/routes/${routeId}/targets/${targetId}`),
+  }
+
+  // ============================================================================
+  // Transform Rules
+  // ============================================================================
+
+  transforms = {
+    list: (routeId: string) =>
+      this.get<ApiResponse<TransformRule[]>>(`/api/routes/${routeId}/transforms`),
+
+    create: (routeId: string, data: { phase: string; type: string; name: string; config: Record<string, any>; order?: number; isActive?: boolean; condition?: Record<string, any> | null }) =>
+      this.post<ApiResponse<TransformRule>>(`/api/routes/${routeId}/transforms`, data),
+
+    update: (routeId: string, ruleId: string, data: Partial<{ phase: string; type: string; name: string; config: Record<string, any>; order: number; isActive: boolean; condition: Record<string, any> | null }>) =>
+      this.put<ApiResponse<TransformRule>>(`/api/routes/${routeId}/transforms/${ruleId}`, data),
+
+    delete: (routeId: string, ruleId: string) =>
+      this.delete<ApiResponse<null>>(`/api/routes/${routeId}/transforms/${ruleId}`),
+  }
+
+  // ============================================================================
+  // Route Groups
+  // ============================================================================
+
+  routeGroups = {
+    list: (filters?: { teamId?: string; search?: string }) => {
+      const params = new URLSearchParams()
+      if (filters?.teamId) params.set('teamId', filters.teamId)
+      if (filters?.search) params.set('search', filters.search)
+      const qs = params.toString()
+      return this.get<ApiResponse<RouteGroup[]>>(`/api/route-groups${qs ? `?${qs}` : ''}`)
+    },
+
+    getById: (id: string) =>
+      this.get<ApiResponse<RouteGroup>>(`/api/route-groups/${id}`),
+
+    create: (data: { name: string; pathPrefix: string; description?: string; teamId?: string; [key: string]: any }) =>
+      this.post<ApiResponse<RouteGroup>>('/api/route-groups', data),
+
+    update: (id: string, data: Partial<RouteGroup>) =>
+      this.put<ApiResponse<RouteGroup>>(`/api/route-groups/${id}`, data),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/route-groups/${id}`),
+
+    assignRoute: (groupId: string, routeId: string) =>
+      this.post<ApiResponse<Route>>(`/api/route-groups/${groupId}/routes/${routeId}`),
+
+    removeRoute: (groupId: string, routeId: string) =>
+      this.delete<ApiResponse<Route>>(`/api/route-groups/${groupId}/routes/${routeId}`),
+  }
+
+  // ============================================================================
+  // Organizations
+  // ============================================================================
+
+  organizations = {
+    list: () =>
+      this.get<ApiResponse<Organization[]>>('/api/organizations'),
+
+    getById: (id: string) =>
+      this.get<ApiResponse<Organization>>(`/api/organizations/${id}`),
+
+    create: (data: { name: string; slug: string; description?: string }) =>
+      this.post<ApiResponse<Organization>>('/api/organizations', data),
+
+    update: (id: string, data: Partial<{ name: string; description: string | null; isActive: boolean }>) =>
+      this.put<ApiResponse<Organization>>(`/api/organizations/${id}`, data),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/organizations/${id}`),
+
+    addMember: (orgId: string, userId: string, role?: string) =>
+      this.post<ApiResponse<any>>(`/api/organizations/${orgId}/members`, { userId, role }),
+
+    updateMemberRole: (orgId: string, userId: string, role: string) =>
+      this.put<ApiResponse<any>>(`/api/organizations/${orgId}/members/${userId}`, { role }),
+
+    removeMember: (orgId: string, userId: string) =>
+      this.delete<ApiResponse<null>>(`/api/organizations/${orgId}/members/${userId}`),
+
+    // Teams
+    getTeams: (orgId: string) =>
+      this.get<ApiResponse<Team[]>>(`/api/organizations/${orgId}/teams`),
+
+    getTeam: (orgId: string, teamId: string) =>
+      this.get<ApiResponse<Team>>(`/api/organizations/${orgId}/teams/${teamId}`),
+
+    createTeam: (orgId: string, data: { name: string; description?: string }) =>
+      this.post<ApiResponse<Team>>(`/api/organizations/${orgId}/teams`, data),
+
+    updateTeam: (orgId: string, teamId: string, data: { name?: string; description?: string | null }) =>
+      this.put<ApiResponse<Team>>(`/api/organizations/${orgId}/teams/${teamId}`, data),
+
+    deleteTeam: (orgId: string, teamId: string) =>
+      this.delete<ApiResponse<null>>(`/api/organizations/${orgId}/teams/${teamId}`),
+
+    addTeamMember: (orgId: string, teamId: string, userId: string) =>
+      this.post<ApiResponse<any>>(`/api/organizations/${orgId}/teams/${teamId}/members`, { userId }),
+
+    removeTeamMember: (orgId: string, teamId: string, userId: string) =>
+      this.delete<ApiResponse<null>>(`/api/organizations/${orgId}/teams/${teamId}/members/${userId}`),
   }
 }
 
