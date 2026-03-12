@@ -41,6 +41,12 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 
 - **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services under `/r/` prefix
 - **Route Management** — Create, test, publish, version, duplicate, import/export routes via UI
+- **WebSocket Proxy** — Native WebSocket upgrade support via `http-proxy` for WS/WSS routes
+- **Load Balancing** — Round-robin, weighted, and failover strategies with multiple targets per route
+- **Circuit Breaker** — Automatic failure detection (CLOSED/OPEN/HALF_OPEN) with configurable thresholds
+- **Route Groups** — Organize routes with shared path prefixes and inherited default settings
+- **Request/Response Transforms** — Set/remove headers, rewrite JSON bodies, map status codes, modify query params
+- **Multi-Tenant** — Organizations with teams, role-based membership (Owner/Admin/Member), route scoping
 - **Two-Factor Authentication** — TOTP-based 2FA with recovery codes for user accounts
 - **Analytics Dashboard** — Latency trends (p50/p95/p99), error rates, traffic heatmap, status distribution
 - **Security** — JWT auth (httpOnly cookies, 7-day sessions), bcrypt, per-route auth (API key / Basic / Bearer), rate limiting, IP allowlists, webhook secrets, CORS
@@ -60,7 +66,7 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 | Backend     | Node.js 22, TypeScript, Express.js, Prisma |
 | Database    | PostgreSQL 16                            |
 | Auth        | JWT (httpOnly cookies, 7 days), bcrypt, TOTP 2FA |
-| Proxy       | axios-based transparent forwarder        |
+| Proxy       | axios + http-proxy (WebSocket)           |
 | Docs        | Swagger UI (swagger-jsdoc + swagger-ui-express) |
 | Metrics     | Prometheus (prom-client)                 |
 | Logging     | Winston + daily rotate                   |
@@ -194,20 +200,26 @@ Public Request
   Match route by path prefix (longest match)
         |
         +-- Check: isActive, status=PUBLISHED
+        +-- Check: circuit breaker state (CLOSED/OPEN/HALF_OPEN)
         +-- Check: maintenance mode
         +-- Check: IP allowlist
         +-- Check: rate limit (if enabled)
         +-- Enforce: route-level auth (API key / Basic / Bearer)
         +-- Validate: webhook secret (if configured)
+        +-- Apply: request transforms (headers, query params, body)
         +-- Apply: header add/remove rules
         +-- Apply: path rewrite rules
-        +-- Forward to target URL
+        +-- Select target (load balancer: round-robin/weighted/failover)
+        +-- Forward to target URL (or WebSocket upgrade)
               |
               v
         n8n.default.svc.cluster.local/webhook/xyz
               |
               v
-        Return response (status, headers, body)
+        Apply: response transforms (headers, status codes, body)
+              |
+              v
+        Return response + update circuit breaker state
 ```
 
 ---
@@ -353,6 +365,51 @@ POST   /api/users/:id/reset-password  Reset password (admin)
 #### Audit Logs
 ```
 GET    /api/audit                Audit log entries (admin, filterable)
+```
+
+#### Route Targets (Load Balancing)
+```
+GET    /api/routes/:id/targets           List targets for route
+POST   /api/routes/:id/targets           Add target
+PUT    /api/routes/:id/targets/:tid      Update target
+DELETE /api/routes/:id/targets/:tid      Delete target
+```
+
+#### Transform Rules
+```
+GET    /api/routes/:id/transforms        List transform rules for route
+POST   /api/routes/:id/transforms        Create transform rule
+PUT    /api/routes/:id/transforms/:rid   Update transform rule
+DELETE /api/routes/:id/transforms/:rid   Delete transform rule
+```
+
+#### Route Groups
+```
+GET    /api/route-groups                 List route groups
+GET    /api/route-groups/:id             Get route group
+POST   /api/route-groups                 Create route group
+PUT    /api/route-groups/:id             Update route group
+DELETE /api/route-groups/:id             Delete route group
+POST   /api/route-groups/:id/routes/:rid Assign route to group
+DELETE /api/route-groups/:id/routes/:rid Remove route from group
+```
+
+#### Organizations & Teams
+```
+GET    /api/organizations                List organizations
+GET    /api/organizations/:id            Get organization details
+POST   /api/organizations                Create organization
+PUT    /api/organizations/:id            Update organization
+DELETE /api/organizations/:id            Delete organization
+POST   /api/organizations/:id/members    Add member
+PUT    /api/organizations/:id/members/:uid  Update member role
+DELETE /api/organizations/:id/members/:uid  Remove member
+GET    /api/organizations/:id/teams      List teams
+POST   /api/organizations/:id/teams      Create team
+PUT    /api/organizations/:oid/teams/:tid   Update team
+DELETE /api/organizations/:oid/teams/:tid   Delete team
+POST   /api/organizations/:oid/teams/:tid/members      Add team member
+DELETE /api/organizations/:oid/teams/:tid/members/:uid  Remove team member
 ```
 
 #### API Keys
