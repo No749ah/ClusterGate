@@ -1,4 +1,4 @@
-import cron from 'node-cron'
+import cron, { ScheduledTask } from 'node-cron'
 import { runAllHealthChecks } from '../services/healthService'
 import { cleanOldLogs } from '../services/logService'
 import { runScheduledUpdateCheck } from '../services/updateService'
@@ -6,7 +6,7 @@ import { createBackup, enforceRetentionPolicy } from '../services/backupService'
 import { logger } from '../lib/logger'
 import { config } from '../config'
 
-const jobs: cron.ScheduledTask[] = []
+const jobs: ScheduledTask[] = []
 
 export function startCronJobs() {
   // Health checks every 5 minutes

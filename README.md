@@ -53,7 +53,13 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Monitoring** — Paginated request logs, error tracking, Prometheus metrics, automated health checks
 - **Database Backups** — Create, download, restore, and manage backups from the UI (Prisma-based JSON export, no pg_dump needed)
 - **API Documentation** — Interactive Swagger/OpenAPI docs at `/api/docs`
-- **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui
+- **Incident Management** — Auto-detection from health checks and circuit breaker, timeline, severity levels, manual creation
+- **Change Requests** — Approval workflow (PENDING → APPROVED → APPLIED or REJECTED), per-organization toggle
+- **Achievement System** — 17 unlockable badges with rarity tiers (common/rare/epic/legendary)
+- **Live Traffic Map** — Canvas-based Mercator projection with SSE real-time traffic visualization, GeoIP lookup
+- **Request Sanitizer** — PII masking (emails, credit cards, SSNs, phone numbers, IBANs) with custom regex patterns
+- **Route Version Diff** — Side-by-side comparison of route configuration changes
+- **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui, PWA installable
 - **Kubernetes-native** — Kubernetes manifests + Helm chart + HPE PCAI support
 
 ---
@@ -162,6 +168,8 @@ Ingress (nginx / Istio)
     |                            +-- Logs / Audit API
     |                            +-- Users / Notifications API
     |                            +-- Backup API
+    |                            +-- Incidents / Change Requests API
+    |                            +-- Traffic Map / Sanitizer API
     |                            +-- System / Update API
     |                            +-- Swagger UI (/api/docs)
     |
@@ -427,6 +435,40 @@ GET    /api/backups                  List backups
 POST   /api/backups/:name/restore    Restore backup
 GET    /api/backups/:name/download   Download backup
 DELETE /api/backups/:name            Delete backup
+```
+
+#### Incidents
+```
+GET    /api/incidents                List incidents (filter by status, routeId)
+GET    /api/incidents/:id            Get incident details with timeline
+POST   /api/incidents                Create incident manually
+PATCH  /api/incidents/:id/status     Update incident status
+POST   /api/incidents/:id/events     Add timeline event/note
+```
+
+#### Change Requests
+```
+GET    /api/change-requests              List change requests
+GET    /api/change-requests/pending-count Pending count
+GET    /api/change-requests/check/:routeId Check if route has pending CR
+GET    /api/change-requests/:id          Get change request details
+POST   /api/change-requests              Create change request
+POST   /api/change-requests/:id/approve  Approve and apply
+POST   /api/change-requests/:id/reject   Reject with comment
+```
+
+#### Achievements
+```
+GET    /api/achievements             List all achievements with unlock status
+GET    /api/achievements/count       Total achievement count
+```
+
+#### Traffic & Sanitizer
+```
+GET    /api/traffic/live             SSE stream of live traffic with GeoIP data
+GET    /api/traffic/map              Aggregated traffic by country/city
+GET    /api/traffic/sanitizer        Get sanitizer configuration (admin)
+PUT    /api/traffic/sanitizer        Update sanitizer configuration (admin)
 ```
 
 #### Notifications

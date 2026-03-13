@@ -1229,10 +1229,10 @@ export default function SettingsPage() {
             <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
               <p className="text-sm font-medium text-foreground">What&apos;s new:</p>
               <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                <li>Incident timeline with auto-detection from health checks and circuit breaker</li>
-                <li>Change request approval workflow (enable per organization)</li>
-                <li>Route version diff view for comparing configuration changes</li>
-                <li>Achievement system with 17 unlockable badges</li>
+                <li>Live traffic map with real-time GeoIP visualization</li>
+                <li>Request sanitizer for PII masking in logs</li>
+                <li>PWA support — install ClusterGate on mobile devices</li>
+                <li>Dependency upgrades and security patches</li>
               </ul>
             </div>
 
