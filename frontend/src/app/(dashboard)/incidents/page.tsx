@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { Incident, IncidentStatus, IncidentSeverity } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
+import { toast } from 'sonner'
 import {
   AlertTriangle,
   Search,
@@ -15,6 +16,8 @@ import {
   ChevronRight,
   Route,
   Filter,
+  Ban,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -46,12 +49,14 @@ const statusIcons: Record<IncidentStatus, React.ReactNode> = {
   ACTIVE: <AlertCircle className="w-4 h-4 text-red-400" />,
   INVESTIGATING: <Search className="w-4 h-4 text-yellow-400" />,
   RESOLVED: <CheckCircle2 className="w-4 h-4 text-green-400" />,
+  DISMISSED: <Ban className="w-4 h-4 text-gray-400" />,
 }
 
 const statusColors: Record<IncidentStatus, string> = {
   ACTIVE: 'bg-red-500/10 text-red-400 border-red-500/20',
   INVESTIGATING: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
   RESOLVED: 'bg-green-500/10 text-green-400 border-green-500/20',
+  DISMISSED: 'text-gray-400 border-gray-500/20 bg-gray-500/10',
 }
 
 export default function IncidentsPage() {
@@ -106,6 +111,26 @@ export default function IncidentsPage() {
     },
   })
 
+  const dismissMutation = useMutation({
+    mutationFn: (id: string) => api.incidents.dismiss(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] })
+      queryClient.invalidateQueries({ queryKey: ['incident'] })
+      toast.success('Incident dismissed')
+    },
+    onError: () => toast.error('Failed to dismiss incident'),
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.incidents.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['incidents'] })
+      setSelectedIncident(null)
+      toast.success('Incident deleted')
+    },
+    onError: () => toast.error('Failed to delete incident'),
+  })
+
   const incidents = data?.data || []
   const incident = detailQuery.data?.data
 
@@ -137,6 +162,7 @@ export default function IncidentsPage() {
             <SelectItem value="ACTIVE">Active</SelectItem>
             <SelectItem value="INVESTIGATING">Investigating</SelectItem>
             <SelectItem value="RESOLVED">Resolved</SelectItem>
+            <SelectItem value="DISMISSED">Dismissed</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -230,8 +256,8 @@ export default function IncidentsPage() {
                     </Badge>
                   )}
                   <div className="flex-1" />
-                  {isAdmin && incident.status !== 'RESOLVED' && (
-                    <div className="flex gap-2">
+                  {isAdmin && (
+                    <div className="flex gap-2 flex-wrap">
                       {incident.status === 'ACTIVE' && (
                         <Button
                           size="sm"
@@ -241,12 +267,41 @@ export default function IncidentsPage() {
                           Investigate
                         </Button>
                       )}
-                      <Button
-                        size="sm"
-                        onClick={() => updateStatusMutation.mutate({ id: incident.id, status: 'RESOLVED' })}
-                      >
-                        Resolve
-                      </Button>
+                      {(incident.status === 'ACTIVE' || incident.status === 'INVESTIGATING') && (
+                        <>
+                          <Button
+                            size="sm"
+                            onClick={() => updateStatusMutation.mutate({ id: incident.id, status: 'RESOLVED' })}
+                          >
+                            Resolve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="text-muted-foreground"
+                            disabled={dismissMutation.isPending}
+                            onClick={() => dismissMutation.mutate(incident.id)}
+                          >
+                            <Ban className="w-3.5 h-3.5 mr-1" />
+                            Dismiss
+                          </Button>
+                        </>
+                      )}
+                      {user?.role === 'ADMIN' && (
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={deleteMutation.isPending}
+                          onClick={() => {
+                            if (confirm('Delete this incident and all its events? This cannot be undone.')) {
+                              deleteMutation.mutate(incident.id)
+                            }
+                          }}
+                        >
+                          <Trash2 className="w-3.5 h-3.5 mr-1" />
+                          Delete
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -289,7 +344,7 @@ export default function IncidentsPage() {
                 </div>
 
                 {/* Add note */}
-                {isAdmin && incident.status !== 'RESOLVED' && (
+                {isAdmin && incident.status !== 'RESOLVED' && incident.status !== 'DISMISSED' && (
                   <div className="border-t border-border pt-4">
                     <h3 className="text-sm font-medium mb-2">Add Note</h3>
                     <div className="space-y-2">

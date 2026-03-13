@@ -80,12 +80,24 @@ router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, ne
 // ============================================================================
 
 // Add member
-router.post('/:id/members', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.post('/:id/members', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const { userId, role } = z.object({
       userId: z.string(),
       role: z.enum(['OWNER', 'ADMIN', 'MEMBER']).default('MEMBER'),
     }).parse(req.body)
+
+    // Only existing org OWNERs can assign the OWNER role
+    if (role === 'OWNER') {
+      const requesterMembership = await orgService.getOrgMembership(req.params.id, req.user!.userId)
+      if (!requesterMembership || requesterMembership.role !== 'OWNER') {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Only organization owners can assign the OWNER role' },
+        })
+      }
+    }
+
     const member = await orgService.addOrgMember(req.params.id, userId, role)
 
     // Achievement: Team Player (join an organization)
@@ -98,11 +110,23 @@ router.post('/:id/members', authenticate, authorize([Role.ADMIN]), async (req, r
 })
 
 // Update member role
-router.put('/:id/members/:userId', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.put('/:id/members/:userId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const { role } = z.object({
       role: z.enum(['OWNER', 'ADMIN', 'MEMBER']),
     }).parse(req.body)
+
+    // Only existing org OWNERs can assign the OWNER role
+    if (role === 'OWNER') {
+      const requesterMembership = await orgService.getOrgMembership(req.params.id, req.user!.userId)
+      if (!requesterMembership || requesterMembership.role !== 'OWNER') {
+        return res.status(403).json({
+          success: false,
+          error: { message: 'Only organization owners can assign the OWNER role' },
+        })
+      }
+    }
+
     const member = await orgService.updateOrgMemberRole(req.params.id, req.params.userId, role)
     res.json({ success: true, data: member })
   } catch (err) {

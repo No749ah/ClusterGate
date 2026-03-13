@@ -89,6 +89,12 @@ export async function deleteOrganization(id: string) {
 // Organization Members
 // ============================================================================
 
+export async function getOrgMembership(orgId: string, userId: string) {
+  return prisma.orgMembership.findFirst({
+    where: { organizationId: orgId, userId },
+  })
+}
+
 export async function addOrgMember(organizationId: string, userId: string, role: OrgRole = 'MEMBER') {
   const existing = await prisma.orgMembership.findUnique({
     where: { userId_organizationId: { userId, organizationId } },

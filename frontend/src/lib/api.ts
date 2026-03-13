@@ -753,6 +753,16 @@ class ApiClient {
 
     addEvent: (id: string, data: { type: string; title: string; description?: string; metadata?: Record<string, any> }) =>
       this.post<ApiResponse<any>>(`/api/incidents/${id}/events`, data),
+
+    dismiss: (id: string) =>
+      this.request<ApiResponse<Incident>>(`/api/incidents/${id}/dismiss`, {
+        method: 'PATCH',
+      }),
+
+    delete: (id: string) =>
+      this.request<ApiResponse<null>>(`/api/incidents/${id}`, {
+        method: 'DELETE',
+      }),
   }
 
   // ============================================================================

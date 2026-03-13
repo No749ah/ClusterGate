@@ -57,7 +57,7 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
 router.patch('/:id/status', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const { status } = z.object({
-      status: z.enum(['ACTIVE', 'INVESTIGATING', 'RESOLVED']),
+      status: z.enum(['ACTIVE', 'INVESTIGATING', 'RESOLVED', 'DISMISSED']),
     }).parse(req.body)
 
     const incident = await incidentService.updateStatus(req.params.id, status, req.user!.userId)
@@ -88,6 +88,26 @@ router.post('/:id/events', authenticate, authorize([Role.ADMIN, Role.OPERATOR]),
       createdById: req.user!.userId,
     })
     res.status(201).json({ success: true, data: event })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Dismiss incident (mark as false positive)
+router.patch('/:id/dismiss', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+  try {
+    const incident = await incidentService.updateStatus(req.params.id, 'DISMISSED' as any, req.user!.userId)
+    res.json({ success: true, data: incident })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Delete incident
+router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    await incidentService.deleteIncident(req.params.id)
+    res.json({ success: true, message: 'Incident deleted' })
   } catch (err) {
     next(err)
   }

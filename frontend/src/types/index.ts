@@ -11,7 +11,7 @@ export type LBStrategy = 'ROUND_ROBIN' | 'WEIGHTED' | 'FAILOVER'
 export type TransformPhase = 'REQUEST' | 'RESPONSE'
 export type TransformType = 'SET_HEADER' | 'REMOVE_HEADER' | 'REWRITE_BODY_JSON' | 'SET_QUERY_PARAM' | 'REMOVE_QUERY_PARAM' | 'MAP_STATUS_CODE'
 export type OrgRole = 'OWNER' | 'ADMIN' | 'MEMBER'
-export type IncidentStatus = 'ACTIVE' | 'INVESTIGATING' | 'RESOLVED'
+export type IncidentStatus = 'ACTIVE' | 'INVESTIGATING' | 'RESOLVED' | 'DISMISSED'
 export type IncidentSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
 export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'APPLIED'
 

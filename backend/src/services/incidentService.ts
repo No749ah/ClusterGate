@@ -155,6 +155,12 @@ export const incidentService = {
     })
   },
 
+  async deleteIncident(id: string) {
+    // Delete events first (child records)
+    await prisma.incidentEvent.deleteMany({ where: { incidentId: id } })
+    return prisma.incident.delete({ where: { id } })
+  },
+
   // Auto-resolve when route becomes healthy
   async autoResolveIfHealthy(routeId: string) {
     const active = await prisma.incident.findMany({
