@@ -28,15 +28,18 @@ const TYPE_COLORS: Record<string, string> = {
 export function NotificationBell() {
   const [open, setOpen] = useState(false)
   const { data: countData } = useUnreadCount()
-  const { data: notifData } = useNotifications()
+  const notifQuery = useNotifications()
   const markRead = useMarkAsRead()
   const markAllRead = useMarkAllAsRead()
 
   const count = countData?.data?.count ?? 0
-  const notifications = notifData?.data ?? []
+  const notifications = notifQuery.data?.data ?? []
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={(v) => {
+      setOpen(v)
+      if (v) notifQuery.refetch()
+    }}>
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="icon" className="h-8 w-8 relative text-foreground hover:text-foreground [&>svg]:text-foreground">
           <Bell className="h-4 w-4 text-foreground" />

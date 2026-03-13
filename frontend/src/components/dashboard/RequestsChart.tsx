@@ -17,11 +17,11 @@ export function RequestsChart() {
 
   if (isLoading) {
     return (
-      <Card>
+      <Card className="flex flex-col">
         <CardHeader>
           <Skeleton className="h-5 w-40" />
         </CardHeader>
-        <CardContent>
+        <CardContent className="flex-1">
           <Skeleton className="h-48 w-full" />
         </CardContent>
       </Card>
@@ -29,11 +29,11 @@ export function RequestsChart() {
   }
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader>
         <CardTitle>Request Volume (Last 7 Days)</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="flex-1">
         <ResponsiveContainer width="100%" height={200}>
           <LineChart data={chartData} margin={{ top: 5, right: 10, left: -20, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />

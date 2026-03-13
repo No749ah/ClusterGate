@@ -48,7 +48,7 @@ export function SystemHealth({ healthyRoutes, unhealthyRoutes }: SystemHealthPro
     : 0
 
   return (
-    <Card>
+    <Card className="flex flex-col">
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2">
           <Server className="w-4 h-4" />
@@ -59,7 +59,7 @@ export function SystemHealth({ healthyRoutes, unhealthyRoutes }: SystemHealthPro
           </span>
         </CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-3 flex-1">
         {/* Route Health */}
         <div className="flex items-center justify-between text-sm">
           <span className="flex items-center gap-2 text-muted-foreground">

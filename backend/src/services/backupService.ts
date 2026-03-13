@@ -20,6 +20,7 @@ interface BackupMeta {
 
 // All models to export, in dependency order (parents before children)
 const BACKUP_MODELS = [
+  'systemSetting',
   'user',
   'organization',
   'orgMembership',
@@ -35,6 +36,10 @@ const BACKUP_MODELS = [
   'auditLog',
   'healthCheck',
   'notification',
+  'incident',
+  'incidentEvent',
+  'changeRequest',
+  'achievement',
   'inviteToken',
 ] as const
 

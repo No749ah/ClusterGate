@@ -338,7 +338,7 @@ export default function DashboardPage() {
           {gridBuffer.map((item) => {
             const colSpan = item.size === 'sm' ? 'lg:col-span-1' : item.size === 'md' ? 'lg:col-span-2' : item.size === 'lg' ? 'lg:col-span-3' : 'lg:col-span-4'
             return (
-              <div key={item.id} className={colSpan}>
+              <div key={item.id} className={cn(colSpan, '[&>*]:h-full')}>
                 {widgetRenderers[item.id]?.()}
               </div>
             )
