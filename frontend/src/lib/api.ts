@@ -21,6 +21,8 @@ import {
   Incident,
   ChangeRequest,
   Achievement,
+  TrafficMapData,
+  SanitizerConfig,
   ApiResponse,
   PaginatedResponse,
 } from '@/types'
@@ -790,6 +792,29 @@ class ApiClient {
 
     count: () =>
       this.get<ApiResponse<{ count: number; total: number }>>('/api/achievements/count'),
+  }
+
+  // ============================================================================
+  // Traffic Map
+  // ============================================================================
+
+  traffic = {
+    map: (hours = 24) =>
+      this.get<ApiResponse<TrafficMapData>>(`/api/traffic/map?hours=${hours}`),
+
+    liveUrl: () => `${this.baseUrl}/api/traffic/live`,
+  }
+
+  // ============================================================================
+  // Sanitizer
+  // ============================================================================
+
+  sanitizer = {
+    getConfig: () =>
+      this.get<ApiResponse<SanitizerConfig>>('/api/traffic/sanitizer'),
+
+    updateConfig: (data: Partial<SanitizerConfig>) =>
+      this.put<ApiResponse<SanitizerConfig>>('/api/traffic/sanitizer', data),
   }
 }
 

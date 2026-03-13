@@ -13,6 +13,8 @@ import { notifyRouteError } from './notificationService'
 import { checkCircuitBreaker, recordSuccess, recordFailure } from './circuitBreakerService'
 import { selectTarget, markTargetUnhealthy, markTargetHealthy } from './loadBalancerService'
 import { applyRequestTransforms, applyResponseTransforms } from './transformService'
+import { lookupIp } from './geoipService'
+import { sanitizeText } from './sanitizerService'
 import { v4 as uuid } from 'uuid'
 
 // Extended route type with relations loaded by proxyHandler
@@ -483,6 +485,9 @@ async function logRequest(data: {
   userAgent?: string
 }) {
   try {
+    // GeoIP lookup
+    const geo = lookupIp(data.ip)
+
     await prisma.requestLog.create({
       data: {
         routeId: data.routeId,
@@ -491,15 +496,19 @@ async function logRequest(data: {
         path: data.path,
         queryParams: data.queryParams,
         requestHeaders: data.requestHeaders,
-        requestBody: data.requestBody,
+        requestBody: sanitizeText(data.requestBody) ?? data.requestBody,
         responseStatus: data.responseStatus,
         responseHeaders: data.responseHeaders,
-        responseBody: data.responseBody,
+        responseBody: sanitizeText(data.responseBody) ?? data.responseBody,
         duration: data.duration,
         targetUrl: data.targetUrl,
         error: data.error,
         ip: data.ip,
         userAgent: data.userAgent,
+        geoCountry: geo.country,
+        geoCity: geo.city,
+        geoLatitude: geo.latitude,
+        geoLongitude: geo.longitude,
       },
     })
   } catch (err) {

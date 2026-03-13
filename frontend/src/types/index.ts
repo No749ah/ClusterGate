@@ -487,3 +487,44 @@ export interface Achievement {
   unlocked: boolean
   unlockedAt: string | null
 }
+
+// ============================================================================
+// Traffic Map
+// ============================================================================
+
+export interface TrafficCountry {
+  country: string
+  lat: number
+  lng: number
+  count: number
+  avgDuration: number
+}
+
+export interface TrafficCity {
+  city: string
+  country: string
+  lat: number
+  lng: number
+  count: number
+}
+
+export interface TrafficMapData {
+  countries: TrafficCountry[]
+  cities: TrafficCity[]
+  total: number
+  hours: number
+}
+
+// ============================================================================
+// Sanitizer
+// ============================================================================
+
+export interface SanitizerConfig {
+  enabled: boolean
+  maskEmails: boolean
+  maskCreditCards: boolean
+  maskSSNs: boolean
+  maskPhoneNumbers: boolean
+  maskIBANs: boolean
+  customPatterns: { name: string; pattern: string; replacement: string }[]
+}

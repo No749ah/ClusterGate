@@ -380,12 +380,20 @@ model RequestLog {
   error           String?
   ip              String?
   userAgent       String?
+
+  // GeoIP
+  geoCountry      String?
+  geoCity          String?
+  geoLatitude      Float?
+  geoLongitude     Float?
+
   createdAt       DateTime @default(now())
 
   @@index([routeId, createdAt, duration])
   @@index([createdAt])
   @@index([createdAt, responseStatus])
   @@index([routeId, createdAt, responseStatus])
+  @@index([geoCountry, createdAt])
   @@map("request_logs")
 }
 

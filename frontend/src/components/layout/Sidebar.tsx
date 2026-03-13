@@ -21,6 +21,7 @@ import {
   X,
   AlertTriangle,
   GitPullRequest,
+  Globe,
 } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
@@ -57,6 +58,7 @@ const navSections: NavSection[] = [
       { href: '/routes', icon: Route, label: 'Routes' },
       { href: '/groups', icon: FolderOpen, label: 'Route Groups' },
       { href: '/activity', icon: ScrollText, label: 'Logs' },
+      { href: '/traffic-map', icon: Globe, label: 'Traffic Map' },
       { href: '/incidents', icon: AlertTriangle, label: 'Incidents' },
       { href: '/change-requests', icon: GitPullRequest, label: 'Change Requests' },
     ],

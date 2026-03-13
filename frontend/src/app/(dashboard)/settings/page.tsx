@@ -1,16 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldOff, Wrench, Database, Activity, LogOut, ExternalLink, Copy, KeyRound, Trophy } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldOff, Wrench, Database, Activity, LogOut, ExternalLink, Copy, KeyRound, Trophy, ShieldAlert, Plus, Trash2 } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useAuth, useChangePassword } from '@/hooks/useAuth'
 import { useRoutes } from '@/hooks/useRoutes'
 import { api } from '@/lib/api'
-import { Achievement } from '@/types'
+import { Achievement, SanitizerConfig } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -25,6 +25,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog'
+import { Switch } from '@/components/ui/switch'
 import { formatDate } from '@/lib/utils'
 import { Confetti } from '@/components/fun/Confetti'
 
@@ -1173,6 +1174,9 @@ export default function SettingsPage() {
       {/* Achievements */}
       <AchievementsCard />
 
+      {/* Request Sanitizer (admin only) */}
+      {isAdmin && <SanitizerCard />}
+
       {/* System Info (non-admin) */}
       {!isAdmin && (
         <Card>
@@ -1325,6 +1329,167 @@ function AchievementsCard() {
               </div>
             </div>
           ))}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function SanitizerCard() {
+  const queryClient = useQueryClient()
+  const { data, isLoading } = useQuery({
+    queryKey: ['sanitizer-config'],
+    queryFn: () => api.sanitizer.getConfig(),
+  })
+
+  const config = data?.data
+
+  const mutation = useMutation({
+    mutationFn: (update: Partial<SanitizerConfig>) => api.sanitizer.updateConfig(update),
+    onSuccess: (res) => {
+      queryClient.setQueryData(['sanitizer-config'], res)
+      toast.success('Sanitizer config updated')
+    },
+    onError: () => toast.error('Failed to update sanitizer config'),
+  })
+
+  const [newPatternName, setNewPatternName] = useState('')
+  const [newPatternRegex, setNewPatternRegex] = useState('')
+  const [newPatternReplacement, setNewPatternReplacement] = useState('')
+
+  const toggleField = (field: keyof SanitizerConfig) => {
+    if (!config) return
+    mutation.mutate({ [field]: !config[field] })
+  }
+
+  const addCustomPattern = () => {
+    if (!config || !newPatternName || !newPatternRegex) return
+    try {
+      new RegExp(newPatternRegex)
+    } catch {
+      toast.error('Invalid regex pattern')
+      return
+    }
+    mutation.mutate({
+      customPatterns: [
+        ...config.customPatterns,
+        { name: newPatternName, pattern: newPatternRegex, replacement: newPatternReplacement || '***' },
+      ],
+    })
+    setNewPatternName('')
+    setNewPatternRegex('')
+    setNewPatternReplacement('')
+  }
+
+  const removeCustomPattern = (index: number) => {
+    if (!config) return
+    mutation.mutate({
+      customPatterns: config.customPatterns.filter((_: any, i: number) => i !== index),
+    })
+  }
+
+  if (isLoading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldAlert className="w-4 h-4" /> Request Sanitizer
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    )
+  }
+
+  if (!config) return null
+
+  const toggleItems = [
+    { key: 'enabled' as const, label: 'Sanitizer Enabled', desc: 'Master toggle for PII masking in request/response logs' },
+    { key: 'maskEmails' as const, label: 'Mask Emails', desc: 'Replace email addresses with u***@***.com' },
+    { key: 'maskCreditCards' as const, label: 'Mask Credit Cards', desc: 'Replace credit card numbers (with Luhn validation)' },
+    { key: 'maskSSNs' as const, label: 'Mask SSNs', desc: 'Replace Social Security Numbers' },
+    { key: 'maskPhoneNumbers' as const, label: 'Mask Phone Numbers', desc: 'Replace phone numbers' },
+    { key: 'maskIBANs' as const, label: 'Mask IBANs', desc: 'Replace International Bank Account Numbers' },
+  ]
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <ShieldAlert className="w-4 h-4" /> Request Sanitizer
+        </CardTitle>
+        <CardDescription>
+          Automatically mask PII (emails, credit cards, SSNs, etc.) in logged request and response bodies
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {toggleItems.map((item) => (
+          <div key={item.key} className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">{item.label}</p>
+              <p className="text-xs text-muted-foreground">{item.desc}</p>
+            </div>
+            <Switch
+              checked={config[item.key] as boolean}
+              onCheckedChange={() => toggleField(item.key)}
+              disabled={mutation.isPending || (item.key !== 'enabled' && !config.enabled)}
+            />
+          </div>
+        ))}
+
+        <Separator />
+
+        <div>
+          <p className="text-sm font-medium mb-2">Custom Patterns</p>
+          {config.customPatterns.length > 0 && (
+            <div className="space-y-2 mb-3">
+              {config.customPatterns.map((p: { name: string; pattern: string; replacement: string }, i: number) => (
+                <div key={i} className="flex items-center gap-2 text-xs bg-muted/30 rounded-md px-3 py-2">
+                  <span className="font-medium">{p.name}</span>
+                  <span className="text-muted-foreground font-mono flex-1 truncate">{p.pattern}</span>
+                  <span className="text-muted-foreground">&rarr; {p.replacement}</span>
+                  <button
+                    onClick={() => removeCustomPattern(i)}
+                    className="p-1 text-muted-foreground hover:text-red-400 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-4 gap-2">
+            <Input
+              placeholder="Name"
+              value={newPatternName}
+              onChange={(e) => setNewPatternName(e.target.value)}
+              className="text-xs"
+            />
+            <Input
+              placeholder="Regex pattern"
+              value={newPatternRegex}
+              onChange={(e) => setNewPatternRegex(e.target.value)}
+              className="text-xs font-mono"
+            />
+            <Input
+              placeholder="Replacement (default: ***)"
+              value={newPatternReplacement}
+              onChange={(e) => setNewPatternReplacement(e.target.value)}
+              className="text-xs"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={addCustomPattern}
+              disabled={!newPatternName || !newPatternRegex || mutation.isPending}
+            >
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>

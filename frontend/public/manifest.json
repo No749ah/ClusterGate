@@ -1,0 +1,19 @@
+{
+  "name": "ClusterGate",
+  "short_name": "ClusterGate",
+  "description": "Kubernetes Routing Gateway Platform",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#3b82f6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ],
+  "categories": ["developer", "utilities"]
+}
