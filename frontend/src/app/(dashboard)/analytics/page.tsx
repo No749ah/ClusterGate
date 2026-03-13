@@ -261,9 +261,9 @@ export default function AnalyticsPage() {
                       borderRadius: '8px',
                       fontSize: '12px',
                     }}
-                    formatter={(value: number, name: string) => [
-                      formatMs(value),
-                      name.toUpperCase(),
+                    formatter={(value, name) => [
+                      formatMs(Number(value)),
+                      String(name).toUpperCase(),
                     ]}
                   />
                   <Legend />
@@ -332,9 +332,9 @@ export default function AnalyticsPage() {
                       borderRadius: '8px',
                       fontSize: '12px',
                     }}
-                    formatter={(value: number, name: string) => {
-                      if (name === 'errorRate') return [`${value}%`, 'Error Rate']
-                      return [value, name]
+                    formatter={(value, name) => {
+                      if (name === 'errorRate') return [`${Number(value)}%`, 'Error Rate']
+                      return [value, String(name)]
                     }}
                   />
                   <Area
@@ -532,8 +532,8 @@ export default function AnalyticsPage() {
                       borderRadius: '8px',
                       fontSize: '12px',
                     }}
-                    formatter={(value: number) => [
-                      value.toLocaleString(),
+                    formatter={(value) => [
+                      Number(value).toLocaleString(),
                       'Requests',
                     ]}
                   />

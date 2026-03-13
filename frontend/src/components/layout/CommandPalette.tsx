@@ -73,7 +73,7 @@ export function CommandPalette() {
   const router = useRouter()
   const { user } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
-  const searchTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const searchTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const partyMode = usePartyMode()
 
   const secretCommands: SecretCommand[] = [

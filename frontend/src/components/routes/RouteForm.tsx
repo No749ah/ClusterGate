@@ -81,7 +81,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const isNew = !defaultValues?.publicPath
 
   const form = useForm<RouteFormValues>({
-    resolver: zodResolver(routeSchema),
+    resolver: zodResolver(routeSchema) as never,
     defaultValues: {
       name: defaultValues?.name ?? '',
       description: defaultValues?.description ?? '',

@@ -11,7 +11,7 @@ interface LogoProps {
 
 export function Logo({ size = 32, className, onSecretClick }: LogoProps) {
   const clickCount = useRef(0)
-  const clickTimer = useRef<ReturnType<typeof setTimeout>>()
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const handleClick = useCallback(() => {
     clickCount.current++

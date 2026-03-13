@@ -7,7 +7,7 @@ const PARTY_DURATION = 30000 // 30 seconds
 
 export function usePartyMode() {
   const [active, setActive] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout>>()
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   const stopParty = useCallback(() => {
     setActive(false)
