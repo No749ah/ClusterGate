@@ -17,8 +17,12 @@ import {
   Filter,
   Power,
   PowerOff,
+  Building2,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
 import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkDelete } from '@/hooks/useRoutes'
+import { useAuth } from '@/hooks/useAuth'
+import { api } from '@/lib/api'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
 import { HealthIndicator } from '@/components/routes/HealthIndicator'
 import { CircuitBreakerBadge } from '@/components/routes/CircuitBreakerBadge'
@@ -64,11 +68,19 @@ function MethodBadge({ method }: { method: string }) {
 }
 
 export default function RoutesPage() {
+  const { user } = useAuth()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<RouteStatus | 'ALL'>('ALL')
+  const [orgFilter, setOrgFilter] = useState<string>('ALL')
   const [tagFilter, setTagFilter] = useState<string>('ALL')
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+
+  const { data: orgsData } = useQuery({
+    queryKey: ['organizations'],
+    queryFn: () => api.organizations.list(),
+  })
+  const userOrgs = orgsData?.data ?? []
 
   // Fetch all routes (no tag filter) to extract unique tags for the filter dropdown
   const { data: allRoutesData } = useRoutes({ pageSize: 200 })
@@ -80,6 +92,7 @@ export default function RoutesPage() {
     search: search || undefined,
     status: statusFilter === 'ALL' ? undefined : statusFilter,
     tags: tagFilter !== 'ALL' ? [tagFilter] : undefined,
+    organizationId: orgFilter !== 'ALL' ? orgFilter : undefined,
     page,
     pageSize: 20,
   })
@@ -221,6 +234,20 @@ export default function RoutesPage() {
             <SelectItem value="DRAFT">Draft</SelectItem>
           </SelectContent>
         </Select>
+        {userOrgs.length > 1 && (
+          <Select value={orgFilter} onValueChange={(v) => { setOrgFilter(v); setPage(1) }}>
+            <SelectTrigger className="w-44">
+              <Building2 className="w-3 h-3 mr-2 text-muted-foreground" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="ALL">All Organizations</SelectItem>
+              {userOrgs.map((org: any) => (
+                <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         {allTags.length > 0 && (
           <Select value={tagFilter} onValueChange={(v) => { setTagFilter(v); setPage(1) }}>
             <SelectTrigger className="w-40">
@@ -452,6 +479,9 @@ function RouteRow({
                 </Badge>
               ))}
             </div>
+          )}
+          {(route as any).organization && (
+            <Badge variant="outline" className="text-xs ml-2">{(route as any).organization.name}</Badge>
           )}
         </div>
       </td>

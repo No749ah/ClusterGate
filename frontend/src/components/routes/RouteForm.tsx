@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, Shuffle, AlertCircle, CheckCircle2 } from 'lucide-react'
+import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, Shuffle, AlertCircle, CheckCircle2, Building2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -13,7 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
-import { RouteFormData } from '@/types'
+import { RouteFormData, Organization } from '@/types'
+import { useAuth } from '@/hooks/useAuth'
 
 const routeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -78,7 +79,22 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const [pathStatus, setPathStatus] = useState<'idle' | 'checking' | 'available' | 'taken'>('idle')
   const [pathConflict, setPathConflict] = useState<string | null>(null)
   const [prefixShake, setPrefixShake] = useState(false)
+  const [orgs, setOrgs] = useState<Organization[]>([])
+  const { user } = useAuth()
+  const isAdmin = user?.role === 'ADMIN'
   const isNew = !defaultValues?.publicPath
+
+  // Fetch user's organizations
+  useEffect(() => {
+    api.organizations.list().then((res) => {
+      const orgList = res.data ?? []
+      setOrgs(orgList)
+      // Auto-select if user has only one org and no default set
+      if (orgList.length === 1 && !defaultValues?.organizationId) {
+        setValue('organizationId', orgList[0].id)
+      }
+    }).catch(() => {})
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const form = useForm<RouteFormValues>({
     resolver: zodResolver(routeSchema) as never,
@@ -213,10 +229,18 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       [], // Maintenance
     ]
     const valid = await trigger(stepFields[step])
+    // Block non-admins from proceeding without an org on step 0
+    if (step === 0 && !isAdmin && orgs.length > 0 && !form.getValues('organizationId')) {
+      return
+    }
     if (valid) setStep((s) => s + 1)
   }
 
   const handleFormSubmit = async (data: RouteFormValues) => {
+    if (!isAdmin && !data.organizationId) {
+      setStep(0)
+      return
+    }
     const { rateLimitWindowSeconds, ...rest } = data
     const formData: RouteFormData = {
       ...rest,
@@ -296,6 +320,30 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             <Field label="Route Name" error={errors.name?.message} required>
               <input {...register('name')} placeholder="My API Service" className={fieldClass(errors.name)} />
             </Field>
+            {orgs.length > 0 && (
+              <Field label="Organization" required={!isAdmin} hint={isAdmin ? 'Optional for admins — routes without an org are globally accessible' : 'Select the organization this route belongs to'}>
+                <Select
+                  value={watch('organizationId') ?? '_none'}
+                  onValueChange={(v) => setValue('organizationId', v === '_none' ? null : v)}
+                >
+                  <SelectTrigger>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                      <SelectValue placeholder="Select organization..." />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {isAdmin && <SelectItem value="_none">No organization (global)</SelectItem>}
+                    {orgs.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!isAdmin && !watch('organizationId') && (
+                  <p className="text-xs text-destructive">Organization is required</p>
+                )}
+              </Field>
+            )}
             <Field label="Description" error={errors.description?.message}>
               <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
             </Field>

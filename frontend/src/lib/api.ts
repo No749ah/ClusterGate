@@ -157,6 +157,7 @@ class ApiClient {
       if (filters.status) params.set('status', filters.status)
       if (filters.isActive !== undefined) params.set('isActive', String(filters.isActive))
       if (filters.tags?.length) params.set('tags', filters.tags.join(','))
+      if (filters.organizationId) params.set('organizationId', filters.organizationId)
       if (filters.page) params.set('page', String(filters.page))
       if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
       if (filters.sortBy) params.set('sortBy', filters.sortBy)

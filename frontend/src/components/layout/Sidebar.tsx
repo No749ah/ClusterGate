@@ -66,7 +66,7 @@ const navSections: NavSection[] = [
   {
     title: 'Administration',
     items: [
-      { href: '/organizations', icon: Building2, label: 'Organizations', adminOnly: true },
+      { href: '/organizations', icon: Building2, label: 'Organizations' },
       { href: '/users', icon: Users, label: 'Users', adminOnly: true },
       { href: '/audit', icon: Shield, label: 'Audit Log', adminOnly: true },
       { href: '/backups', icon: HardDrive, label: 'Backups', adminOnly: true },

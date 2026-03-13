@@ -9,6 +9,8 @@ export interface RouteFilters {
   status?: RouteStatus
   isActive?: boolean
   tags?: string[]
+  organizationIds?: string[] // scope to user's orgs
+  organizationId?: string    // filter by single org
 }
 
 export interface Pagination {
@@ -48,6 +50,14 @@ export async function getRoutes(
     ...(filters.tags && filters.tags.length > 0 && {
       tags: { hasSome: filters.tags },
     }),
+    // Org scoping: non-admins see only their org's routes
+    ...(filters.organizationIds && {
+      organizationId: { in: filters.organizationIds },
+    }),
+    // Single org filter
+    ...(filters.organizationId && {
+      organizationId: filters.organizationId,
+    }),
   }
 
   const validSortFields = ['name', 'createdAt', 'updatedAt', 'status']
@@ -62,6 +72,7 @@ export async function getRoutes(
       include: {
         createdBy: { select: { id: true, name: true, email: true } },
         updatedBy: { select: { id: true, name: true, email: true } },
+        organization: { select: { id: true, name: true, slug: true } },
         healthChecks: {
           orderBy: { createdAt: 'desc' },
           take: 1,
@@ -87,6 +98,7 @@ export async function getRouteById(id: string) {
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       updatedBy: { select: { id: true, name: true, email: true } },
+      organization: { select: { id: true, name: true, slug: true } },
       healthChecks: { orderBy: { createdAt: 'desc' }, take: 1 },
       apiKeys: { where: { isActive: true }, select: { id: true, name: true, lastUsedAt: true, expiresAt: true } },
       _count: { select: { requestLogs: true, versions: true } },

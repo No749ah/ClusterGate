@@ -103,6 +103,7 @@ export interface Route {
   // Relations
   createdBy: { id: string; name: string; email: string } | null
   updatedBy: { id: string; name: string; email: string } | null
+  organization?: { id: string; name: string; slug: string } | null
   routeGroup?: RouteGroup | null
   healthChecks?: HealthCheck[]
   apiKeys?: ApiKey[]
@@ -247,6 +248,7 @@ export interface RouteFilters {
   status?: RouteStatus
   isActive?: boolean
   tags?: string[]
+  organizationId?: string
   page?: number
   pageSize?: number
   sortBy?: string

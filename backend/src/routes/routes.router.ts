@@ -12,6 +12,7 @@ import { AppError } from '../lib/errors'
 import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync } from '../lib/security'
 import { achievementService } from '../services/achievementService'
 import { changeRequestService } from '../services/changeRequestService'
+import { getUserOrgIds, canManageRoute, canManageOrgRoutes, canDeleteRoute } from '../services/orgAccessService'
 
 const router = Router()
 
@@ -126,9 +127,18 @@ const routeBodySchema = z.object({
  *       401:
  *         description: Not authenticated
  */
-router.get('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR, Role.VIEWER]), async (req, res, next) => {
+router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { page = '1', pageSize = '20', search, status, isActive, tags, sortBy, sortDir } = req.query
+    const { page = '1', pageSize = '20', search, status, isActive, tags, sortBy, sortDir, organizationId } = req.query
+
+    // Scope routes by user's org memberships (admins see all)
+    let organizationIds: string[] | undefined
+    if (req.user!.role !== 'ADMIN') {
+      organizationIds = await getUserOrgIds(req.user!.userId)
+      if (organizationIds.length === 0) {
+        return res.json({ success: true, data: [], total: 0, page: 1, pageSize: 20, totalPages: 0 })
+      }
+    }
 
     const result = await routeService.getRoutes(
       {
@@ -136,6 +146,8 @@ router.get('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR, Role.VIEWER]
         status: status as any,
         isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
         tags: tags ? String(tags).split(',') : undefined,
+        organizationIds,
+        organizationId: organizationId as string | undefined,
       },
       {
         page: parseInt(String(page)) || 1,
@@ -578,9 +590,21 @@ router.get('/:id', authenticate, async (req, res, next) => {
  *       403:
  *         description: Insufficient permissions
  */
-router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/', authenticate, async (req, res, next) => {
   try {
     const data = routeBodySchema.parse(req.body)
+
+    // Non-admins must specify an org they have OWNER/ADMIN role in
+    if (req.user!.role !== 'ADMIN') {
+      if (!data.organizationId) {
+        return res.status(400).json({ success: false, error: { message: 'Organization is required' } })
+      }
+      const allowed = await canManageOrgRoutes(req.user!.userId, req.user!.role, data.organizationId)
+      if (!allowed) {
+        return res.status(403).json({ success: false, error: { message: 'You need Owner or Admin role in this organization to create routes' } })
+      }
+    }
+
     const route = await routeService.createRoute(data as any, req.user!.userId)
 
     // Achievement checks (fire-and-forget)
@@ -632,9 +656,17 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
  *       404:
  *         description: Route not found
  */
-router.put('/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.put('/:id', authenticate, async (req, res, next) => {
   try {
     const data = routeBodySchema.partial().parse(req.body)
+
+    // Check org-based write access
+    if (req.user!.role !== 'ADMIN') {
+      const allowed = await canManageRoute(req.user!.userId, req.user!.role, req.params.id)
+      if (!allowed) {
+        return res.status(403).json({ success: false, error: { message: 'You need Owner or Admin role in this route\'s organization' } })
+      }
+    }
 
     // Check if change request is required
     const canBypass = await changeRequestService.canBypass(req.params.id, req.user!.userId, req.user!.role)
@@ -710,8 +742,13 @@ router.put('/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (
  *       404:
  *         description: Route not found
  */
-router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.delete('/:id', authenticate, async (req, res, next) => {
   try {
+    const allowed = await canDeleteRoute(req.user!.userId, req.user!.role, req.params.id)
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: 'You need Owner role in this route\'s organization to delete routes' } })
+    }
+
     await routeService.deleteRoute(req.params.id)
     res.json({ success: true, message: 'Route deleted successfully' })
   } catch (err) {
@@ -748,8 +785,14 @@ router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, ne
  *       404:
  *         description: Route not found
  */
-router.post('/:id/publish', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/:id/publish', authenticate, async (req, res, next) => {
   try {
+    if (req.user!.role !== 'ADMIN') {
+      const allowed = await canManageRoute(req.user!.userId, req.user!.role, req.params.id)
+      if (!allowed) {
+        return res.status(403).json({ success: false, error: { message: 'Insufficient permissions' } })
+      }
+    }
     const route = await routeService.publishRoute(req.params.id, req.user!.userId)
     achievementService.checkPublish(req.user!.userId).catch(() => {})
     res.json({ success: true, data: route })
@@ -787,8 +830,14 @@ router.post('/:id/publish', authenticate, authorize([Role.ADMIN, Role.OPERATOR])
  *       404:
  *         description: Route not found
  */
-router.post('/:id/deactivate', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/:id/deactivate', authenticate, async (req, res, next) => {
   try {
+    if (req.user!.role !== 'ADMIN') {
+      const allowed = await canManageRoute(req.user!.userId, req.user!.role, req.params.id)
+      if (!allowed) {
+        return res.status(403).json({ success: false, error: { message: 'Insufficient permissions' } })
+      }
+    }
     const route = await routeService.deactivateRoute(req.params.id, req.user!.userId)
     res.json({ success: true, data: route })
   } catch (err) {
@@ -825,8 +874,14 @@ router.post('/:id/deactivate', authenticate, authorize([Role.ADMIN, Role.OPERATO
  *       404:
  *         description: Route not found
  */
-router.post('/:id/duplicate', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/:id/duplicate', authenticate, async (req, res, next) => {
   try {
+    if (req.user!.role !== 'ADMIN') {
+      const allowed = await canManageRoute(req.user!.userId, req.user!.role, req.params.id)
+      if (!allowed) {
+        return res.status(403).json({ success: false, error: { message: 'Insufficient permissions' } })
+      }
+    }
     const route = await routeService.duplicateRoute(req.params.id, req.user!.userId)
     res.status(201).json({ success: true, data: route })
   } catch (err) {
@@ -899,7 +954,7 @@ router.post('/:id/duplicate', authenticate, authorize([Role.ADMIN, Role.OPERATOR
  *       404:
  *         description: Route not found
  */
-router.post('/:id/test', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/:id/test', authenticate, async (req, res, next) => {
   try {
     const route = await routeService.getRouteById(req.params.id)
 
