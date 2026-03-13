@@ -66,6 +66,26 @@ enum OrgRole {
   MEMBER
 }
 
+enum IncidentStatus {
+  ACTIVE
+  INVESTIGATING
+  RESOLVED
+}
+
+enum IncidentSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum ChangeRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
 // =============================================================================
 // Models
 // =============================================================================
@@ -93,6 +113,9 @@ model User {
   inviteTokens     InviteToken[]    @relation("InviteCreatedBy")
   orgMemberships   OrgMembership[]
   teamMemberships  TeamMembership[]
+  changeRequestsMade    ChangeRequest[] @relation("ChangeRequestedBy")
+  changeRequestsReviewed ChangeRequest[] @relation("ChangeReviewedBy")
+  achievements     Achievement[]
 
   @@index([email])
   @@map("users")
@@ -106,6 +129,8 @@ model Organization {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+
+  changeRequestsEnabled Boolean @default(false)
 
   teams       Team[]
   memberships OrgMembership[]
@@ -278,6 +303,8 @@ model Route {
   notifications  Notification[]
   targets        RouteTarget[]
   transformRules TransformRule[]
+  incidents      Incident[]
+  changeRequests ChangeRequest[]
 
   @@unique([publicPath])
   @@index([status, isActive])
@@ -425,6 +452,93 @@ model Notification {
   @@index([userId, isRead])
   @@index([createdAt])
   @@map("notifications")
+}
+
+// =============================================================================
+// Incident Timeline
+// =============================================================================
+
+model Incident {
+  id          String           @id @default(cuid())
+  title       String
+  description String?
+  status      IncidentStatus   @default(ACTIVE)
+  severity    IncidentSeverity @default(MEDIUM)
+  routeId     String?
+  route       Route?           @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  startedAt   DateTime         @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  events      IncidentEvent[]
+
+  @@index([status])
+  @@index([routeId])
+  @@index([startedAt])
+  @@map("incidents")
+}
+
+model IncidentEvent {
+  id          String   @id @default(cuid())
+  incidentId  String
+  incident    Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  type        String   // health_check_failed, error_spike, cb_opened, cb_closed, manual_note, status_change, config_change
+  title       String
+  description String?
+  metadata    Json     @default("{}")
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@index([incidentId, createdAt])
+  @@map("incident_events")
+}
+
+// =============================================================================
+// Change Requests (Approval Workflow)
+// =============================================================================
+
+model ChangeRequest {
+  id          String              @id @default(cuid())
+  routeId     String?
+  route       Route?              @relation(fields: [routeId], references: [id], onDelete: SetNull)
+  type        String              // create, update, delete
+  status      ChangeRequestStatus @default(PENDING)
+  title       String
+  description String?
+  payload     Json                // The proposed route config
+  diff        Json?               // Computed diff for display
+
+  requestedById String
+  requestedBy   User   @relation("ChangeRequestedBy", fields: [requestedById], references: [id])
+  reviewedById  String?
+  reviewedBy    User?  @relation("ChangeReviewedBy", fields: [reviewedById], references: [id])
+  reviewComment String?
+  reviewedAt    DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([routeId])
+  @@index([requestedById])
+  @@map("change_requests")
+}
+
+// =============================================================================
+// Achievement System
+// =============================================================================
+
+model Achievement {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  key         String   // e.g., first_route, century, million_requests
+  unlockedAt  DateTime @default(now())
+
+  @@unique([userId, key])
+  @@index([userId])
+  @@map("achievements")
 }
 
 model InviteToken {

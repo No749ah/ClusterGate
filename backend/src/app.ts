@@ -33,6 +33,9 @@ import routeGroupsRouter from './routes/routegroups.router'
 import organizationsRouter from './routes/organizations.router'
 import transformsRouter from './routes/transforms.router'
 import targetsRouter from './routes/targets.router'
+import incidentsRouter from './routes/incidents.router'
+import changeRequestsRouter from './routes/changeRequests.router'
+import achievementsRouter from './routes/achievements.router'
 import { handleWebSocketUpgrade } from './proxy/wsHandler'
 
 const app = express()
@@ -127,6 +130,9 @@ app.use('/api/route-groups', auditLogger, routeGroupsRouter)
 app.use('/api/organizations', auditLogger, organizationsRouter)
 app.use('/api/routes', auditLogger, transformsRouter)
 app.use('/api/routes', auditLogger, targetsRouter)
+app.use('/api/incidents', incidentsRouter)
+app.use('/api/change-requests', auditLogger, changeRequestsRouter)
+app.use('/api/achievements', achievementsRouter)
 
 // ============================================================================
 // Proxy Handler — all proxy routes live under /r/ prefix

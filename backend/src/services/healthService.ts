@@ -5,6 +5,7 @@ import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { healthCheckStatus } from '../lib/metrics'
 import { notifyHealthDown } from './notificationService'
+import { incidentService } from './incidentService'
 import { validateTargetUrlSync } from '../lib/security'
 
 export async function checkRouteHealth(route: Route): Promise<{
@@ -106,6 +107,9 @@ export async function checkRouteHealth(route: Route): Promise<{
     // Notify admins about health failure
     notifyHealthDown(route.id, route.name, error)
 
+    // Auto-detect incident from health failure
+    incidentService.checkAndCreateFromHealthFailure(route.id, route.name, error).catch(() => {})
+
     return { status: HealthStatus.UNHEALTHY, responseTime, error }
   }
 }
@@ -128,6 +132,14 @@ export async function runAllHealthChecks(): Promise<void> {
   const unhealthy = results.filter(
     (r) => r.status === 'fulfilled' && r.value.status === HealthStatus.UNHEALTHY
   ).length
+
+  // Auto-resolve incidents for routes that are now healthy
+  for (let i = 0; i < routes.length; i++) {
+    const result = results[i]
+    if (result.status === 'fulfilled' && result.value.status === HealthStatus.HEALTHY) {
+      incidentService.autoResolveIfHealthy(routes[i].id).catch(() => {})
+    }
+  }
 
   logger.info(`Health checks complete: ${healthy} healthy, ${unhealthy} unhealthy`)
 }

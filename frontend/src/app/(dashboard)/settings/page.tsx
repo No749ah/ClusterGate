@@ -1,14 +1,16 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldOff, Wrench, Database, Activity, LogOut, ExternalLink, Copy, KeyRound } from 'lucide-react'
+import { Eye, EyeOff, Download, Upload, Loader2, User, Lock, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, AlertTriangle, Shield, ShieldCheck, ShieldOff, Wrench, Database, Activity, LogOut, ExternalLink, Copy, KeyRound, Trophy } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth, useChangePassword } from '@/hooks/useAuth'
 import { useRoutes } from '@/hooks/useRoutes'
 import { api } from '@/lib/api'
+import { Achievement } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -1168,6 +1170,9 @@ export default function SettingsPage() {
         </>
       )}
 
+      {/* Achievements */}
+      <AchievementsCard />
+
       {/* System Info (non-admin) */}
       {!isAdmin && (
         <Card>
@@ -1220,10 +1225,10 @@ export default function SettingsPage() {
             <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
               <p className="text-sm font-medium text-foreground">What&apos;s new:</p>
               <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                <li>Easter eggs and fun surprises hidden throughout the UI</li>
-                <li>Confetti celebration on successful updates</li>
-                <li>Fun 404 page with glitch effect</li>
-                <li>Secret commands in the command palette (Ctrl+K)</li>
+                <li>Incident timeline with auto-detection from health checks and circuit breaker</li>
+                <li>Change request approval workflow (enable per organization)</li>
+                <li>Route version diff view for comparing configuration changes</li>
+                <li>Achievement system with 17 unlockable badges</li>
               </ul>
             </div>
 
@@ -1255,5 +1260,73 @@ export default function SettingsPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+const rarityColors: Record<string, string> = {
+  common: 'border-zinc-500/30 bg-zinc-500/5',
+  rare: 'border-blue-500/30 bg-blue-500/5',
+  epic: 'border-purple-500/30 bg-purple-500/5',
+  legendary: 'border-amber-500/30 bg-amber-500/5',
+}
+
+const rarityTextColors: Record<string, string> = {
+  common: 'text-zinc-400',
+  rare: 'text-blue-400',
+  epic: 'text-purple-400',
+  legendary: 'text-amber-400',
+}
+
+function AchievementsCard() {
+  const { data } = useQuery({
+    queryKey: ['achievements'],
+    queryFn: () => api.achievements.list(),
+  })
+
+  const achievements = data?.data || []
+  const unlocked = achievements.filter((a) => a.unlocked).length
+  const total = achievements.length
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Trophy className="w-4 h-4" /> Achievements
+        </CardTitle>
+        <CardDescription>
+          {unlocked} / {total} unlocked
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {achievements.map((a) => (
+            <div
+              key={a.key}
+              className={`rounded-lg border p-3 transition-all ${
+                a.unlocked
+                  ? `${rarityColors[a.rarity]} opacity-100`
+                  : 'border-border bg-muted/10 opacity-40 grayscale'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-xl">{a.icon}</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{a.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">{a.description}</p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <span className={`text-xs font-medium capitalize ${rarityTextColors[a.rarity]}`}>{a.rarity}</span>
+                {a.unlocked && a.unlockedAt && (
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(a.unlockedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   )
 }

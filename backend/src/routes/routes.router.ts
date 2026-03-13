@@ -10,6 +10,7 @@ import { createAuditLog } from '../services/auditService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync } from '../lib/security'
+import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
@@ -580,6 +581,13 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
   try {
     const data = routeBodySchema.parse(req.body)
     const route = await routeService.createRoute(data as any, req.user!.userId)
+
+    // Achievement checks (fire-and-forget)
+    achievementService.checkRouteCount(req.user!.userId).catch(() => {})
+    achievementService.checkNightOwl(req.user!.userId).catch(() => {})
+    if (data.wsEnabled) achievementService.checkWebSocket(req.user!.userId).catch(() => {})
+    if (data.circuitBreakerEnabled) achievementService.checkCircuitBreaker(req.user!.userId).catch(() => {})
+
     res.status(201).json({ success: true, data: route })
   } catch (err) {
     next(err)
@@ -627,6 +635,12 @@ router.put('/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (
   try {
     const data = routeBodySchema.partial().parse(req.body)
     const route = await routeService.updateRoute(req.params.id, data as any, req.user!.userId)
+
+    // Achievement checks on update
+    achievementService.checkNightOwl(req.user!.userId).catch(() => {})
+    if (data.wsEnabled) achievementService.checkWebSocket(req.user!.userId).catch(() => {})
+    if (data.circuitBreakerEnabled) achievementService.checkCircuitBreaker(req.user!.userId).catch(() => {})
+
     res.json({ success: true, data: route })
   } catch (err) {
     next(err)
@@ -703,6 +717,7 @@ router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, ne
 router.post('/:id/publish', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const route = await routeService.publishRoute(req.params.id, req.user!.userId)
+    achievementService.checkPublish(req.user!.userId).catch(() => {})
     res.json({ success: true, data: route })
   } catch (err) {
     next(err)

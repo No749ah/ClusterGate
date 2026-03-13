@@ -10,6 +10,7 @@ import {
   deleteBackup,
   downloadBackup,
 } from '../services/backupService'
+import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
@@ -100,6 +101,8 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
       ip: req.ip || req.socket.remoteAddress,
       userAgent: req.get('user-agent'),
     })
+
+    achievementService.checkBackup(req.user!.userId).catch(() => {})
 
     res.json({ success: true, data: backup })
   } catch (err) {

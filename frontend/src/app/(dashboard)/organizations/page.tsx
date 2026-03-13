@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
-import { Building2, Plus, Trash2, Pencil, Loader2, Users, FolderOpen } from 'lucide-react'
+import { Building2, Plus, Trash2, Pencil, Loader2, Users, FolderOpen, GitPullRequest } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -217,6 +217,30 @@ export default function OrganizationsPage() {
                   <FolderOpen className="w-3.5 h-3.5" />
                   <span>{org._count?.teams ?? 0} teams</span>
                 </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-border/50 flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <GitPullRequest className="w-3.5 h-3.5" />
+                  <span>Change Requests</span>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.preventDefault()
+                    updateMutation.mutate({
+                      id: org.id,
+                      data: { changeRequestsEnabled: !org.changeRequestsEnabled } as any,
+                    })
+                  }}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    org.changeRequestsEnabled ? 'bg-primary' : 'bg-muted'
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${
+                      org.changeRequestsEnabled ? 'translate-x-4' : 'translate-x-1'
+                    }`}
+                  />
+                </button>
               </div>
             </div>
           ))}

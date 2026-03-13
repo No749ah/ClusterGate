@@ -52,7 +52,9 @@ router.post('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =
 // Update organization
 router.put('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
-    const data = orgSchema.partial().parse(req.body)
+    const data = orgSchema.partial().extend({
+      changeRequestsEnabled: z.boolean().optional(),
+    }).parse(req.body)
     const org = await orgService.updateOrganization(req.params.id, data as any)
     res.json({ success: true, data: org })
   } catch (err) {

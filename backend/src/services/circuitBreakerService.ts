@@ -1,6 +1,7 @@
 import { Route } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
+import { incidentService } from './incidentService'
 
 /**
  * Circuit Breaker Service
@@ -71,6 +72,8 @@ export async function recordSuccess(routeId: string): Promise<void> {
   if (route.cbState === 'HALF_OPEN') {
     await resetCircuitBreaker(routeId)
     logger.info('Circuit breaker → CLOSED (success in HALF_OPEN)', { routeId })
+    // Auto-resolve any active incidents for this route
+    incidentService.autoResolveIfHealthy(routeId).catch(() => {})
   } else if (route.cbState === 'CLOSED') {
     // Reset failure count on success
     await prisma.route.update({
@@ -128,6 +131,11 @@ export async function recordFailure(routeId: string): Promise<void> {
       failures: newCount,
       threshold: route.cbFailureThreshold,
     })
+    // Auto-create incident when circuit breaker opens
+    const fullRoute = await prisma.route.findUnique({ where: { id: routeId }, select: { name: true } })
+    if (fullRoute) {
+      incidentService.checkAndCreateFromCBOpen(routeId, fullRoute.name).catch(() => {})
+    }
   } else {
     await prisma.route.update({
       where: { id: routeId },

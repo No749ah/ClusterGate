@@ -18,6 +18,9 @@ import {
   RouteGroup,
   Organization,
   Team,
+  Incident,
+  ChangeRequest,
+  Achievement,
   ApiResponse,
   PaginatedResponse,
 } from '@/types'
@@ -710,6 +713,83 @@ class ApiClient {
 
     removeTeamMember: (orgId: string, teamId: string, userId: string) =>
       this.delete<ApiResponse<null>>(`/api/organizations/${orgId}/teams/${teamId}/members/${userId}`),
+  }
+
+  // ============================================================================
+  // Incidents
+  // ============================================================================
+
+  incidents = {
+    list: (filters?: { status?: string; routeId?: string; page?: number; pageSize?: number }) => {
+      const params = new URLSearchParams()
+      if (filters?.status) params.set('status', filters.status)
+      if (filters?.routeId) params.set('routeId', filters.routeId)
+      if (filters?.page) params.set('page', String(filters.page))
+      if (filters?.pageSize) params.set('pageSize', String(filters.pageSize))
+      const qs = params.toString()
+      return this.get<PaginatedResponse<Incident>>(`/api/incidents${qs ? `?${qs}` : ''}`)
+    },
+
+    getById: (id: string) =>
+      this.get<ApiResponse<Incident>>(`/api/incidents/${id}`),
+
+    create: (data: { title: string; description?: string; severity?: string; routeId?: string }) =>
+      this.post<ApiResponse<Incident>>('/api/incidents', data),
+
+    updateStatus: (id: string, status: string) =>
+      this.request<ApiResponse<Incident>>(`/api/incidents/${id}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ status }),
+      }),
+
+    addEvent: (id: string, data: { type: string; title: string; description?: string; metadata?: Record<string, any> }) =>
+      this.post<ApiResponse<any>>(`/api/incidents/${id}/events`, data),
+  }
+
+  // ============================================================================
+  // Change Requests
+  // ============================================================================
+
+  changeRequests = {
+    list: (filters?: { status?: string; routeId?: string; page?: number; pageSize?: number }) => {
+      const params = new URLSearchParams()
+      if (filters?.status) params.set('status', filters.status)
+      if (filters?.routeId) params.set('routeId', filters.routeId)
+      if (filters?.page) params.set('page', String(filters.page))
+      if (filters?.pageSize) params.set('pageSize', String(filters.pageSize))
+      const qs = params.toString()
+      return this.get<PaginatedResponse<ChangeRequest>>(`/api/change-requests${qs ? `?${qs}` : ''}`)
+    },
+
+    getById: (id: string) =>
+      this.get<ApiResponse<ChangeRequest>>(`/api/change-requests/${id}`),
+
+    pendingCount: () =>
+      this.get<ApiResponse<{ count: number }>>('/api/change-requests/pending-count'),
+
+    checkRequired: (routeId: string) =>
+      this.get<ApiResponse<{ required: boolean }>>(`/api/change-requests/check/${routeId}`),
+
+    create: (data: { routeId?: string; type: string; title: string; description?: string; payload: Record<string, any>; diff?: Record<string, any> }) =>
+      this.post<ApiResponse<ChangeRequest>>('/api/change-requests', data),
+
+    approve: (id: string, comment?: string) =>
+      this.post<ApiResponse<ChangeRequest>>(`/api/change-requests/${id}/approve`, { comment }),
+
+    reject: (id: string, comment?: string) =>
+      this.post<ApiResponse<ChangeRequest>>(`/api/change-requests/${id}/reject`, { comment }),
+  }
+
+  // ============================================================================
+  // Achievements
+  // ============================================================================
+
+  achievements = {
+    list: () =>
+      this.get<ApiResponse<Achievement[]>>('/api/achievements'),
+
+    count: () =>
+      this.get<ApiResponse<{ count: number; total: number }>>('/api/achievements/count'),
   }
 }
 

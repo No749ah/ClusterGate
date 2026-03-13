@@ -11,6 +11,9 @@ export type LBStrategy = 'ROUND_ROBIN' | 'WEIGHTED' | 'FAILOVER'
 export type TransformPhase = 'REQUEST' | 'RESPONSE'
 export type TransformType = 'SET_HEADER' | 'REMOVE_HEADER' | 'REWRITE_BODY_JSON' | 'SET_QUERY_PARAM' | 'REMOVE_QUERY_PARAM' | 'MAP_STATUS_CODE'
 export type OrgRole = 'OWNER' | 'ADMIN' | 'MEMBER'
+export type IncidentStatus = 'ACTIVE' | 'INVESTIGATING' | 'RESOLVED'
+export type IncidentSeverity = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL'
+export type ChangeRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'APPLIED'
 
 export interface User {
   id: string
@@ -378,6 +381,7 @@ export interface Organization {
   slug: string
   description: string | null
   isActive: boolean
+  changeRequestsEnabled: boolean
   memberships?: OrgMembership[]
   teams?: Team[]
   _count?: { memberships: number; teams: number; routes: number }
@@ -413,4 +417,73 @@ export interface TeamMembership {
   teamId: string
   user?: { id: string; name: string; email: string }
   createdAt: string
+}
+
+// ============================================================================
+// Incidents
+// ============================================================================
+
+export interface Incident {
+  id: string
+  title: string
+  description: string | null
+  status: IncidentStatus
+  severity: IncidentSeverity
+  routeId: string | null
+  route?: { id: string; name: string; publicPath: string } | null
+  startedAt: string
+  resolvedAt: string | null
+  createdAt: string
+  updatedAt: string
+  events?: IncidentEvent[]
+  _count?: { events: number }
+}
+
+export interface IncidentEvent {
+  id: string
+  incidentId: string
+  type: string
+  title: string
+  description: string | null
+  metadata: Record<string, any>
+  createdById: string | null
+  createdAt: string
+}
+
+// ============================================================================
+// Change Requests
+// ============================================================================
+
+export interface ChangeRequest {
+  id: string
+  routeId: string | null
+  route?: { id: string; name: string; publicPath: string; targetUrl?: string } | null
+  type: string
+  status: ChangeRequestStatus
+  title: string
+  description: string | null
+  payload: Record<string, any>
+  diff: Record<string, any> | null
+  requestedById: string
+  requestedBy?: { id: string; name: string; email: string }
+  reviewedById: string | null
+  reviewedBy?: { id: string; name: string; email: string } | null
+  reviewComment: string | null
+  reviewedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+// ============================================================================
+// Achievements
+// ============================================================================
+
+export interface Achievement {
+  key: string
+  title: string
+  description: string
+  icon: string
+  rarity: 'common' | 'rare' | 'epic' | 'legendary'
+  unlocked: boolean
+  unlockedAt: string | null
 }
