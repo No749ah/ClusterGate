@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, use } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -27,8 +27,8 @@ import { Switch } from '@/components/ui/switch'
 
 // Removed PROXY_BASE - using window.location.origin instead
 
-export default function RouteDetailPage({ params }: { params: { id: string } }) {
-  const { id } = params
+export default function RouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = use(params)
   const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
   const [diffVersion, setDiffVersion] = useState<RouteVersion | null>(null)
 

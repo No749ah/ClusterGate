@@ -1,13 +1,22 @@
 'use client'
 
 import { useState } from 'react'
-import { Download, Trash2, RotateCcw, Plus, HardDrive, Loader2 } from 'lucide-react'
+import { Download, Trash2, RotateCcw, Plus, HardDrive, Loader2, AlertTriangle } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useBackups, useCreateBackup, useRestoreBackup, useDeleteBackup } from '@/hooks/useBackups'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Input } from '@/components/ui/input'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from '@/components/ui/dialog'
 import { formatRelativeTime } from '@/lib/utils'
 
 function formatBytes(bytes: number): string {
@@ -26,6 +35,11 @@ export default function BackupsPage() {
   const deleteBackup = useDeleteBackup()
   const [restoringFile, setRestoringFile] = useState<string | null>(null)
 
+  // Restore confirmation state
+  const [restoreDialog, setRestoreDialog] = useState<string | null>(null)
+  const [restoreInput, setRestoreInput] = useState('')
+  const [restoreChecks, setRestoreChecks] = useState({ dataLoss: false, noUndo: false, createBackup: false })
+
   const backups = data?.data ?? []
 
   const handleCreate = async () => {
@@ -37,15 +51,23 @@ export default function BackupsPage() {
     }
   }
 
-  const handleRestore = async (filename: string) => {
-    const confirmed = await confirm({
-      title: 'Restore Database',
-      description: `This will replace the current database with the backup "${filename}". This action cannot be undone. Are you sure?`,
-      confirmLabel: 'Restore',
-      variant: 'destructive',
-    })
-    if (!confirmed) return
+  const openRestoreDialog = (filename: string) => {
+    setRestoreDialog(filename)
+    setRestoreInput('')
+    setRestoreChecks({ dataLoss: false, noUndo: false, createBackup: false })
+  }
 
+  const canRestore = restoreDialog &&
+    restoreInput === restoreDialog &&
+    restoreChecks.dataLoss &&
+    restoreChecks.noUndo &&
+    restoreChecks.createBackup
+
+  const handleRestore = async () => {
+    if (!restoreDialog || !canRestore) return
+
+    const filename = restoreDialog
+    setRestoreDialog(null)
     setRestoringFile(filename)
     try {
       await restoreBackup.mutateAsync(filename)
@@ -158,7 +180,7 @@ export default function BackupsPage() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleRestore(backup.filename)}
+                          onClick={() => openRestoreDialog(backup.filename)}
                           disabled={restoringFile === backup.filename}
                           title="Restore"
                         >
@@ -187,6 +209,90 @@ export default function BackupsPage() {
           </div>
         )}
       </div>
+
+      {/* Restore Confirmation Dialog */}
+      <Dialog open={!!restoreDialog} onOpenChange={(v) => { if (!v) setRestoreDialog(null) }}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-destructive/10 mb-3">
+              <AlertTriangle className="w-6 h-6 text-destructive" />
+            </div>
+            <DialogTitle>Restore Database</DialogTitle>
+            <DialogDescription>
+              This is a destructive operation. The entire current database will be replaced with the backup data.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Checkboxes */}
+            <div className="space-y-3">
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={restoreChecks.dataLoss}
+                  onChange={(e) => setRestoreChecks((p) => ({ ...p, dataLoss: e.target.checked }))}
+                  className="mt-0.5 rounded border-border"
+                />
+                <span className="text-sm">
+                  I understand that <strong>all current data will be permanently replaced</strong> with the backup data.
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={restoreChecks.noUndo}
+                  onChange={(e) => setRestoreChecks((p) => ({ ...p, noUndo: e.target.checked }))}
+                  className="mt-0.5 rounded border-border"
+                />
+                <span className="text-sm">
+                  I understand that this action <strong>cannot be undone</strong>. Any data created after the backup was made will be lost.
+                </span>
+              </label>
+
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={restoreChecks.createBackup}
+                  onChange={(e) => setRestoreChecks((p) => ({ ...p, createBackup: e.target.checked }))}
+                  className="mt-0.5 rounded border-border"
+                />
+                <span className="text-sm">
+                  I have <strong>created a backup of the current state</strong> or I accept losing the current data.
+                </span>
+              </label>
+            </div>
+
+            {/* Type to confirm */}
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                Type the filename to confirm: <code className="text-xs bg-muted px-1.5 py-0.5 rounded font-mono">{restoreDialog}</code>
+              </p>
+              <Input
+                value={restoreInput}
+                onChange={(e) => setRestoreInput(e.target.value)}
+                placeholder="Enter the backup filename"
+                className="font-mono text-sm"
+                autoFocus
+              />
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setRestoreDialog(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRestore}
+              disabled={!canRestore}
+            >
+              <RotateCcw className="w-4 h-4 mr-2" />
+              Restore Database
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -70,7 +70,13 @@ app.set('trust proxy', 1) // Trust first proxy (for correct IP in k8s)
 app.use(cookieParser())
 app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
-app.use(compression())
+app.use(compression({
+  filter: (req, res) => {
+    // Never compress SSE streams — compression buffers chunks and breaks real-time streaming
+    if (res.getHeader('Content-Type') === 'text/event-stream') return false
+    return compression.filter(req, res)
+  },
+}))
 
 // ============================================================================
 // Logging & Rate Limiting

@@ -91,13 +91,13 @@ export function Header({ title }: HeaderProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>
-              <Link href="/settings" className="cursor-pointer">
+              <Link href="/account" className="cursor-pointer">
                 <Settings className="w-4 h-4 mr-2" />
-                Settings
+                Account
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/settings" className="cursor-pointer">
+              <Link href="/account" className="cursor-pointer">
                 <KeyRound className="w-4 h-4 mr-2" />
                 Change Password
               </Link>

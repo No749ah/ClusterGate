@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -62,7 +62,8 @@ const ROLE_LABELS: Record<string, string> = {
   VIEWER: 'Viewer',
 }
 
-export default function InvitePage({ params }: { params: { token: string } }) {
+export default function InvitePage({ params }: { params: Promise<{ token: string }> }) {
+  const { token } = use(params)
   const router = useRouter()
   const queryClient = useQueryClient()
   const [showPassword, setShowPassword] = useState(false)
@@ -72,7 +73,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    api.auth.validateInvite(params.token)
+    api.auth.validateInvite(token)
       .then((res) => {
         setInviteData(res.data)
         setLoading(false)
@@ -81,7 +82,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
         setError(err.message || 'Invalid or expired invite link')
         setLoading(false)
       })
-  }, [params.token])
+  }, [token])
 
   const {
     register,
@@ -94,7 +95,7 @@ export default function InvitePage({ params }: { params: { token: string } }) {
   const onSubmit = async (data: AcceptForm) => {
     try {
       await api.auth.acceptInvite({
-        token: params.token,
+        token: token,
         name: data.name,
         password: data.password,
       })

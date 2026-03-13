@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { TrafficCountry, TrafficCity } from '@/types'
@@ -84,99 +84,141 @@ export default function TrafficMapPage() {
     return () => es.close()
   }, [])
 
+  // Store traffic in a ref so the animation loop always sees current data
+  const trafficRef = useRef(traffic)
+  trafficRef.current = traffic
+  const liveDotsRef = useRef(liveDots)
+  liveDotsRef.current = liveDots
+
   // Canvas animation loop
-  const drawMap = useCallback(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
-    const ctx = canvas.getContext('2d')
-    if (!ctx) return
+  useEffect(() => {
+    let running = true
 
-    const { width, height } = canvas
+    const drawMap = () => {
+      if (!running) return
+      const canvas = canvasRef.current
+      if (!canvas) { animFrameRef.current = requestAnimationFrame(drawMap); return }
+      const ctx = canvas.getContext('2d')
+      if (!ctx) return
 
-    // Dark background
-    ctx.fillStyle = '#0a0f1a'
-    ctx.fillRect(0, 0, width, height)
+      const { width, height } = canvas
+      if (width === 0 || height === 0) { animFrameRef.current = requestAnimationFrame(drawMap); return }
 
-    // Draw grid lines
-    ctx.strokeStyle = 'rgba(59, 130, 246, 0.06)'
-    ctx.lineWidth = 1
-    for (let lat = -60; lat <= 80; lat += 30) {
-      const [, y] = project(lat, 0, width, height)
-      ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(width, y)
-      ctx.stroke()
-    }
-    for (let lng = -180; lng <= 180; lng += 40) {
-      const [x] = project(0, lng, width, height)
-      ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, height)
-      ctx.stroke()
-    }
+      // Dark background
+      ctx.fillStyle = '#0a0f1a'
+      ctx.fillRect(0, 0, width, height)
 
-    // Draw static traffic hotspots from historical data
-    if (traffic?.countries) {
-      const maxCount = Math.max(...traffic.countries.map((c) => c.count), 1)
-      for (const c of traffic.countries) {
-        const [x, y] = project(c.lat, c.lng, width, height)
-        const size = 4 + (c.count / maxCount) * 20
-        const alpha = 0.15 + (c.count / maxCount) * 0.4
-
-        // Glow
-        const gradient = ctx.createRadialGradient(x, y, 0, x, y, size * 2)
-        gradient.addColorStop(0, `rgba(59, 130, 246, ${alpha})`)
-        gradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
-        ctx.fillStyle = gradient
+      // Draw grid lines
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.06)'
+      ctx.lineWidth = 1
+      for (let lat = -60; lat <= 80; lat += 30) {
+        const [, y] = project(lat, 0, width, height)
         ctx.beginPath()
-        ctx.arc(x, y, size * 2, 0, Math.PI * 2)
-        ctx.fill()
-
-        // Center dot
-        ctx.fillStyle = `rgba(96, 165, 250, ${alpha + 0.2})`
-        ctx.beginPath()
-        ctx.arc(x, y, size / 2, 0, Math.PI * 2)
-        ctx.fill()
-      }
-    }
-
-    // Draw live dots with pulse animation
-    const now = Date.now()
-    setLiveDots((prev) => {
-      const updated = prev.map((d) => ({ ...d, age: d.age + 1 })).filter((d) => d.age < 60) // ~2s lifetime at 30fps
-      for (const dot of updated) {
-        const progress = dot.age / 60
-        const alpha = 1 - progress
-        const size = 3 + progress * 12
-
-        const isError = dot.status && dot.status >= 400
-        const color = isError ? `rgba(239, 68, 68, ${alpha})` : `rgba(34, 197, 94, ${alpha})`
-
-        // Expanding ring
-        ctx.strokeStyle = color
-        ctx.lineWidth = 2 * alpha
-        ctx.beginPath()
-        ctx.arc(dot.x, dot.y, size, 0, Math.PI * 2)
+        ctx.moveTo(0, y)
+        ctx.lineTo(width, y)
         ctx.stroke()
+      }
+      for (let lng = -180; lng <= 180; lng += 40) {
+        const [x] = project(0, lng, width, height)
+        ctx.beginPath()
+        ctx.moveTo(x, 0)
+        ctx.lineTo(x, height)
+        ctx.stroke()
+      }
 
-        // Center point
-        if (progress < 0.5) {
-          ctx.fillStyle = color
+      // Draw continent outlines (simplified landmass indicators)
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.03)'
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.08)'
+      ctx.lineWidth = 0.5
+      // Draw simple continent-shaped regions for visual reference
+      const landmarks = [
+        { lat: 48, lng: 10, label: 'EU' }, { lat: 40, lng: -100, label: 'US' },
+        { lat: 35, lng: 105, label: 'CN' }, { lat: -25, lng: 135, label: 'AU' },
+        { lat: 20, lng: 78, label: 'IN' }, { lat: -15, lng: -50, label: 'BR' },
+        { lat: 35, lng: 140, label: 'JP' }, { lat: 5, lng: 25, label: 'AF' },
+      ]
+      for (const lm of landmarks) {
+        const [x, y] = project(lm.lat, lm.lng, width, height)
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.04)'
+        ctx.beginPath()
+        ctx.arc(x, y, 30, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.fillStyle = 'rgba(59, 130, 246, 0.12)'
+        ctx.font = '9px sans-serif'
+        ctx.fillText(lm.label, x - 6, y + 3)
+      }
+
+      // Draw static traffic hotspots from historical data
+      const currentTraffic = trafficRef.current
+      if (currentTraffic?.countries) {
+        const maxCount = Math.max(...currentTraffic.countries.map((c: TrafficCountry) => c.count), 1)
+        for (const c of currentTraffic.countries) {
+          const [x, y] = project(c.lat, c.lng, width, height)
+          const size = 4 + (c.count / maxCount) * 20
+          const alpha = 0.15 + (c.count / maxCount) * 0.4
+
+          // Glow
+          const gradient = ctx.createRadialGradient(x, y, 0, x, y, size * 2)
+          gradient.addColorStop(0, `rgba(59, 130, 246, ${alpha})`)
+          gradient.addColorStop(1, 'rgba(59, 130, 246, 0)')
+          ctx.fillStyle = gradient
           ctx.beginPath()
-          ctx.arc(dot.x, dot.y, 2, 0, Math.PI * 2)
+          ctx.arc(x, y, size * 2, 0, Math.PI * 2)
+          ctx.fill()
+
+          // Center dot
+          ctx.fillStyle = `rgba(96, 165, 250, ${alpha + 0.2})`
+          ctx.beginPath()
+          ctx.arc(x, y, size / 2, 0, Math.PI * 2)
           ctx.fill()
         }
       }
-      return updated
-    })
+
+      // Draw live dots with pulse animation
+      setLiveDots((prev) => {
+        const updated = prev.map((d) => ({ ...d, age: d.age + 1 })).filter((d) => d.age < 60)
+        for (const dot of updated) {
+          const progress = dot.age / 60
+          const alpha = 1 - progress
+          const size = 3 + progress * 12
+
+          const isError = dot.status && dot.status >= 400
+          const color = isError ? `rgba(239, 68, 68, ${alpha})` : `rgba(34, 197, 94, ${alpha})`
+
+          ctx.strokeStyle = color
+          ctx.lineWidth = 2 * alpha
+          ctx.beginPath()
+          ctx.arc(dot.x, dot.y, size, 0, Math.PI * 2)
+          ctx.stroke()
+
+          if (progress < 0.5) {
+            ctx.fillStyle = color
+            ctx.beginPath()
+            ctx.arc(dot.x, dot.y, 2, 0, Math.PI * 2)
+            ctx.fill()
+          }
+        }
+        return updated
+      })
+
+      // Show "no geo data" message on canvas when there are requests but no countries
+      if (currentTraffic && currentTraffic.total > 0 && (!currentTraffic.countries || currentTraffic.countries.length === 0)) {
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.5)'
+        ctx.font = '14px sans-serif'
+        ctx.textAlign = 'center'
+        ctx.fillText('No geographic data available', width / 2, height / 2 - 10)
+        ctx.font = '11px sans-serif'
+        ctx.fillStyle = 'rgba(148, 163, 184, 0.3)'
+        ctx.fillText('Requests from private/internal IPs cannot be geolocated', width / 2, height / 2 + 12)
+        ctx.textAlign = 'start'
+      }
+
+      animFrameRef.current = requestAnimationFrame(drawMap)
+    }
 
     animFrameRef.current = requestAnimationFrame(drawMap)
-  }, [traffic])
-
-  useEffect(() => {
-    animFrameRef.current = requestAnimationFrame(drawMap)
-    return () => cancelAnimationFrame(animFrameRef.current)
-  }, [drawMap])
+    return () => { running = false; cancelAnimationFrame(animFrameRef.current) }
+  }, [])
 
   // Resize canvas to container
   useEffect(() => {
@@ -185,8 +227,8 @@ export default function TrafficMapPage() {
       if (!canvas) return
       const rect = canvas.parentElement?.getBoundingClientRect()
       if (rect) {
-        canvas.width = rect.width
-        canvas.height = Math.max(400, rect.height)
+        canvas.width = Math.floor(rect.width)
+        canvas.height = Math.max(400, Math.floor(rect.height))
       }
     }
     handleResize()

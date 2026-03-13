@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive, Sparkles, Cat, Binary } from 'lucide-react'
+import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive, Sparkles, Cat, Binary, User } from 'lucide-react'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -28,7 +28,8 @@ const PAGES: CommandItem[] = [
   { id: 'users', label: 'Users', description: 'Manage users', icon: Users, href: '/users', adminOnly: true },
   { id: 'audit', label: 'Audit Log', description: 'Activity history', icon: Shield, href: '/audit', adminOnly: true },
   { id: 'backups', label: 'Backups', description: 'Database backups', icon: HardDrive, href: '/backups', adminOnly: true },
-  { id: 'settings', label: 'Settings', description: 'Account & system', icon: Settings, href: '/settings' },
+  { id: 'account', label: 'Account', description: 'Profile & security', icon: User, href: '/account' },
+  { id: 'system', label: 'System', description: 'Admin settings', icon: Settings, href: '/settings', adminOnly: true },
 ]
 
 interface SecretCommand {

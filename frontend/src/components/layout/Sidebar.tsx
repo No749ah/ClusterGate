@@ -70,7 +70,7 @@ const navSections: NavSection[] = [
       { href: '/users', icon: Users, label: 'Users', adminOnly: true },
       { href: '/audit', icon: Shield, label: 'Audit Log', adminOnly: true },
       { href: '/backups', icon: HardDrive, label: 'Backups', adminOnly: true },
-      { href: '/settings', icon: Settings, label: 'Settings' },
+      { href: '/settings', icon: Settings, label: 'System', adminOnly: true },
     ],
   },
 ]
@@ -240,7 +240,7 @@ export function Sidebar() {
           {!mobileOpen && collapsed ? (
             <div className="flex flex-col items-center gap-2">
               <Link
-                href="/settings"
+                href="/account"
                 title={`${user.name} (${user.role})`}
                 className="flex items-center justify-center w-9 h-9 rounded-full bg-primary/20 text-primary text-xs font-semibold hover:bg-primary/30 transition-colors"
               >
@@ -257,7 +257,7 @@ export function Sidebar() {
           ) : (
             <div className="flex items-center gap-3 px-3 py-2 rounded-lg bg-white/5">
               <Link
-                href="/settings"
+                href="/account"
                 className="flex items-center justify-center w-8 h-8 rounded-full bg-primary/20 text-primary text-xs font-semibold flex-shrink-0 hover:bg-primary/30 transition-colors"
               >
                 {user.name.charAt(0).toUpperCase()}
