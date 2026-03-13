@@ -67,6 +67,7 @@ export default function SettingsPage() {
   } | null>(null)
   const [updateSteps, setUpdateSteps] = useState<{ step: number; label: string; status: 'running' | 'done' | 'error' }[]>([])
   const [updateComplete, setUpdateComplete] = useState<{ success: boolean; message: string; environment: string } | null>(null)
+  const [releaseNotes, setReleaseNotes] = useState<{ tag: string; name: string; body: string; publishedAt: string; htmlUrl: string } | null>(null)
 
   // System stats & config state
   const [stats, setStats] = useState<{
@@ -166,6 +167,13 @@ export default function SettingsPage() {
       setUpdateInfo(result.data)
       if (result.data.updateAvailable) {
         toast.info('A new version is available!')
+        // Fetch release notes for the new version
+        const latestTag = result.data.backend.latestTag || result.data.frontend.latestTag
+        if (latestTag) {
+          api.system.releaseNotes(latestTag).then((notesRes) => {
+            setReleaseNotes(notesRes.data)
+          }).catch(() => {})
+        }
       } else {
         toast.success('You are running the latest version.')
       }
@@ -813,19 +821,23 @@ export default function SettingsPage() {
           </DialogHeader>
 
           <div className="space-y-3 py-2">
-            <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
-              <p className="text-sm font-medium text-foreground">What&apos;s new:</p>
-              <ul className="text-xs text-muted-foreground space-y-1 list-disc list-inside">
-                <li>Live traffic map with real-time GeoIP visualization</li>
-                <li>Request sanitizer for PII masking in logs</li>
-                <li>PWA support — install ClusterGate on mobile devices</li>
-                <li>Dependency upgrades and security patches</li>
-              </ul>
-            </div>
+            {releaseNotes?.body ? (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
+                <p className="text-sm font-medium text-foreground">What&apos;s new in {releaseNotes.name || releaseNotes.tag}:</p>
+                <div className="text-xs text-muted-foreground prose prose-sm prose-invert max-w-none [&_ul]:list-disc [&_ul]:list-inside [&_ul]:space-y-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-medium [&_p]:mt-1 whitespace-pre-wrap">
+                  {releaseNotes.body}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
+                <p className="text-sm font-medium text-foreground">What&apos;s new:</p>
+                <p className="text-xs text-muted-foreground">Release notes not available. Check GitHub for details.</p>
+              </div>
+            )}
 
-            {updateInfo?.releaseUrl && (
+            {(releaseNotes?.htmlUrl || updateInfo?.releaseUrl) && (
               <a
-                href={updateInfo.releaseUrl}
+                href={releaseNotes?.htmlUrl || updateInfo?.releaseUrl!}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center justify-center gap-2 text-sm text-primary hover:underline"

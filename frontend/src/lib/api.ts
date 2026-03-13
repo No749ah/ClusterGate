@@ -369,6 +369,11 @@ class ApiClient {
     version: () =>
       this.get<ApiResponse<{ version: string }>>('/api/system/version'),
 
+    releaseNotes: (tag?: string) =>
+      this.get<ApiResponse<{ tag: string; name: string; body: string; publishedAt: string; htmlUrl: string } | null>>(
+        `/api/system/release-notes${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`
+      ),
+
     updateStatus: () =>
       this.get<ApiResponse<{
         currentVersion: string

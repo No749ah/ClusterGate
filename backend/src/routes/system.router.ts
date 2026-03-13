@@ -7,6 +7,7 @@ import { getVersion } from '../lib/version'
 import { runAllHealthChecks } from '../services/healthService'
 import { cleanOldLogs } from '../services/logService'
 import { config } from '../config'
+import axios from 'axios'
 
 const router = Router()
 
@@ -215,6 +216,68 @@ router.get('/config', (_req, res) => {
       nodeEnv: config.NODE_ENV,
     },
   })
+})
+
+/**
+ * @openapi
+ * /api/system/release-notes:
+ *   get:
+ *     tags: [System]
+ *     summary: Get release notes from GitHub
+ *     description: Fetches release notes for a specific version tag from GitHub. Requires ADMIN role.
+ *     parameters:
+ *       - name: tag
+ *         in: query
+ *         schema:
+ *           type: string
+ *         description: Version tag (e.g., "1.5.0"). Defaults to latest release.
+ *     responses:
+ *       200:
+ *         description: Release notes
+ */
+router.get('/release-notes', async (req, res, next) => {
+  try {
+    const tag = req.query.tag as string | undefined
+
+    let url: string
+    if (tag) {
+      // Fetch specific release by tag
+      const cleanTag = tag.replace(/^v/, '')
+      url = `https://api.github.com/repos/No749ah/ClusterGate/releases/tags/v${cleanTag}`
+    } else {
+      // Fetch latest release
+      url = `https://api.github.com/repos/No749ah/ClusterGate/releases/latest`
+    }
+
+    try {
+      const response = await axios.get(url, {
+        headers: {
+          Accept: 'application/vnd.github.v3+json',
+          'User-Agent': 'ClusterGate-Backend',
+        },
+        timeout: 10000,
+      })
+
+      res.json({
+        success: true,
+        data: {
+          tag: response.data.tag_name,
+          name: response.data.name,
+          body: response.data.body,
+          publishedAt: response.data.published_at,
+          htmlUrl: response.data.html_url,
+        },
+      })
+    } catch (err: any) {
+      if (err.response?.status === 404) {
+        res.json({ success: true, data: null })
+      } else {
+        throw err
+      }
+    }
+  } catch (err) {
+    next(err)
+  }
 })
 
 /**
