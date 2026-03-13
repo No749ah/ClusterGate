@@ -572,3 +572,11 @@ model InviteToken {
   @@index([email])
   @@map("invite_tokens")
 }
+
+model SystemSetting {
+  key       String   @id
+  value     Json     @default("{}")
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("system_settings")
+}

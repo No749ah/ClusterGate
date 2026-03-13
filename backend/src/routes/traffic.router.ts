@@ -131,11 +131,16 @@ router.get('/map', authenticate, async (req, res, next) => {
 // Sanitizer Config
 // ============================================================================
 
-router.get('/sanitizer', authenticate, authorize([Role.ADMIN]), (_req, res) => {
-  res.json({ success: true, data: getConfig() })
+router.get('/sanitizer', authenticate, authorize([Role.ADMIN]), async (_req, res, next) => {
+  try {
+    const config = await getConfig()
+    res.json({ success: true, data: config })
+  } catch (err) {
+    next(err)
+  }
 })
 
-router.put('/sanitizer', authenticate, authorize([Role.ADMIN]), (req, res, next) => {
+router.put('/sanitizer', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     const data = z.object({
       enabled: z.boolean().optional(),
@@ -151,7 +156,7 @@ router.put('/sanitizer', authenticate, authorize([Role.ADMIN]), (req, res, next)
       })).optional(),
     }).parse(req.body)
 
-    const config = updateConfig(data)
+    const config = await updateConfig(data)
     res.json({ success: true, data: config })
   } catch (err) {
     next(err)

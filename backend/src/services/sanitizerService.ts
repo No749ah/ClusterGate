@@ -2,8 +2,10 @@
  * Request Sanitizer Service
  *
  * Detects and masks PII patterns in request/response bodies before logging.
- * Runs after the proxy response but before data is stored in request_logs.
+ * Config is persisted to DB (system_settings table) and cached in memory.
  */
+
+import { prisma } from '../lib/prisma'
 
 export interface SanitizerConfig {
   enabled: boolean
@@ -25,24 +27,15 @@ const DEFAULT_CONFIG: SanitizerConfig = {
   customPatterns: [],
 }
 
-// In-memory config (can be persisted via system settings later)
-let config: SanitizerConfig = { ...DEFAULT_CONFIG }
+// In-memory cache (loaded from DB on first access)
+let configCache: SanitizerConfig | null = null
 
 // PII regex patterns
 const patterns = {
-  // email: user@domain.com → u***@domain.com
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
-
-  // credit card: 4111111111111111 → 4111********1111
   creditCard: /\b(?:\d[ -]*?){13,19}\b/g,
-
-  // SSN: 123-45-6789 → ***-**-6789
   ssn: /\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/g,
-
-  // phone: +1 (555) 123-4567 → +1 (555) ***-****
   phone: /(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
-
-  // IBAN: DE89 3704 0044 0532 0130 00 → DE89 **** **** **** **** 00
   iban: /\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{0,4}\b/g,
 }
 
@@ -54,7 +47,7 @@ function maskEmail(match: string): string {
 
 function maskCreditCard(match: string): string {
   const digits = match.replace(/\D/g, '')
-  if (digits.length < 13) return match // Not a real CC
+  if (digits.length < 13) return match
   return `${digits.slice(0, 4)}${'*'.repeat(digits.length - 8)}${digits.slice(-4)}`
 }
 
@@ -64,7 +57,6 @@ function maskSSN(match: string): string {
 }
 
 function maskPhone(match: string): string {
-  // Keep area code, mask the rest
   return match.replace(/\d{3}[-.\s]?\d{4}$/, '***-****')
 }
 
@@ -73,36 +65,54 @@ function maskIBAN(match: string): string {
   return `${clean.slice(0, 4)} ${'**** '.repeat(3).trim()} ${clean.slice(-2)}`
 }
 
+async function loadConfig(): Promise<SanitizerConfig> {
+  if (configCache) return configCache
+
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'sanitizer' } })
+    if (row && row.value) {
+      configCache = { ...DEFAULT_CONFIG, ...(row.value as unknown as Partial<SanitizerConfig>) }
+    } else {
+      configCache = { ...DEFAULT_CONFIG }
+    }
+  } catch {
+    // DB not ready yet (e.g., during startup before migration)
+    configCache = { ...DEFAULT_CONFIG }
+  }
+
+  return configCache
+}
+
 export function sanitizeText(text: string | null | undefined): string | null | undefined {
-  if (!text || !config.enabled) return text
+  // Use cached config synchronously (falls back to defaults if not loaded yet)
+  const cfg = configCache || DEFAULT_CONFIG
+  if (!text || !cfg.enabled) return text
 
   let result = text
 
-  if (config.maskEmails) {
+  if (cfg.maskEmails) {
     result = result.replace(patterns.email, maskEmail)
   }
-  if (config.maskCreditCards) {
+  if (cfg.maskCreditCards) {
     result = result.replace(patterns.creditCard, (match) => {
       const digits = match.replace(/\D/g, '')
-      // Validate Luhn check to avoid false positives on random number sequences
       if (digits.length >= 13 && digits.length <= 19 && luhnCheck(digits)) {
         return maskCreditCard(match)
       }
       return match
     })
   }
-  if (config.maskSSNs) {
+  if (cfg.maskSSNs) {
     result = result.replace(patterns.ssn, maskSSN)
   }
-  if (config.maskPhoneNumbers) {
+  if (cfg.maskPhoneNumbers) {
     result = result.replace(patterns.phone, maskPhone)
   }
-  if (config.maskIBANs) {
+  if (cfg.maskIBANs) {
     result = result.replace(patterns.iban, maskIBAN)
   }
 
-  // Apply custom patterns
-  for (const custom of config.customPatterns) {
+  for (const custom of cfg.customPatterns) {
     try {
       const regex = new RegExp(custom.pattern, 'g')
       result = result.replace(regex, custom.replacement)
@@ -130,11 +140,23 @@ function luhnCheck(num: string): boolean {
   return sum % 10 === 0
 }
 
-export function getConfig(): SanitizerConfig {
-  return { ...config }
+export async function getConfig(): Promise<SanitizerConfig> {
+  return loadConfig()
 }
 
-export function updateConfig(update: Partial<SanitizerConfig>): SanitizerConfig {
-  config = { ...config, ...update }
-  return { ...config }
+export async function updateConfig(update: Partial<SanitizerConfig>): Promise<SanitizerConfig> {
+  const current = await loadConfig()
+  const newConfig = { ...current, ...update }
+
+  await prisma.systemSetting.upsert({
+    where: { key: 'sanitizer' },
+    create: { key: 'sanitizer', value: newConfig as any },
+    update: { value: newConfig as any },
+  })
+
+  configCache = newConfig
+  return { ...newConfig }
 }
+
+// Pre-load config on module import (non-blocking)
+loadConfig().catch(() => {})
