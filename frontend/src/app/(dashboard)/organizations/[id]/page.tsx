@@ -55,7 +55,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
 
   // Mutations
   const updateOrgMutation = useMutation({
-    mutationFn: (data: Partial<{ name: string; description: string | null; isActive: boolean; changeRequestsEnabled: boolean }>) =>
+    mutationFn: (data: Partial<{ name: string; description: string | null; isActive: boolean; changeRequestsEnabled: boolean; crBypassRoles: string[]; crApproverRoles: string[] }>) =>
       api.organizations.update(id, data as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization', id] })
@@ -286,6 +286,80 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </CardContent>
         </Card>
       </div>
+
+      {/* CR Policy Config */}
+      {org.changeRequestsEnabled && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <GitPullRequest className="w-4 h-4" /> Approval Policy
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Can edit without approval</label>
+                <p className="text-xs text-muted-foreground mb-3">Members with these org roles can edit routes directly</p>
+                <div className="space-y-2">
+                  {(['OWNER', 'ADMIN', 'MEMBER'] as const).map((role) => {
+                    const checked = org.crBypassRoles?.includes(role) ?? false
+                    return (
+                      <label key={role} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const current = org.crBypassRoles ?? []
+                            const updated = checked
+                              ? current.filter((r) => r !== role)
+                              : [...current, role]
+                            updateOrgMutation.mutate({ crBypassRoles: updated } as any)
+                          }}
+                          className="rounded border-border"
+                        />
+                        <Badge variant={role === 'OWNER' ? 'default' : role === 'ADMIN' ? 'secondary' : 'outline'}>
+                          {role}
+                        </Badge>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Can approve/reject</label>
+                <p className="text-xs text-muted-foreground mb-3">Members with these org roles can review change requests</p>
+                <div className="space-y-2">
+                  {(['OWNER', 'ADMIN', 'MEMBER'] as const).map((role) => {
+                    const checked = org.crApproverRoles?.includes(role) ?? false
+                    return (
+                      <label key={role} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const current = org.crApproverRoles ?? []
+                            const updated = checked
+                              ? current.filter((r) => r !== role)
+                              : [...current, role]
+                            updateOrgMutation.mutate({ crApproverRoles: updated } as any)
+                          }}
+                          className="rounded border-border"
+                        />
+                        <Badge variant={role === 'OWNER' ? 'default' : role === 'ADMIN' ? 'secondary' : 'outline'}>
+                          {role}
+                        </Badge>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground border-t border-border pt-3">
+              System admins always have full access. Route groups can override these settings.
+            </p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Tabs */}
       <Tabs defaultValue="members">

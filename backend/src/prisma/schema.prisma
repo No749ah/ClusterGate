@@ -131,6 +131,8 @@ model Organization {
   updatedAt   DateTime @updatedAt
 
   changeRequestsEnabled Boolean @default(false)
+  crBypassRoles         OrgRole[] @default([OWNER])
+  crApproverRoles       OrgRole[] @default([OWNER, ADMIN])
 
   teams       Team[]
   memberships OrgMembership[]
@@ -203,6 +205,12 @@ model RouteGroup {
   defaultIpAllowlist       String[]    @default([])
 
   isActive    Boolean  @default(true)
+
+  // Change request policy (null = inherit from org)
+  changeRequestsEnabled Boolean?
+  crBypassRoles         OrgRole[] @default([])
+  crApproverRoles       OrgRole[] @default([])
+
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

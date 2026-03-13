@@ -43,10 +43,16 @@ export function useUpdateRoute(id: string) {
 
   return useMutation({
     mutationFn: (data: Partial<RouteFormData>) => api.routes.update(id, data),
-    onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ['routes'] })
-      queryClient.setQueryData(['routes', id], { success: true, data: res.data })
-      toast.success('Route updated successfully')
+    onSuccess: (res: any) => {
+      if (res.changeRequest) {
+        // A change request was created instead of direct update
+        queryClient.invalidateQueries({ queryKey: ['change-requests'] })
+        toast.success('Change request submitted for approval')
+      } else {
+        queryClient.invalidateQueries({ queryKey: ['routes'] })
+        queryClient.setQueryData(['routes', id], { success: true, data: res.data })
+        toast.success('Route updated successfully')
+      }
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to update route')

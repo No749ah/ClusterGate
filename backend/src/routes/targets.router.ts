@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as lbService from '../services/loadBalancerService'
+import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
@@ -27,6 +28,10 @@ router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERA
   try {
     const data = targetSchema.parse(req.body)
     const target = await lbService.addTarget(req.params.routeId, data)
+
+    // Achievement: Load Balancer (add a target)
+    achievementService.checkLoadBalancer(req.user!.userId).catch(() => {})
+
     res.status(201).json({ success: true, data: target })
   } catch (err) {
     next(err)

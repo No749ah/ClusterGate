@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as orgService from '../services/organizationService'
+import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
@@ -54,6 +55,8 @@ router.put('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next)
   try {
     const data = orgSchema.partial().extend({
       changeRequestsEnabled: z.boolean().optional(),
+      crBypassRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
+      crApproverRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
     }).parse(req.body)
     const org = await orgService.updateOrganization(req.params.id, data as any)
     res.json({ success: true, data: org })
@@ -84,6 +87,10 @@ router.post('/:id/members', authenticate, authorize([Role.ADMIN]), async (req, r
       role: z.enum(['OWNER', 'ADMIN', 'MEMBER']).default('MEMBER'),
     }).parse(req.body)
     const member = await orgService.addOrgMember(req.params.id, userId, role)
+
+    // Achievement: Team Player (join an organization)
+    achievementService.checkTeamPlayer(userId).catch(() => {})
+
     res.status(201).json({ success: true, data: member })
   } catch (err) {
     next(err)

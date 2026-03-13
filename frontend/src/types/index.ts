@@ -365,6 +365,10 @@ export interface RouteGroup {
   defaultCorsEnabled: boolean | null
   defaultCorsOrigins: string[]
   defaultIpAllowlist: string[]
+  // Change request policy (null = inherit from org)
+  changeRequestsEnabled: boolean | null
+  crBypassRoles: OrgRole[]
+  crApproverRoles: OrgRole[]
   routes?: { id: string; name: string; publicPath: string; status: RouteStatus; isActive: boolean }[]
   _count?: { routes: number }
   createdAt: string
@@ -382,6 +386,8 @@ export interface Organization {
   description: string | null
   isActive: boolean
   changeRequestsEnabled: boolean
+  crBypassRoles: OrgRole[]
+  crApproverRoles: OrgRole[]
   memberships?: OrgMembership[]
   teams?: Team[]
   _count?: { memberships: number; teams: number; routes: number }
@@ -472,6 +478,15 @@ export interface ChangeRequest {
   reviewedAt: string | null
   createdAt: string
   updatedAt: string
+}
+
+export interface CRPolicy {
+  required: boolean
+  bypassRoles: OrgRole[]
+  approverRoles: OrgRole[]
+  source: 'none' | 'organization' | 'group'
+  canBypass: boolean
+  canApprove: boolean
 }
 
 // ============================================================================

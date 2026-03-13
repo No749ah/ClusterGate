@@ -1,6 +1,13 @@
-import { PrismaClient, ChangeRequestStatus } from '@prisma/client'
+import { PrismaClient, ChangeRequestStatus, OrgRole } from '@prisma/client'
 
 const prisma = new PrismaClient()
+
+export interface CRPolicy {
+  required: boolean
+  bypassRoles: OrgRole[]
+  approverRoles: OrgRole[]
+  source: 'none' | 'organization' | 'group'
+}
 
 export const changeRequestService = {
   async list(filters?: { status?: ChangeRequestStatus; routeId?: string; requestedById?: string; page?: number; pageSize?: number }) {
@@ -129,20 +136,141 @@ export const changeRequestService = {
     }
   },
 
-  async isChangeRequestRequired(routeId: string): Promise<boolean> {
+  /**
+   * Resolve the full CR policy for a route, considering org and group overrides.
+   */
+  async getPolicy(routeId: string): Promise<CRPolicy> {
+    const route = await prisma.route.findUnique({
+      where: { id: routeId },
+      select: {
+        organizationId: true,
+        routeGroupId: true,
+      },
+    })
+
+    if (!route?.organizationId) {
+      return { required: false, bypassRoles: [], approverRoles: [], source: 'none' }
+    }
+
+    const org = await prisma.organization.findUnique({
+      where: { id: route.organizationId },
+      select: {
+        changeRequestsEnabled: true,
+        crBypassRoles: true,
+        crApproverRoles: true,
+      },
+    })
+
+    if (!org) {
+      return { required: false, bypassRoles: [], approverRoles: [], source: 'none' }
+    }
+
+    // Check group-level override
+    if (route.routeGroupId) {
+      const group = await prisma.routeGroup.findUnique({
+        where: { id: route.routeGroupId },
+        select: {
+          changeRequestsEnabled: true,
+          crBypassRoles: true,
+          crApproverRoles: true,
+        },
+      })
+
+      if (group && group.changeRequestsEnabled !== null) {
+        // Group has its own CR policy
+        return {
+          required: group.changeRequestsEnabled,
+          bypassRoles: group.crBypassRoles.length > 0 ? group.crBypassRoles : org.crBypassRoles,
+          approverRoles: group.crApproverRoles.length > 0 ? group.crApproverRoles : org.crApproverRoles,
+          source: 'group',
+        }
+      }
+    }
+
+    // Inherit from organization
+    return {
+      required: org.changeRequestsEnabled,
+      bypassRoles: org.crBypassRoles,
+      approverRoles: org.crApproverRoles,
+      source: org.changeRequestsEnabled ? 'organization' : 'none',
+    }
+  },
+
+  /**
+   * Check if a user can bypass CR for a route (edit directly).
+   * System ADMINs always bypass.
+   */
+  async canBypass(routeId: string, userId: string, systemRole: string): Promise<boolean> {
+    if (systemRole === 'ADMIN') return true
+
+    const policy = await this.getPolicy(routeId)
+    if (!policy.required) return true
+
+    // Get user's org membership role
     const route = await prisma.route.findUnique({
       where: { id: routeId },
       select: { organizationId: true },
     })
 
-    if (!route?.organizationId) return false
+    if (!route?.organizationId) return true
 
-    const org = await prisma.organization.findUnique({
-      where: { id: route.organizationId },
-      select: { changeRequestsEnabled: true },
+    const membership = await prisma.orgMembership.findUnique({
+      where: {
+        userId_organizationId: {
+          userId,
+          organizationId: route.organizationId,
+        },
+      },
+      select: { role: true },
     })
 
-    return org?.changeRequestsEnabled ?? false
+    if (!membership) return true // Not an org member, standard auth applies
+
+    return policy.bypassRoles.includes(membership.role)
+  },
+
+  /**
+   * Check if a user can approve/reject a CR.
+   * System ADMINs can always approve.
+   */
+  async canApprove(crId: string, userId: string, systemRole: string): Promise<boolean> {
+    if (systemRole === 'ADMIN') return true
+
+    const cr = await prisma.changeRequest.findUnique({
+      where: { id: crId },
+      select: { routeId: true },
+    })
+
+    if (!cr?.routeId) return systemRole === 'ADMIN'
+
+    const policy = await this.getPolicy(cr.routeId)
+
+    const route = await prisma.route.findUnique({
+      where: { id: cr.routeId },
+      select: { organizationId: true },
+    })
+
+    if (!route?.organizationId) return systemRole === 'ADMIN'
+
+    const membership = await prisma.orgMembership.findUnique({
+      where: {
+        userId_organizationId: {
+          userId,
+          organizationId: route.organizationId,
+        },
+      },
+      select: { role: true },
+    })
+
+    if (!membership) return false
+
+    return policy.approverRoles.includes(membership.role)
+  },
+
+  /** Keep backward compat — simple boolean check */
+  async isChangeRequestRequired(routeId: string): Promise<boolean> {
+    const policy = await this.getPolicy(routeId)
+    return policy.required
   },
 
   async pendingCount() {

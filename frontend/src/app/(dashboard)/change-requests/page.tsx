@@ -72,6 +72,13 @@ export default function ChangeRequestsPage() {
     enabled: !!selectedCR,
   })
 
+  // Check if user can approve this CR (via org role or system admin)
+  const policyQuery = useQuery({
+    queryKey: ['cr-policy', selectedCR?.routeId],
+    queryFn: () => api.changeRequests.getPolicy(selectedCR!.routeId!),
+    enabled: !!selectedCR?.routeId && selectedCR?.status === 'PENDING',
+  })
+
   const approveMutation = useMutation({
     mutationFn: ({ id, comment }: { id: string; comment?: string }) => api.changeRequests.approve(id, comment),
     onSuccess: () => {
@@ -242,7 +249,7 @@ export default function ChangeRequestsPage() {
                 </div>
 
                 {/* Review actions */}
-                {isAdmin && cr.status === 'PENDING' && (
+                {(isAdmin || policyQuery.data?.data?.canApprove) && cr.status === 'PENDING' && (
                   <div className="border-t border-border pt-4 space-y-3">
                     <Input
                       placeholder="Review comment (optional)"

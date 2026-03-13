@@ -18,8 +18,12 @@ export default function EditRoutePage({ params }: { params: Promise<{ id: string
   const updateRoute = useUpdateRoute(id)
 
   const handleSubmit = async (data: RouteFormData) => {
-    await updateRoute.mutateAsync(data)
-    router.push(`/routes/${id}`)
+    const res: any = await updateRoute.mutateAsync(data)
+    if (res.changeRequest) {
+      router.push('/change-requests')
+    } else {
+      router.push(`/routes/${id}`)
+    }
   }
 
   if (isLoading) {

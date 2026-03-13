@@ -20,6 +20,7 @@ import {
   Team,
   Incident,
   ChangeRequest,
+  CRPolicy,
   Achievement,
   TrafficMapData,
   SanitizerConfig,
@@ -771,6 +772,9 @@ class ApiClient {
 
     checkRequired: (routeId: string) =>
       this.get<ApiResponse<{ required: boolean }>>(`/api/change-requests/check/${routeId}`),
+
+    getPolicy: (routeId: string) =>
+      this.get<ApiResponse<CRPolicy>>(`/api/change-requests/policy/${routeId}`),
 
     create: (data: { routeId?: string; type: string; title: string; description?: string; payload: Record<string, any>; diff?: Record<string, any> }) =>
       this.post<ApiResponse<ChangeRequest>>('/api/change-requests', data),

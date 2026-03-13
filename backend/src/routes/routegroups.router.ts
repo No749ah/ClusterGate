@@ -23,6 +23,10 @@ const routeGroupSchema = z.object({
   defaultCorsEnabled: z.boolean().optional(),
   defaultCorsOrigins: z.array(z.string()).optional(),
   defaultIpAllowlist: z.array(z.string()).optional(),
+  // Change request policy
+  changeRequestsEnabled: z.boolean().nullable().optional(),
+  crBypassRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
+  crApproverRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
 })
 
 // List route groups

@@ -11,6 +11,7 @@ import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync } from '../lib/security'
 import { achievementService } from '../services/achievementService'
+import { changeRequestService } from '../services/changeRequestService'
 
 const router = Router()
 
@@ -634,6 +635,39 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
 router.put('/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const data = routeBodySchema.partial().parse(req.body)
+
+    // Check if change request is required
+    const canBypass = await changeRequestService.canBypass(req.params.id, req.user!.userId, req.user!.role)
+
+    if (!canBypass) {
+      // Get current route for diff computation
+      const currentRoute = await routeService.getRouteById(req.params.id)
+      const diff: Record<string, any> = {}
+      for (const [key, value] of Object.entries(data)) {
+        const oldVal = (currentRoute as any)[key]
+        if (JSON.stringify(oldVal) !== JSON.stringify(value)) {
+          diff[key] = { from: oldVal, to: value }
+        }
+      }
+
+      const cr = await changeRequestService.create({
+        routeId: req.params.id,
+        type: 'update',
+        title: `Update route: ${currentRoute.name}`,
+        description: `Proposed changes to ${Object.keys(diff).length} field(s)`,
+        payload: data,
+        diff,
+        requestedById: req.user!.userId,
+      })
+
+      return res.status(202).json({
+        success: true,
+        changeRequest: true,
+        data: cr,
+        message: 'Change request created — awaiting approval',
+      })
+    }
+
     const route = await routeService.updateRoute(req.params.id, data as any, req.user!.userId)
 
     // Achievement checks on update

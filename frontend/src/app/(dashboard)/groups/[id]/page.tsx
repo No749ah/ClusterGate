@@ -2,7 +2,7 @@
 
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Trash2, ExternalLink, Shield, Clock, RefreshCw, Globe, Network } from 'lucide-react'
+import { ArrowLeft, Plus, Trash2, ExternalLink, Shield, Clock, RefreshCw, Globe, Network, GitPullRequest } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { toast } from 'sonner'
@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
-import { RouteGroup } from '@/types'
+import { RouteGroup, OrgRole } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
 
 export default function RouteGroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -30,6 +30,15 @@ export default function RouteGroupDetailPage({ params }: { params: Promise<{ id:
     queryKey: ['routes', 'all'],
     queryFn: () => api.routes.list({ pageSize: 500 }),
     enabled: showAddRoute,
+  })
+
+  const updateGroupMutation = useMutation({
+    mutationFn: (data: Partial<RouteGroup>) => api.routeGroups.update(id, data as any),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['route-group', id] })
+      toast.success('Group updated')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to update group'),
   })
 
   const assignMutation = useMutation({
@@ -201,6 +210,103 @@ export default function RouteGroupDetailPage({ params }: { params: Promise<{ id:
               </span>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Change Request Policy Override */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base flex items-center gap-2">
+            <GitPullRequest className="w-4 h-4" /> Change Request Policy
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <label className="text-sm font-medium mb-1 block">Override organization setting</label>
+            <p className="text-xs text-muted-foreground mb-3">
+              Leave as "Inherit" to use the organization's CR policy, or override for routes in this group.
+            </p>
+            <div className="flex items-center gap-3">
+              {([
+                { value: null, label: 'Inherit from org' },
+                { value: true, label: 'Require CRs' },
+                { value: false, label: 'No CRs needed' },
+              ] as const).map((opt) => (
+                <button
+                  key={String(opt.value)}
+                  onClick={() => updateGroupMutation.mutate({ changeRequestsEnabled: opt.value } as any)}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${
+                    group.changeRequestsEnabled === opt.value
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {group.changeRequestsEnabled === true && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-3 border-t border-border">
+              <div>
+                <label className="text-sm font-medium mb-2 block">Can edit without approval</label>
+                <p className="text-xs text-muted-foreground mb-3">Leave empty to inherit from organization</p>
+                <div className="space-y-2">
+                  {(['OWNER', 'ADMIN', 'MEMBER'] as const).map((role) => {
+                    const checked = group.crBypassRoles?.includes(role) ?? false
+                    return (
+                      <label key={role} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const current = group.crBypassRoles ?? []
+                            const updated = checked
+                              ? current.filter((r: OrgRole) => r !== role)
+                              : [...current, role]
+                            updateGroupMutation.mutate({ crBypassRoles: updated } as any)
+                          }}
+                          className="rounded border-border"
+                        />
+                        <Badge variant={role === 'OWNER' ? 'default' : role === 'ADMIN' ? 'secondary' : 'outline'}>
+                          {role}
+                        </Badge>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="text-sm font-medium mb-2 block">Can approve/reject</label>
+                <p className="text-xs text-muted-foreground mb-3">Leave empty to inherit from organization</p>
+                <div className="space-y-2">
+                  {(['OWNER', 'ADMIN', 'MEMBER'] as const).map((role) => {
+                    const checked = group.crApproverRoles?.includes(role) ?? false
+                    return (
+                      <label key={role} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => {
+                            const current = group.crApproverRoles ?? []
+                            const updated = checked
+                              ? current.filter((r: OrgRole) => r !== role)
+                              : [...current, role]
+                            updateGroupMutation.mutate({ crApproverRoles: updated } as any)
+                          }}
+                          className="rounded border-border"
+                        />
+                        <Badge variant={role === 'OWNER' ? 'default' : role === 'ADMIN' ? 'secondary' : 'outline'}>
+                          {role}
+                        </Badge>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

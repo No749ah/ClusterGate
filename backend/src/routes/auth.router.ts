@@ -10,6 +10,7 @@ import { signToken, signShortLivedToken, verifyShortLivedToken } from '../lib/jw
 import { createAuditLog } from '../services/auditService'
 import { AppError } from '../lib/errors'
 import { prisma } from '../lib/prisma'
+import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
@@ -595,6 +596,9 @@ router.post('/2fa/enable', authenticate, async (req: Request, res: Response, nex
       ip: req.ip || req.socket.remoteAddress,
       userAgent: req.get('user-agent'),
     })
+
+    // Achievement: Fort Knox (enable 2FA)
+    achievementService.checkTwoFactor(req.user!.userId).catch(() => {})
 
     res.json({
       success: true,

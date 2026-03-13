@@ -4,6 +4,7 @@ import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { changeRequestService } from '../services/changeRequestService'
 import { achievementService } from '../services/achievementService'
+import { prisma } from '../lib/prisma'
 
 const router = Router()
 
@@ -39,6 +40,36 @@ router.get('/check/:routeId', authenticate, async (req, res, next) => {
   try {
     const required = await changeRequestService.isChangeRequestRequired(req.params.routeId)
     res.json({ success: true, data: { required } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Get full CR policy for a route (includes user's permissions)
+router.get('/policy/:routeId', authenticate, async (req, res, next) => {
+  try {
+    const policy = await changeRequestService.getPolicy(req.params.routeId)
+    const canBypass = await changeRequestService.canBypass(req.params.routeId, req.user!.userId, req.user!.role)
+
+    // Check if user can approve CRs for this route
+    let canApprove = req.user!.role === 'ADMIN'
+    if (!canApprove && policy.required) {
+      const route = await prisma.route.findUnique({
+        where: { id: req.params.routeId },
+        select: { organizationId: true },
+      })
+      if (route?.organizationId) {
+        const membership = await prisma.orgMembership.findUnique({
+          where: { userId_organizationId: { userId: req.user!.userId, organizationId: route.organizationId } },
+          select: { role: true },
+        })
+        if (membership) {
+          canApprove = policy.approverRoles.includes(membership.role)
+        }
+      }
+    }
+
+    res.json({ success: true, data: { ...policy, canBypass, canApprove } })
   } catch (err) {
     next(err)
   }
@@ -80,8 +111,14 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
 })
 
 // Approve change request
-router.post('/:id/approve', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.post('/:id/approve', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
+    // Check if user has approver role for this CR
+    const allowed = await changeRequestService.canApprove(req.params.id, req.user!.userId, req.user!.role)
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: 'You do not have permission to approve this change request' } })
+    }
+
     const { comment } = z.object({
       comment: z.string().max(1000).optional(),
     }).parse(req.body || {})
@@ -98,8 +135,14 @@ router.post('/:id/approve', authenticate, authorize([Role.ADMIN]), async (req, r
 })
 
 // Reject change request
-router.post('/:id/reject', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.post('/:id/reject', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
+    // Check if user has approver role for this CR
+    const allowed = await changeRequestService.canApprove(req.params.id, req.user!.userId, req.user!.role)
+    if (!allowed) {
+      return res.status(403).json({ success: false, error: { message: 'You do not have permission to reject this change request' } })
+    }
+
     const { comment } = z.object({
       comment: z.string().max(1000).optional(),
     }).parse(req.body || {})
