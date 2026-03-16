@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { formatDistanceToNow, format } from 'date-fns'
+import { useConfirm } from '@/components/ui/confirm-dialog'
 
 const severityColors: Record<IncidentSeverity, string> = {
   LOW: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
@@ -69,6 +70,7 @@ export default function IncidentsPage() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createForm, setCreateForm] = useState({ title: '', description: '', severity: 'MEDIUM' as string })
   const [noteForm, setNoteForm] = useState({ title: '', description: '' })
+  const confirm = useConfirm()
 
   const { data, isLoading } = useQuery({
     queryKey: ['incidents', statusFilter, page],
@@ -292,10 +294,14 @@ export default function IncidentsPage() {
                           size="sm"
                           variant="destructive"
                           disabled={deleteMutation.isPending}
-                          onClick={() => {
-                            if (confirm('Delete this incident and all its events? This cannot be undone.')) {
-                              deleteMutation.mutate(incident.id)
-                            }
+                          onClick={async () => {
+                            const ok = await confirm({
+                              title: 'Delete Incident',
+                              description: 'Delete this incident and all its events? This cannot be undone.',
+                              confirmText: 'Delete',
+                              variant: 'destructive',
+                            })
+                            if (ok) deleteMutation.mutate(incident.id)
                           }}
                         >
                           <Trash2 className="w-3.5 h-3.5 mr-1" />
