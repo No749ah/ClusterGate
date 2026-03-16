@@ -821,7 +821,7 @@ export default function SettingsPage() {
             {releaseNotes?.body ? (
               <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
                 <p className="text-sm font-medium text-foreground">What&apos;s new in {releaseNotes.name || releaseNotes.tag}:</p>
-                <div className="text-xs text-muted-foreground prose prose-sm prose-invert max-w-none [&_ul]:list-disc [&_ul]:list-inside [&_ul]:space-y-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-medium [&_p]:mt-1 whitespace-pre-wrap">
+                <div className="text-xs text-muted-foreground prose prose-sm prose-invert max-w-none [&_ul]:list-disc [&_ul]:list-inside [&_ul]:space-y-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-medium [&_p]:mt-1 whitespace-pre-wrap max-h-60 overflow-y-auto">
                   {releaseNotes.body}
                 </div>
               </div>
