@@ -7,7 +7,37 @@ import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
-// List incidents
+/**
+ * @openapi
+ * /api/incidents:
+ *   get:
+ *     tags: [Incidents]
+ *     summary: List incidents
+ *     description: Returns a paginated list of incidents, optionally filtered by status or route.
+ *     parameters:
+ *       - name: status
+ *         in: query
+ *         schema:
+ *           type: string
+ *           enum: [ACTIVE, INVESTIGATING, RESOLVED, DISMISSED]
+ *       - name: routeId
+ *         in: query
+ *         schema:
+ *           type: string
+ *       - name: page
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - name: pageSize
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Paginated list of incidents
+ */
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { status, routeId, page = '1', pageSize = '20' } = req.query
@@ -23,7 +53,25 @@ router.get('/', authenticate, async (req, res, next) => {
   }
 })
 
-// Get incident by ID
+/**
+ * @openapi
+ * /api/incidents/{id}:
+ *   get:
+ *     tags: [Incidents]
+ *     summary: Get incident by ID
+ *     description: Returns a single incident with its timeline events.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Incident with events
+ *       404:
+ *         description: Incident not found
+ */
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const incident = await incidentService.getById(req.params.id)
@@ -36,7 +84,35 @@ router.get('/:id', authenticate, async (req, res, next) => {
   }
 })
 
-// Create incident manually
+/**
+ * @openapi
+ * /api/incidents:
+ *   post:
+ *     tags: [Incidents]
+ *     summary: Create incident
+ *     description: Manually create a new incident. Requires ADMIN or OPERATOR role.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [title]
+ *             properties:
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               severity:
+ *                 type: string
+ *                 enum: [LOW, MEDIUM, HIGH, CRITICAL]
+ *                 default: MEDIUM
+ *               routeId:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Incident created
+ */
 router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const data = z.object({
@@ -53,7 +129,34 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
   }
 })
 
-// Update incident status
+/**
+ * @openapi
+ * /api/incidents/{id}/status:
+ *   patch:
+ *     tags: [Incidents]
+ *     summary: Update incident status
+ *     description: Change the status of an incident. Requires ADMIN or OPERATOR role.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [status]
+ *             properties:
+ *               status:
+ *                 type: string
+ *                 enum: [ACTIVE, INVESTIGATING, RESOLVED, DISMISSED]
+ *     responses:
+ *       200:
+ *         description: Updated incident
+ */
 router.patch('/:id/status', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const { status } = z.object({
@@ -73,7 +176,39 @@ router.patch('/:id/status', authenticate, authorize([Role.ADMIN, Role.OPERATOR])
   }
 })
 
-// Add event to incident
+/**
+ * @openapi
+ * /api/incidents/{id}/events:
+ *   post:
+ *     tags: [Incidents]
+ *     summary: Add event to incident
+ *     description: Add a timeline event (note, status change, etc.) to an incident. Requires ADMIN or OPERATOR role.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [type, title]
+ *             properties:
+ *               type:
+ *                 type: string
+ *               title:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               metadata:
+ *                 type: object
+ *     responses:
+ *       201:
+ *         description: Event created
+ */
 router.post('/:id/events', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const data = z.object({
@@ -93,7 +228,23 @@ router.post('/:id/events', authenticate, authorize([Role.ADMIN, Role.OPERATOR]),
   }
 })
 
-// Dismiss incident (mark as false positive)
+/**
+ * @openapi
+ * /api/incidents/{id}/dismiss:
+ *   patch:
+ *     tags: [Incidents]
+ *     summary: Dismiss incident
+ *     description: Mark an incident as a false positive. Requires ADMIN or OPERATOR role.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Incident dismissed
+ */
 router.patch('/:id/dismiss', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const incident = await incidentService.updateStatus(req.params.id, 'DISMISSED' as any, req.user!.userId)
@@ -103,7 +254,23 @@ router.patch('/:id/dismiss', authenticate, authorize([Role.ADMIN, Role.OPERATOR]
   }
 })
 
-// Delete incident
+/**
+ * @openapi
+ * /api/incidents/{id}:
+ *   delete:
+ *     tags: [Incidents]
+ *     summary: Delete incident
+ *     description: Permanently delete an incident and all its events. Requires ADMIN role.
+ *     parameters:
+ *       - name: id
+ *         in: path
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Incident deleted
+ */
 router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     await incidentService.deleteIncident(req.params.id)

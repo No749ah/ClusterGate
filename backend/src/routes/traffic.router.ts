@@ -11,6 +11,21 @@ const router = Router()
 // Live Traffic SSE
 // ============================================================================
 
+/**
+ * @openapi
+ * /api/traffic/live:
+ *   get:
+ *     tags: [Traffic]
+ *     summary: Live traffic stream
+ *     description: SSE stream of recent proxy requests with GeoIP data. Sends events every 2 seconds.
+ *     responses:
+ *       200:
+ *         description: Server-Sent Events stream
+ *         content:
+ *           text/event-stream:
+ *             schema:
+ *               type: string
+ */
 router.get('/live', authenticate, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
@@ -65,6 +80,24 @@ router.get('/live', authenticate, (req, res) => {
 // Traffic Map Data (snapshot)
 // ============================================================================
 
+/**
+ * @openapi
+ * /api/traffic/map:
+ *   get:
+ *     tags: [Traffic]
+ *     summary: Traffic map data
+ *     description: Aggregated traffic data by country and city for map visualization.
+ *     parameters:
+ *       - name: hours
+ *         in: query
+ *         schema:
+ *           type: integer
+ *           default: 24
+ *         description: Lookback period in hours
+ *     responses:
+ *       200:
+ *         description: Traffic map data with countries, cities, and totals
+ */
 router.get('/map', authenticate, async (req, res, next) => {
   try {
     const hours = parseInt(String(req.query.hours)) || 24
@@ -131,6 +164,17 @@ router.get('/map', authenticate, async (req, res, next) => {
 // Sanitizer Config
 // ============================================================================
 
+/**
+ * @openapi
+ * /api/traffic/sanitizer:
+ *   get:
+ *     tags: [Traffic]
+ *     summary: Get sanitizer configuration
+ *     description: Returns the current PII sanitizer configuration. Requires ADMIN role.
+ *     responses:
+ *       200:
+ *         description: Sanitizer configuration
+ */
 router.get('/sanitizer', authenticate, authorize([Role.ADMIN]), async (_req, res, next) => {
   try {
     const config = await getConfig()
@@ -140,6 +184,46 @@ router.get('/sanitizer', authenticate, authorize([Role.ADMIN]), async (_req, res
   }
 })
 
+/**
+ * @openapi
+ * /api/traffic/sanitizer:
+ *   put:
+ *     tags: [Traffic]
+ *     summary: Update sanitizer configuration
+ *     description: Updates the PII sanitizer configuration. Persisted to database. Requires ADMIN role.
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               enabled:
+ *                 type: boolean
+ *               maskEmails:
+ *                 type: boolean
+ *               maskCreditCards:
+ *                 type: boolean
+ *               maskSSNs:
+ *                 type: boolean
+ *               maskPhoneNumbers:
+ *                 type: boolean
+ *               maskIBANs:
+ *                 type: boolean
+ *               customPatterns:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     name:
+ *                       type: string
+ *                     pattern:
+ *                       type: string
+ *                     replacement:
+ *                       type: string
+ *     responses:
+ *       200:
+ *         description: Updated sanitizer configuration
+ */
 router.put('/sanitizer', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     const data = z.object({
@@ -163,7 +247,28 @@ router.put('/sanitizer', authenticate, authorize([Role.ADMIN]), async (req, res,
   }
 })
 
-// Test sanitizer — preview what masking looks like on sample text
+/**
+ * @openapi
+ * /api/traffic/sanitizer/test:
+ *   post:
+ *     tags: [Traffic]
+ *     summary: Test sanitizer on sample text
+ *     description: Preview how the sanitizer masks PII in the provided text. Requires ADMIN role.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [text]
+ *             properties:
+ *               text:
+ *                 type: string
+ *                 maxLength: 10000
+ *     responses:
+ *       200:
+ *         description: Original and sanitized text
+ */
 router.post('/sanitizer/test', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     const { text } = z.object({ text: z.string().max(10000) }).parse(req.body)

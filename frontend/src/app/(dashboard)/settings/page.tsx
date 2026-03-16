@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Download, Upload, Loader2, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, AlertTriangle, Shield, Wrench, Database, Activity, LogOut, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { useRoutes } from '@/hooks/useRoutes'
 import { api } from '@/lib/api'
