@@ -292,15 +292,25 @@ export default function UsersPage() {
             </DialogHeader>
             <Input
               type="password"
-              placeholder="New password (min 8 chars)"
+              placeholder="New password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
             />
+            <p className="text-xs text-muted-foreground">
+              Min 8 chars with uppercase, lowercase, number, and special character
+            </p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setResetPasswordUser(null)}>Cancel</Button>
               <Button
                 onClick={() => resetPasswordMutation.mutate({ id: resetPasswordUser.id, password: newPassword })}
-                disabled={newPassword.length < 8 || resetPasswordMutation.isPending}
+                disabled={
+                  newPassword.length < 8 ||
+                  !/[A-Z]/.test(newPassword) ||
+                  !/[a-z]/.test(newPassword) ||
+                  !/[0-9]/.test(newPassword) ||
+                  !/[^A-Za-z0-9]/.test(newPassword) ||
+                  resetPasswordMutation.isPending
+                }
               >
                 Reset Password
               </Button>

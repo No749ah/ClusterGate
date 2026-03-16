@@ -11,6 +11,7 @@ import { getVersion } from './lib/version'
 import { prisma } from './lib/prisma'
 import { registry } from './lib/metrics'
 import { globalLimiter, proxyLimiter } from './middleware/rateLimiter'
+import { csrfProtection } from './middleware/csrf'
 import { requestLogger } from './middleware/requestLogger'
 import { auditLogger } from './middleware/auditLogger'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
@@ -57,11 +58,17 @@ app.use(
     origin: config.allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Webhook-Signature', 'X-Hub-Signature-256'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Webhook-Signature', 'X-Hub-Signature-256', 'X-CSRF-Token'],
   })
 )
 
 app.set('trust proxy', 1) // Trust first proxy (for correct IP in k8s)
+
+// API version header — enables consumers to detect breaking changes
+app.use((_req, res, next) => {
+  res.setHeader('X-API-Version', '1')
+  next()
+})
 
 // ============================================================================
 // Parsing & Compression
@@ -77,6 +84,12 @@ app.use(compression({
     return compression.filter(req, res)
   },
 }))
+
+// ============================================================================
+// CSRF Protection
+// ============================================================================
+
+app.use(csrfProtection)
 
 // ============================================================================
 // Logging & Rate Limiting

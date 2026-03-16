@@ -37,17 +37,25 @@ class ApiClient {
     this.baseUrl = baseUrl
   }
 
+  private getCsrfToken(): string | null {
+    if (typeof document === 'undefined') return null
+    const match = document.cookie.match(/(?:^|;\s*)cg_csrf=([^;]+)/)
+    return match ? match[1] : null
+  }
+
   private async request<T>(
     path: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`
+    const csrfToken = this.getCsrfToken()
 
     const response = await fetch(url, {
       ...options,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
+        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
         ...options.headers,
       },
     })
@@ -395,11 +403,15 @@ class ApiClient {
       }>>('/api/system/update-check'),
 
     update: (onEvent: (event: any) => void): Promise<void> => {
+      const csrf = this.getCsrfToken()
       return new Promise((resolve, reject) => {
         fetch(`${this.baseUrl}/api/system/update`, {
           method: 'POST',
           credentials: 'include',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+          },
         }).then(response => {
           if (!response.ok || !response.body) {
             reject(new Error(`Update failed with status ${response.status}`))

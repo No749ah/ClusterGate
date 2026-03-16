@@ -110,7 +110,7 @@ export async function acceptInvite(token: string, data: { name: string; password
     })
   }, { isolationLevel: 'Serializable' })
 
-  const jwtToken = signToken({ userId: user.id, email: user.email, role: user.role })
+  const jwtToken = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
   const { passwordHash: _, ...safeUser } = user
 
   return { user: safeUser, token: jwtToken }

@@ -134,10 +134,10 @@ export async function deleteUser(id: string, requestingUserId: string) {
     }
   }
 
-  // Soft delete
+  // Soft delete + revoke all sessions
   await prisma.user.update({
     where: { id },
-    data: { isActive: false },
+    data: { isActive: false, tokenVersion: { increment: 1 } },
   })
 }
 
@@ -151,5 +151,5 @@ export async function adminResetPassword(id: string, newPassword: string) {
   }
 
   const passwordHash = await hashPassword(newPassword)
-  await prisma.user.update({ where: { id }, data: { passwordHash } })
+  await prisma.user.update({ where: { id }, data: { passwordHash, tokenVersion: { increment: 1 } } })
 }

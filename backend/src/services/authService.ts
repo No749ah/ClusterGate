@@ -40,7 +40,7 @@ export async function login(email: string, password: string): Promise<LoginResul
     data: { lastLoginAt: new Date() },
   })
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role })
+  const token = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
 
   const { passwordHash: _, twoFactorSecret: _s, recoveryCodes: _r, ...safeUser } = user
 
@@ -89,7 +89,7 @@ export async function changePassword(
   }
 
   const passwordHash = await bcrypt.hash(newPassword, BCRYPT_ROUNDS)
-  await prisma.user.update({ where: { id: userId }, data: { passwordHash } })
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash, tokenVersion: { increment: 1 } } })
 }
 
 export function validatePassword(password: string): { valid: boolean; errors: string[] } {
@@ -143,7 +143,7 @@ export async function setupInitialAdmin(data: {
     })
   }, { isolationLevel: 'Serializable' })
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role })
+  const token = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
   const { passwordHash: _, twoFactorSecret: _s, recoveryCodes: _r, ...safeUser } = user
 
   return { user: safeUser, token }

@@ -20,7 +20,12 @@ import { formatDate } from '@/lib/utils'
 const passwordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Current password required'),
-    newPassword: z.string().min(8, 'Min 8 characters'),
+    newPassword: z.string()
+      .min(8, 'Min 8 characters')
+      .regex(/[A-Z]/, 'Must contain an uppercase letter')
+      .regex(/[a-z]/, 'Must contain a lowercase letter')
+      .regex(/[0-9]/, 'Must contain a number')
+      .regex(/[^A-Za-z0-9]/, 'Must contain a special character'),
     confirmPassword: z.string(),
   })
   .refine((d) => d.newPassword === d.confirmPassword, {

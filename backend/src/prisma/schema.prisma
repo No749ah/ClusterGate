@@ -101,6 +101,7 @@ model User {
   twoFactorSecret  String?
   twoFactorEnabled Boolean   @default(false)
   recoveryCodes    String[]  @default([])
+  tokenVersion     Int       @default(0)
   lastLoginAt      DateTime?
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt

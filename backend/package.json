@@ -1,6 +1,6 @@
 {
   "name": "clustergate-backend",
-  "version": "1.5.1",
+  "version": "2.0.0",
   "description": "ClusterGate - Kubernetes Routing Gateway Backend",
   "main": "dist/app.js",
   "scripts": {
@@ -12,7 +12,10 @@
     "db:generate": "prisma generate",
     "db:seed": "tsx src/prisma/seed.ts",
     "db:studio": "prisma studio",
-    "db:reset": "prisma migrate reset --force"
+    "db:reset": "prisma migrate reset --force",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@prisma/client": "^5.10.0",
@@ -53,8 +56,10 @@
     "@types/node": "^25.5.0",
     "@types/swagger-jsdoc": "^6.0.4",
     "@types/swagger-ui-express": "^4.1.8",
+    "@types/jest": "^29.5.14",
     "prisma": "^5.10.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^3.1.1"
   }
 }

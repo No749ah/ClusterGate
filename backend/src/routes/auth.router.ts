@@ -451,6 +451,7 @@ router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next
         role: true,
         isActive: true,
         twoFactorEnabled: true,
+        tokenVersion: true,
         lastLoginAt: true,
         createdAt: true,
         updatedAt: true,
@@ -467,7 +468,7 @@ router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next
       data: { lastLoginAt: new Date() },
     })
 
-    const token = signToken({ userId: user.id, email: user.email, role: user.role })
+    const token = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
     res.cookie('cg_session', token, COOKIE_OPTIONS)
 
     createAuditLog({
@@ -691,18 +692,28 @@ router.post('/2fa/disable', authenticate, async (req: Request, res: Response, ne
  *       401:
  *         description: Not authenticated
  */
-router.post('/logout', authenticate, (req: Request, res: Response) => {
-  createAuditLog({
-    userId: req.user!.userId,
-    action: 'auth.logout',
-    resource: 'auth',
-    resourceId: req.user!.userId,
-    ip: req.ip || req.socket.remoteAddress,
-    userAgent: req.get('user-agent'),
-  })
+router.post('/logout', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Increment tokenVersion to revoke all sessions for this user
+    await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { tokenVersion: { increment: 1 } },
+    })
 
-  res.clearCookie('cg_session', { path: '/' })
-  res.json({ success: true, message: 'Logged out successfully' })
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'auth.logout',
+      resource: 'auth',
+      resourceId: req.user!.userId,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.clearCookie('cg_session', { path: '/' })
+    res.json({ success: true, message: 'Logged out successfully' })
+  } catch (err) {
+    next(err)
+  }
 })
 
 /**

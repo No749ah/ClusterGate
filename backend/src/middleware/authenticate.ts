@@ -42,12 +42,18 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
     // Verify user still exists and is active
     const user = await prisma.user.findUnique({
       where: { id: payload.userId },
-      select: { id: true, email: true, role: true, isActive: true },
+      select: { id: true, email: true, role: true, isActive: true, tokenVersion: true },
     })
 
     if (!user || !user.isActive) {
       res.clearCookie('cg_session', { path: '/' })
       throw AppError.unauthorized('Account not found or deactivated')
+    }
+
+    // Check token version for session revocation
+    if (payload.tokenVersion !== undefined && payload.tokenVersion !== user.tokenVersion) {
+      res.clearCookie('cg_session', { path: '/' })
+      throw AppError.unauthorized('Session has been revoked')
     }
 
     req.user = {

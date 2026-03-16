@@ -662,11 +662,11 @@ router.get('/audit-export', async (req, res, next) => {
  */
 router.post('/force-logout-all', async (req, res, next) => {
   try {
-    const result = await prisma.user.updateMany({
-      where: { isActive: true, id: { not: (req as any).user.id } },
-      data: { updatedAt: new Date() },
-    })
-    res.json({ success: true, data: { affectedUsers: result.count, message: 'All other users will need to re-authenticate' } })
+    const result = await prisma.$executeRaw`
+      UPDATE "users" SET "tokenVersion" = "tokenVersion" + 1, "updatedAt" = NOW()
+      WHERE "isActive" = true AND "id" != ${(req as any).user.userId}
+    `
+    res.json({ success: true, data: { affectedUsers: result, message: 'All other users will need to re-authenticate' } })
   } catch (err) {
     next(err)
   }
