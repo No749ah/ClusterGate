@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { Role } from '@prisma/client'
 import { prisma } from '../lib/prisma'
-import { getConfig, updateConfig } from '../services/sanitizerService'
+import { getConfig, updateConfig, sanitizeText } from '../services/sanitizerService'
 import { z } from 'zod'
 
 const router = Router()
@@ -158,6 +158,17 @@ router.put('/sanitizer', authenticate, authorize([Role.ADMIN]), async (req, res,
 
     const config = await updateConfig(data)
     res.json({ success: true, data: config })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Test sanitizer — preview what masking looks like on sample text
+router.post('/sanitizer/test', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    const { text } = z.object({ text: z.string().max(10000) }).parse(req.body)
+    const sanitized = sanitizeText(text)
+    res.json({ success: true, data: { original: text, sanitized: sanitized ?? text } })
   } catch (err) {
     next(err)
   }

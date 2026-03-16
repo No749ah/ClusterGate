@@ -835,6 +835,9 @@ class ApiClient {
 
     updateConfig: (data: Partial<SanitizerConfig>) =>
       this.put<ApiResponse<SanitizerConfig>>('/api/traffic/sanitizer', data),
+
+    test: (text: string) =>
+      this.post<ApiResponse<{ original: string; sanitized: string }>>('/api/traffic/sanitizer/test', { text }),
   }
 }
 

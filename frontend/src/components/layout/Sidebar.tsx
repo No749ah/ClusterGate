@@ -22,6 +22,7 @@ import {
   AlertTriangle,
   GitPullRequest,
   Globe,
+  ShieldAlert,
 } from 'lucide-react'
 import { Logo } from '@/components/common/Logo'
 import { cn } from '@/lib/utils'
@@ -68,6 +69,7 @@ const navSections: NavSection[] = [
     items: [
       { href: '/organizations', icon: Building2, label: 'Organizations' },
       { href: '/users', icon: Users, label: 'Users', adminOnly: true },
+      { href: '/sanitizer', icon: ShieldAlert, label: 'Sanitizer', adminOnly: true },
       { href: '/audit', icon: Shield, label: 'Audit Log', adminOnly: true },
       { href: '/backups', icon: HardDrive, label: 'Backups', adminOnly: true },
       { href: '/settings', icon: Settings, label: 'System', adminOnly: true },
