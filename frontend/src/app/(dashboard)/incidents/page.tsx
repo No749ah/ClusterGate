@@ -298,7 +298,7 @@ export default function IncidentsPage() {
                             const ok = await confirm({
                               title: 'Delete Incident',
                               description: 'Delete this incident and all its events? This cannot be undone.',
-                              confirmText: 'Delete',
+                              confirmLabel: 'Delete',
                               variant: 'destructive',
                             })
                             if (ok) deleteMutation.mutate(incident.id)
