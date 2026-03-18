@@ -1,6 +1,6 @@
 {
   "name": "clustergate-frontend",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "ClusterGate - Kubernetes Routing Gateway Frontend",
   "scripts": {
     "dev": "next dev -p 3000",
