@@ -237,6 +237,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   }
 
   const handleFormSubmit = async (data: RouteFormValues) => {
+    // Prevent accidental submit when not on the last step (e.g. Enter key in input)
+    if (step < STEPS.length - 1) return
     if (!isAdmin && !data.organizationId) {
       setStep(0)
       return

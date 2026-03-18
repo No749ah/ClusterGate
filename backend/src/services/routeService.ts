@@ -178,10 +178,13 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
   }
 
   // Check if any fields actually changed before creating a new version
-  const versionableFields = ['name', 'path', 'targetUrl', 'methods', 'isActive', 'stripPrefix',
-    'customHeaders', 'rewriteRules', 'timeout', 'maxRetries', 'retryDelay',
-    'maintenanceMode', 'maintenanceMessage', 'webhookUrl', 'webhookSecret', 'webhookEvents',
-    'wsEnabled', 'cbEnabled', 'cbThreshold', 'cbTimeout', 'cbHalfOpenMax',
+  const versionableFields = ['name', 'publicPath', 'targetUrl', 'methods', 'isActive', 'stripPrefix',
+    'addHeaders', 'removeHeaders', 'rewriteRules', 'timeout', 'retryCount', 'retryDelay',
+    'maintenanceMode', 'maintenanceMessage', 'webhookSecret',
+    'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
+    'lbStrategy', 'requireAuth', 'authType', 'authValue',
+    'corsEnabled', 'corsOrigins', 'ipAllowlist',
+    'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
     'organizationId', 'routeGroupId'] as const
   const hasChanges = versionableFields.some((field) => {
     if (!(field in data)) return false

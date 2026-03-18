@@ -624,6 +624,9 @@ const DIFF_FIELDS = [
   'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules',
   'corsEnabled', 'corsOrigins', 'ipAllowlist', 'requireAuth', 'authType',
   'maintenanceMode', 'maintenanceMessage',
+  'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
+  'lbStrategy', 'webhookSecret', 'organizationId', 'routeGroupId',
+  'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
 ] as const
 
 function VersionDiffDialog({
