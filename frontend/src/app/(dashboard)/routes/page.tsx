@@ -471,17 +471,20 @@ function RouteRow({
             {route.publicPath}
             <CopyUrlButton path={route.publicPath} />
           </p>
-          {route.tags.length > 0 && (
-            <div className="flex gap-1 mt-1 flex-wrap">
+          {(route.tags.length > 0 || (route as any).organization) && (
+            <div className="flex items-center gap-1 mt-1 flex-wrap">
+              {(route as any).organization && (
+                <Badge variant="outline" className="text-[10px] py-0 px-1.5">{(route as any).organization.name}</Badge>
+              )}
               {route.tags.slice(0, 3).map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-xs py-0 px-1.5">
+                <Badge key={tag} variant="secondary" className="text-[10px] py-0 px-1">
                   {tag}
                 </Badge>
               ))}
+              {route.tags.length > 3 && (
+                <span className="text-[10px] text-muted-foreground">+{route.tags.length - 3}</span>
+              )}
             </div>
-          )}
-          {(route as any).organization && (
-            <Badge variant="outline" className="text-xs ml-2">{(route as any).organization.name}</Badge>
           )}
         </div>
       </td>
