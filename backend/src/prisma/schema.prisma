@@ -582,3 +582,19 @@ model SystemSetting {
 
   @@map("system_settings")
 }
+
+// =============================================================================
+// Backups (stored in DB, survives container restarts)
+// =============================================================================
+
+model Backup {
+  id        String   @id @default(cuid())
+  filename  String   @unique
+  data      Json
+  size      Int
+  tags      String[] @default([])
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@map("backups")
+}

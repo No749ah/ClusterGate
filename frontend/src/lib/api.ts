@@ -607,10 +607,13 @@ class ApiClient {
 
   backups = {
     list: () =>
-      this.get<ApiResponse<{ filename: string; size: number; createdAt: string }[]>>('/api/backups'),
+      this.get<ApiResponse<{ filename: string; size: number; tags: string[]; note: string | null; createdAt: string }[]>>('/api/backups'),
 
-    create: () =>
-      this.post<ApiResponse<{ filename: string; size: number; createdAt: string }>>('/api/backups'),
+    create: (options?: { tags?: string[]; note?: string }) =>
+      this.post<ApiResponse<{ filename: string; size: number; tags: string[]; note: string | null; createdAt: string }>>('/api/backups', options),
+
+    update: (filename: string, data: { tags?: string[]; note?: string | null }) =>
+      this.put<ApiResponse<{ filename: string; size: number; tags: string[]; note: string | null; createdAt: string }>>(`/api/backups/${encodeURIComponent(filename)}`, data),
 
     restore: (filename: string) =>
       this.post<ApiResponse<null>>(`/api/backups/${encodeURIComponent(filename)}/restore`),

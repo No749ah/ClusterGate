@@ -146,6 +146,9 @@ export async function getTeams(organizationId: string) {
   return prisma.team.findMany({
     where: { organizationId },
     include: {
+      members: {
+        include: { user: { select: { id: true, name: true, email: true } } },
+      },
       _count: { select: { members: true, routeGroups: true } },
     },
     orderBy: { name: 'asc' },

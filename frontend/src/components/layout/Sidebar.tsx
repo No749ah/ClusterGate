@@ -265,8 +265,10 @@ export function Sidebar() {
                 {user.name.charAt(0).toUpperCase()}
               </Link>
               <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-sidebar-foreground truncate">{user.name}</p>
-                <p className="text-xs text-muted-foreground truncate">{user.role}</p>
+                <p className="text-xs font-medium text-sidebar-foreground truncate" title={user.name}>{user.name}</p>
+                <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded-full ${user.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-400' : user.role === 'OPERATOR' ? 'bg-blue-500/20 text-blue-400' : 'bg-muted text-muted-foreground'}`}>
+                  {user.role === 'ADMIN' ? 'Admin' : user.role === 'OPERATOR' ? 'Operator' : 'Viewer'}
+                </span>
               </div>
               <button
                 onClick={() => logoutMutation.mutate()}

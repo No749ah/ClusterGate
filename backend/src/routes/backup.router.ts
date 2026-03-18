@@ -9,6 +9,7 @@ import {
   restoreBackup,
   deleteBackup,
   downloadBackup,
+  updateBackup,
 } from '../services/backupService'
 import { achievementService } from '../services/achievementService'
 
@@ -91,7 +92,8 @@ router.get('/schedule', (_req: Request, res: Response) => {
  */
 router.post('/', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const backup = await createBackup()
+    const { tags, note } = req.body || {}
+    const backup = await createBackup({ tags, note })
 
     createAuditLog({
       userId: req.user!.userId,
@@ -228,7 +230,7 @@ router.post('/:filename/restore', async (req: Request, res: Response, next: Next
 router.get('/:filename/download', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const { filename } = req.params
-    const filePath = await downloadBackup(filename)
+    const jsonData = await downloadBackup(filename)
 
     createAuditLog({
       userId: req.user!.userId,
@@ -239,7 +241,9 @@ router.get('/:filename/download', async (req: Request, res: Response, next: Next
       userAgent: req.get('user-agent'),
     })
 
-    res.download(filePath, filename)
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+    res.setHeader('Content-Type', 'application/json')
+    res.send(jsonData)
   } catch (err) {
     next(err)
   }
@@ -289,6 +293,18 @@ router.delete('/:filename', async (req: Request, res: Response, next: NextFuncti
     })
 
     res.json({ success: true, message: `Backup ${filename} deleted` })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Update backup metadata (tags, note)
+router.put('/:filename', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { filename } = req.params
+    const { tags, note } = req.body
+    const backup = await updateBackup(filename, { tags, note })
+    res.json({ success: true, data: backup })
   } catch (err) {
     next(err)
   }

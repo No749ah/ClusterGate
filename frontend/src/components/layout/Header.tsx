@@ -86,8 +86,13 @@ export function Header({ title }: HeaderProps) {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuLabel>
-              <p className="font-medium">{user?.name}</p>
-              <p className="text-xs text-muted-foreground font-normal truncate">{user?.email}</p>
+              <div className="flex items-center gap-2">
+                <p className="font-medium">{user?.name}</p>
+                <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${user?.role === 'ADMIN' ? 'bg-purple-500/20 text-purple-400' : user?.role === 'OPERATOR' ? 'bg-blue-500/20 text-blue-400' : 'bg-muted text-muted-foreground'}`}>
+                  {user?.role === 'ADMIN' ? 'Admin' : user?.role === 'OPERATOR' ? 'Operator' : 'Viewer'}
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground font-normal truncate" title={user?.email}>{user?.email}</p>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem asChild>

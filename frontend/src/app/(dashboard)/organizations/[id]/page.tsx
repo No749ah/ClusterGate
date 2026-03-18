@@ -127,6 +127,30 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
     onError: (err: any) => toast.error(err.message || 'Failed to delete team'),
   })
 
+  const [expandedTeam, setExpandedTeam] = useState<string | null>(null)
+  const [addTeamMemberUserId, setAddTeamMemberUserId] = useState('')
+
+  const addTeamMemberMutation = useMutation({
+    mutationFn: ({ teamId, userId }: { teamId: string; userId: string }) =>
+      api.organizations.addTeamMember(id, teamId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-teams', id] })
+      toast.success('Team member added')
+      setAddTeamMemberUserId('')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to add team member'),
+  })
+
+  const removeTeamMemberMutation = useMutation({
+    mutationFn: ({ teamId, userId }: { teamId: string; userId: string }) =>
+      api.organizations.removeTeamMember(id, teamId, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['organization-teams', id] })
+      toast.success('Team member removed')
+    },
+    onError: (err: any) => toast.error(err.message || 'Failed to remove team member'),
+  })
+
   const resetTeamForm = () => {
     setShowTeamForm(false)
     setEditingTeam(null)
@@ -545,45 +569,104 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <p className="text-xs mt-1">Create a team to organize members.</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-              {teams.map((team) => (
-                <div key={team.id} className="rounded-lg border border-border bg-card p-5 hover:border-primary/30 transition-colors">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="text-base font-semibold">{team.name}</p>
-                      {team.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" title={team.description}>{team.description}</p>
-                      )}
+            <div className="space-y-4">
+              {teams.map((team) => {
+                const isExpanded = expandedTeam === team.id
+                const teamMembers = team.members ?? []
+                const teamMemberIds = new Set(teamMembers.map((m: any) => m.userId))
+                return (
+                  <div key={team.id} className="rounded-lg border border-border bg-card hover:border-primary/30 transition-colors">
+                    <div className="p-5">
+                      <div className="flex items-start justify-between mb-2">
+                        <button onClick={() => setExpandedTeam(isExpanded ? null : team.id)} className="text-left flex-1">
+                          <p className="text-base font-semibold">{team.name}</p>
+                          {team.description && (
+                            <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" title={team.description}>{team.description}</p>
+                          )}
+                        </button>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => handleEditTeam(team)} className="h-7 w-7 p-0">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleDeleteTeam(team)}
+                            className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs text-muted-foreground mt-3 pt-3 border-t border-border/50">
+                        <button onClick={() => setExpandedTeam(isExpanded ? null : team.id)} className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+                          <Users className="w-3.5 h-3.5" />
+                          <span>{team._count?.members ?? teamMembers.length} members</span>
+                        </button>
+                        <div className="flex items-center gap-1.5">
+                          <Shield className="w-3.5 h-3.5" />
+                          <span>{team._count?.routeGroups ?? 0} groups</span>
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => handleEditTeam(team)} className="h-7 w-7 p-0">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteTeam(team)}
-                        className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
+                    {isExpanded && (
+                      <div className="border-t border-border/50 p-4 space-y-3">
+                        {/* Add member */}
+                        <div className="flex items-center gap-2">
+                          <Select value={addTeamMemberUserId} onValueChange={setAddTeamMemberUserId}>
+                            <SelectTrigger className="flex-1 h-8 text-xs">
+                              <SelectValue placeholder="Select user to add..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {allUsers
+                                .filter((u: User) => !teamMemberIds.has(u.id))
+                                .map((u: User) => (
+                                  <SelectItem key={u.id} value={u.id}>
+                                    {u.name} ({u.email})
+                                  </SelectItem>
+                                ))}
+                            </SelectContent>
+                          </Select>
+                          <Button
+                            size="sm"
+                            className="h-8"
+                            disabled={!addTeamMemberUserId || addTeamMemberMutation.isPending}
+                            onClick={() => addTeamMemberMutation.mutate({ teamId: team.id, userId: addTeamMemberUserId })}
+                          >
+                            <Plus className="w-3.5 h-3.5 mr-1" /> Add
+                          </Button>
+                        </div>
+                        {/* Member list */}
+                        {teamMembers.length === 0 ? (
+                          <p className="text-xs text-muted-foreground">No members yet.</p>
+                        ) : (
+                          <div className="space-y-1">
+                            {teamMembers.map((m: any) => (
+                              <div key={m.id} className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-muted/30">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-semibold flex items-center justify-center">
+                                    {m.user?.name?.charAt(0).toUpperCase() ?? '?'}
+                                  </div>
+                                  <span className="text-sm">{m.user?.name ?? 'Unknown'}</span>
+                                  <span className="text-xs text-muted-foreground">{m.user?.email}</span>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive"
+                                  onClick={() => removeTeamMemberMutation.mutate({ teamId: team.id, userId: m.userId })}
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground mt-3 pt-3 border-t border-border/50">
-                    <div className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5" />
-                      <span>{team._count?.members ?? team.members?.length ?? 0} members</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5" />
-                      <span>{team._count?.routeGroups ?? 0} groups</span>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    Created {formatRelativeTime(team.createdAt)}
-                  </p>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </TabsContent>

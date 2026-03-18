@@ -1,20 +1,12 @@
-import fs from 'fs'
-import path from 'path'
 import { logger } from '../lib/logger'
 import { AppError } from '../lib/errors'
 import { prisma } from '../lib/prisma'
 
-const fsPromises = fs.promises
-
-// Backup directory inside the app
-const BACKUPS_DIR = path.resolve(process.cwd(), 'backups')
-
-// Strict filename validation: alphanumeric, dashes, underscores, dots only
-const SAFE_FILENAME_RE = /^[a-zA-Z0-9_\-]+\.json$/
-
-interface BackupMeta {
+export interface BackupMeta {
   filename: string
   size: number
+  tags: string[]
+  note: string | null
   createdAt: string
 }
 
@@ -43,31 +35,11 @@ const BACKUP_MODELS = [
   'inviteToken',
 ] as const
 
-function validateFilename(filename: string): void {
-  if (!filename || !SAFE_FILENAME_RE.test(filename)) {
-    throw AppError.badRequest('Invalid backup filename. Only alphanumeric characters, dashes, underscores, and .json extension are allowed.')
-  }
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
-    throw AppError.badRequest('Invalid backup filename')
-  }
-}
-
-async function ensureBackupsDir(): Promise<void> {
-  try {
-    await fsPromises.mkdir(BACKUPS_DIR, { recursive: true })
-  } catch (err) {
-    logger.error('Failed to create backups directory', { error: (err as Error).message })
-    throw AppError.internal('Failed to create backups directory')
-  }
-}
-
 /**
- * Create a new database backup using Prisma.
- * Exports all tables as JSON — no pg_dump binary needed.
+ * Create a new database backup stored in the database itself.
+ * Exports all tables as JSON — survives container restarts.
  */
-export async function createBackup(): Promise<BackupMeta> {
-  await ensureBackupsDir()
-
+export async function createBackup(options?: { tags?: string[]; note?: string }): Promise<BackupMeta> {
   const now = new Date()
   const timestamp = now
     .toISOString()
@@ -75,12 +47,10 @@ export async function createBackup(): Promise<BackupMeta> {
     .replace(/:/g, '-')
     .replace(/\..+/, '')
   const filename = `clustergate_backup_${timestamp}.json`
-  const filePath = path.join(BACKUPS_DIR, filename)
 
   try {
     const data: Record<string, any[]> = {}
 
-    // Export each model
     for (const model of BACKUP_MODELS) {
       const delegate = (prisma as any)[model]
       if (delegate && typeof delegate.findMany === 'function') {
@@ -94,82 +64,60 @@ export async function createBackup(): Promise<BackupMeta> {
       models: BACKUP_MODELS as unknown as string[],
     }]
 
-    await fsPromises.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8')
-    const stat = await fsPromises.stat(filePath)
+    const json = JSON.stringify(data)
+    const size = Buffer.byteLength(json, 'utf-8')
 
-    logger.info('Database backup created', { filename, size: stat.size })
+    const tags = options?.tags ?? []
+    const note = options?.note ?? null
 
-    return {
-      filename,
-      size: stat.size,
-      createdAt: now.toISOString(),
-    }
+    await prisma.backup.create({
+      data: { filename, data: data as any, size, tags, note },
+    })
+
+    logger.info('Database backup created', { filename, size })
+
+    return { filename, size, tags, note, createdAt: now.toISOString() }
   } catch (err) {
-    try { await fsPromises.unlink(filePath) } catch {}
     logger.error('Backup creation failed', { error: (err as Error).message })
     throw AppError.internal(`Backup failed: ${(err as Error).message}`)
   }
 }
 
 /**
- * List all backup files with metadata.
+ * List all backups with metadata.
  */
 export async function listBackups(): Promise<BackupMeta[]> {
-  await ensureBackupsDir()
+  const backups = await prisma.backup.findMany({
+    select: { filename: true, size: true, tags: true, note: true, createdAt: true },
+    orderBy: { createdAt: 'desc' },
+  })
 
-  const files = await fsPromises.readdir(BACKUPS_DIR)
-  const backupFiles = files.filter((f) => f.endsWith('.json') || f.endsWith('.sql'))
-
-  const backups: BackupMeta[] = []
-  for (const file of backupFiles) {
-    const filePath = path.join(BACKUPS_DIR, file)
-    const stat = await fsPromises.stat(filePath)
-    backups.push({
-      filename: file,
-      size: stat.size,
-      createdAt: stat.birthtime.toISOString(),
-    })
-  }
-
-  backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-  return backups
+  return backups.map((b) => ({
+    filename: b.filename,
+    size: b.size,
+    tags: b.tags,
+    note: b.note,
+    createdAt: b.createdAt.toISOString(),
+  }))
 }
 
 /**
- * Restore a database from a JSON backup file.
+ * Restore a database from a backup stored in the database.
  * Clears all tables and re-inserts data in dependency order.
  */
 export async function restoreBackup(filename: string): Promise<void> {
-  // Accept both .json and legacy .sql filenames for validation
-  if (!filename || (!/^[a-zA-Z0-9_\-]+\.json$/.test(filename) && !/^[a-zA-Z0-9_\-]+\.sql$/.test(filename))) {
-    throw AppError.badRequest('Invalid backup filename')
-  }
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+  if (!filename || !/^[a-zA-Z0-9_\-]+\.json$/.test(filename)) {
     throw AppError.badRequest('Invalid backup filename')
   }
 
-  if (filename.endsWith('.sql')) {
-    throw AppError.badRequest('Legacy .sql backups cannot be restored. Please create a new backup first.')
-  }
-
-  const filePath = path.join(BACKUPS_DIR, filename)
+  const backup = await prisma.backup.findUnique({ where: { filename } })
+  if (!backup) throw AppError.notFound('Backup')
 
   try {
-    await fsPromises.access(filePath)
-  } catch {
-    throw AppError.notFound('Backup file')
-  }
-
-  try {
-    const raw = await fsPromises.readFile(filePath, 'utf-8')
-    const data: Record<string, any[]> = JSON.parse(raw)
-
-    // Delete all data in reverse dependency order (children before parents)
+    const data = backup.data as Record<string, any[]>
     const deleteOrder = [...BACKUP_MODELS].reverse()
 
     await prisma.$transaction(async (tx: any) => {
-      // Clear tables in reverse order
       for (const model of deleteOrder) {
         const delegate = (tx as any)[model]
         if (delegate && typeof delegate.deleteMany === 'function') {
@@ -177,14 +125,12 @@ export async function restoreBackup(filename: string): Promise<void> {
         }
       }
 
-      // Re-insert in dependency order (parents first)
       for (const model of BACKUP_MODELS) {
         const records = data[model]
         if (!records || !Array.isArray(records) || records.length === 0) continue
 
         const delegate = (tx as any)[model]
         if (delegate && typeof delegate.createMany === 'function') {
-          // Convert date strings back to Date objects
           const processed = records.map((record) => {
             const converted: any = { ...record }
             for (const [key, value] of Object.entries(converted)) {
@@ -198,7 +144,7 @@ export async function restoreBackup(filename: string): Promise<void> {
           await delegate.createMany({ data: processed, skipDuplicates: true })
         }
       }
-    }, { timeout: 300000 }) // 5 minute timeout
+    }, { timeout: 300000 })
 
     logger.info('Database restored from backup', { filename })
   } catch (err) {
@@ -208,72 +154,76 @@ export async function restoreBackup(filename: string): Promise<void> {
 }
 
 /**
- * Delete a specific backup file.
+ * Delete a specific backup.
  */
 export async function deleteBackup(filename: string): Promise<void> {
-  // Accept both .json and .sql for deletion
-  if (!filename || (!/^[a-zA-Z0-9_\-]+\.json$/.test(filename) && !/^[a-zA-Z0-9_\-]+\.sql$/.test(filename))) {
-    throw AppError.badRequest('Invalid backup filename')
-  }
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+  if (!filename || !/^[a-zA-Z0-9_\-]+\.json$/.test(filename)) {
     throw AppError.badRequest('Invalid backup filename')
   }
 
-  const filePath = path.join(BACKUPS_DIR, filename)
+  const backup = await prisma.backup.findUnique({ where: { filename } })
+  if (!backup) throw AppError.notFound('Backup')
 
-  try {
-    await fsPromises.access(filePath)
-  } catch {
-    throw AppError.notFound('Backup file')
-  }
-
-  await fsPromises.unlink(filePath)
+  await prisma.backup.delete({ where: { filename } })
   logger.info('Backup deleted', { filename })
 }
 
 /**
- * Returns the absolute file path for a backup file (for streaming download).
+ * Update backup tags and/or note.
  */
+export async function updateBackup(filename: string, data: { tags?: string[]; note?: string | null }): Promise<BackupMeta> {
+  if (!filename || !/^[a-zA-Z0-9_\-]+\.json$/.test(filename)) {
+    throw AppError.badRequest('Invalid backup filename')
+  }
+
+  const backup = await prisma.backup.findUnique({ where: { filename } })
+  if (!backup) throw AppError.notFound('Backup')
+
+  const updated = await prisma.backup.update({
+    where: { filename },
+    data,
+    select: { filename: true, size: true, tags: true, note: true, createdAt: true },
+  })
+
+  return {
+    filename: updated.filename,
+    size: updated.size,
+    tags: updated.tags,
+    note: updated.note,
+    createdAt: updated.createdAt.toISOString(),
+  }
+}
+
 /**
  * Enforce retention policy by deleting oldest backups beyond the limit.
- * Returns the number of backups deleted.
  */
 export async function enforceRetentionPolicy(maxBackups: number): Promise<number> {
   const backups = await listBackups()
   if (backups.length <= maxBackups) return 0
 
-  // Sort newest first (by createdAt descending)
-  const sorted = backups.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-  const toDelete = sorted.slice(maxBackups)
-
+  const toDelete = backups.slice(maxBackups) // already sorted newest-first
   let deleted = 0
   for (const backup of toDelete) {
     try {
       await deleteBackup(backup.filename)
       deleted++
     } catch (err) {
-      console.error(`Failed to delete old backup ${backup.filename}:`, err)
+      logger.error(`Failed to delete old backup ${backup.filename}`, { error: (err as Error).message })
     }
   }
   return deleted
 }
 
+/**
+ * Returns backup data as a JSON string for download.
+ */
 export async function downloadBackup(filename: string): Promise<string> {
-  // Accept both .json and .sql for download
-  if (!filename || (!/^[a-zA-Z0-9_\-]+\.json$/.test(filename) && !/^[a-zA-Z0-9_\-]+\.sql$/.test(filename))) {
-    throw AppError.badRequest('Invalid backup filename')
-  }
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+  if (!filename || !/^[a-zA-Z0-9_\-]+\.json$/.test(filename)) {
     throw AppError.badRequest('Invalid backup filename')
   }
 
-  const filePath = path.join(BACKUPS_DIR, filename)
+  const backup = await prisma.backup.findUnique({ where: { filename } })
+  if (!backup) throw AppError.notFound('Backup')
 
-  try {
-    await fsPromises.access(filePath)
-  } catch {
-    throw AppError.notFound('Backup file')
-  }
-
-  return filePath
+  return JSON.stringify(backup.data, null, 2)
 }
