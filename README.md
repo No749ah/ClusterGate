@@ -12,7 +12,7 @@ Expose internal Kubernetes services over public domains with a beautiful, secure
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js](https://img.shields.io/badge/Node.js-22%2B-339933?logo=node.js&logoColor=white)](https://nodejs.org)
-[![Next.js](https://img.shields.io/badge/Next.js-14-black?logo=next.js)](https://nextjs.org)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?logo=next.js)](https://nextjs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](docker-compose.yml)
 [![Kubernetes](https://img.shields.io/badge/Kubernetes-Helm%20%2B%20kubectl-326CE5?logo=kubernetes&logoColor=white)](k8s/)
@@ -49,7 +49,7 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Multi-Tenant** — Organizations with teams, role-based membership (Owner/Admin/Member), route scoping
 - **Two-Factor Authentication** — TOTP-based 2FA with recovery codes for user accounts
 - **Analytics Dashboard** — Latency trends (p50/p95/p99), error rates, traffic heatmap, status distribution
-- **Security** — JWT auth (httpOnly cookies, 7-day sessions), bcrypt, per-route auth (API key / Basic / Bearer), rate limiting, IP allowlists, webhook secrets, CORS
+- **Security** — JWT auth (httpOnly cookies, 7-day sessions), bcrypt, CSRF protection (double-submit cookie), session revocation (tokenVersion), per-route auth (API key / Basic / Bearer), rate limiting, IP allowlists, webhook secrets, CORS, password policy enforcement
 - **Monitoring** — Paginated request logs, error tracking, Prometheus metrics, automated health checks
 - **Database Backups** — Create, download, restore, and manage backups from the UI (Prisma-based JSON export, no pg_dump needed)
 - **API Documentation** — Interactive Swagger/OpenAPI docs at `/api/docs`
@@ -59,7 +59,9 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Live Traffic Map** — Canvas-based Mercator projection with SSE real-time traffic visualization, GeoIP lookup
 - **Request Sanitizer** — PII masking (emails, credit cards, SSNs, phone numbers, IBANs) with custom regex patterns
 - **Route Version Diff** — Side-by-side comparison of route configuration changes
+- **Org-Scoped Routes** — Routes belong to organizations; non-admin users only see their org's routes
 - **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui, PWA installable
+- **CI/CD** — GitHub Actions pipeline with type-check, Vitest tests (90+), and Docker build validation
 - **Kubernetes-native** — Kubernetes manifests + Helm chart + HPE PCAI support
 
 ---
@@ -68,10 +70,10 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 
 | Layer       | Technology                               |
 |-------------|------------------------------------------|
-| Frontend    | Next.js 14, TypeScript, Tailwind CSS, shadcn/ui, Recharts |
+| Frontend    | Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Recharts, TanStack Query |
 | Backend     | Node.js 22, TypeScript, Express.js, Prisma |
 | Database    | PostgreSQL 16                            |
-| Auth        | JWT (httpOnly cookies, 7 days), bcrypt, TOTP 2FA |
+| Auth        | JWT (httpOnly cookies, 7 days), bcrypt, TOTP 2FA, CSRF, session revocation |
 | Proxy       | axios + http-proxy (WebSocket)           |
 | Docs        | Swagger UI (swagger-jsdoc + swagger-ui-express) |
 | Metrics     | Prometheus (prom-client)                 |
@@ -363,10 +365,12 @@ DELETE /api/logs/cleanup        Cleanup old logs (admin)
 
 #### Users
 ```
-GET    /api/users               List users (admin)
+GET    /api/users               List users (active + inactive) (admin)
 POST   /api/users               Create user (admin)
 PUT    /api/users/:id           Update user (admin)
-DELETE /api/users/:id           Delete user (admin)
+DELETE /api/users/:id           Soft-delete user (admin)
+POST   /api/users/:id/restore   Restore inactive user (admin)
+POST   /api/users/:id/disable-2fa  Disable user's 2FA (admin)
 POST   /api/users/:id/reset-password  Reset password (admin)
 ```
 
@@ -443,6 +447,8 @@ GET    /api/incidents                List incidents (filter by status, routeId)
 GET    /api/incidents/:id            Get incident details with timeline
 POST   /api/incidents                Create incident manually
 PATCH  /api/incidents/:id/status     Update incident status
+PATCH  /api/incidents/:id/dismiss    Dismiss incident (false positive)
+DELETE /api/incidents/:id            Delete incident (admin)
 POST   /api/incidents/:id/events     Add timeline event/note
 ```
 
@@ -461,6 +467,7 @@ POST   /api/change-requests/:id/reject   Reject with comment
 ```
 GET    /api/achievements             List all achievements with unlock status
 GET    /api/achievements/count       Total achievement count
+POST   /api/achievements/party       Trigger party mode achievement
 ```
 
 #### Traffic & Sanitizer
@@ -469,6 +476,7 @@ GET    /api/traffic/live             SSE stream of live traffic with GeoIP data
 GET    /api/traffic/map              Aggregated traffic by country/city
 GET    /api/traffic/sanitizer        Get sanitizer configuration (admin)
 PUT    /api/traffic/sanitizer        Update sanitizer configuration (admin)
+POST   /api/traffic/sanitizer/test   Test sanitizer on sample text (admin)
 ```
 
 #### Notifications
@@ -481,9 +489,15 @@ POST   /api/notifications/read-all   Mark all as read
 
 #### System
 ```
-GET  /api/system/update-status   Check for updates (cached)
-POST /api/system/update-check    Force update check
-POST /api/system/update          Apply update (SSE streaming progress)
+GET  /api/system/update-status        Check for updates (cached)
+POST /api/system/update-check         Force update check
+POST /api/system/update               Apply update (SSE streaming progress)
+GET  /api/system/release-notes        Fetch GitHub release notes for a tag
+POST /api/system/health-check         Trigger manual health check
+POST /api/system/cleanup-logs         Cleanup old request logs
+POST /api/system/cleanup-health-checks  Cleanup old health checks
+POST /api/system/cleanup-audit-logs   Cleanup old audit logs
+POST /api/system/force-logout-all     Revoke all sessions (admin)
 ```
 
 #### Health & Metrics
@@ -567,6 +581,14 @@ ClusterGate supports TOTP-based two-factor authentication:
 3. Login requires both password and 6-digit TOTP code
 4. Recovery codes can be used as fallback (each code is single-use)
 5. Disable 2FA requires password confirmation
+6. Admins can disable 2FA for any user via the Users page
+
+### Session Security
+
+- **Session revocation** — Logout, password change, admin reset, and force-logout-all invalidate existing sessions via `tokenVersion`
+- **CSRF protection** — Double-submit cookie pattern (`cg_csrf` cookie + `X-CSRF-Token` header) on all state-changing requests
+- **Password policy** — Min 8 chars, uppercase, lowercase, number, special character (enforced on all forms)
+- **API versioning** — `X-API-Version: 1` header on all responses
 
 ### Production Checklist
 
@@ -632,7 +654,7 @@ clustergate/
 |   |   +-- config/             # Configuration
 |   |   +-- cron/               # Scheduled jobs (health checks, updates, log cleanup)
 |   |   +-- lib/                # Utilities (logger, jwt, metrics, swagger)
-|   |   +-- middleware/         # Express middleware (auth, rate limit, audit)
+|   |   +-- middleware/         # Express middleware (auth, rate limit, audit, CSRF)
 |   |   +-- prisma/             # Schema, migrations, seed
 |   |   +-- proxy/              # Proxy handler (/r/ prefix)
 |   |   +-- routes/             # API route handlers
@@ -677,7 +699,7 @@ clustergate/
 |
 +-- docker-compose.yml          # Local development
 +-- .env.example                # Environment template
-+-- .github/workflows/          # CI/CD (Docker build + publish)
++-- .github/workflows/          # CI/CD (type-check, test, build, Docker)
 +-- LICENSE                     # MIT License
 +-- CODE_OF_CONDUCT.md
 +-- CONTRIBUTING.md

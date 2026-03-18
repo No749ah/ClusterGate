@@ -90,7 +90,7 @@ A maintainer will review your PR as soon as possible. Please be patient and resp
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Docker + Docker Compose
 - npm
 
@@ -167,13 +167,14 @@ chore(deps): bump prisma to 5.x
 
 - **TypeScript** is used throughout — avoid `any` where possible.
 - **Backend** — Express.js; keep controllers thin, business logic in service files.
-- **Frontend** — Next.js 14 App Router; use shadcn/ui components; Tailwind for styling.
+- **Frontend** — Next.js 16 App Router; use shadcn/ui components; Tailwind for styling.
 - **Formatting** — Follow the existing code style. If a linter/formatter config is present (`eslint`, `prettier`), run it before committing:
   ```bash
   # backend or frontend
   npm run lint
   ```
 - Keep functions small and focused; add JSDoc comments to public-facing utilities.
+- **Tests** — Run `npm test` in the backend directory before submitting a PR. Write tests for new services or middleware using Vitest.
 
 ---
 

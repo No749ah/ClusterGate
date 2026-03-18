@@ -6,10 +6,10 @@ The following versions of ClusterGate are currently receiving security updates:
 
 | Version | Supported          |
 |---------|--------------------|
-| `main`  | ✅ Active support  |
+| `master`  | ✅ Active support  |
 | Others  | ❌ No support      |
 
-We recommend always running the latest version from the `main` branch or the most recent Docker image tag.
+We recommend always running the latest version from the `master` branch or the most recent Docker image tag.
 
 ---
 
@@ -54,6 +54,9 @@ When deploying ClusterGate in production, please follow these recommendations:
 - **Rotate database credentials** regularly and use a dedicated PostgreSQL user with minimal privileges.
 - **Keep Docker images up to date** — rebuild from the latest base images to receive OS-level security patches.
 - **Review proxy routes** — each route maps a public path to an internal Kubernetes service; audit regularly to ensure only intended services are exposed.
+- **Enable 2FA for all admin accounts** — ClusterGate supports TOTP-based 2FA with recovery codes. Admins can disable 2FA for users who lose their authenticator.
+- **Use the force-logout-all feature** after a suspected credential compromise to revoke all active sessions.
+- **CSRF protection** is built in — the frontend automatically sends the `X-CSRF-Token` header on state-changing requests.
 
 ---
 
