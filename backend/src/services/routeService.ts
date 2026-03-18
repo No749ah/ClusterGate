@@ -177,24 +177,39 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     }
   }
 
+  // Check if any fields actually changed before creating a new version
+  const versionableFields = ['name', 'path', 'targetUrl', 'methods', 'isActive', 'stripPrefix',
+    'customHeaders', 'rewriteRules', 'timeout', 'maxRetries', 'retryDelay',
+    'maintenanceMode', 'maintenanceMessage', 'webhookUrl', 'webhookSecret', 'webhookEvents',
+    'wsEnabled', 'cbEnabled', 'cbThreshold', 'cbTimeout', 'cbHalfOpenMax',
+    'organizationId', 'routeGroupId'] as const
+  const hasChanges = versionableFields.some((field) => {
+    if (!(field in data)) return false
+    const oldVal = JSON.stringify((existing as any)[field])
+    const newVal = JSON.stringify((data as any)[field])
+    return oldVal !== newVal
+  })
+
   const route = await prisma.route.update({
     where: { id },
     data: {
       ...data,
-      version: { increment: 1 },
+      ...(hasChanges ? { version: { increment: 1 } } : {}),
       updatedById: userId,
     },
   })
 
-  // Save version snapshot
-  await prisma.routeVersion.create({
-    data: {
-      routeId: route.id,
-      version: route.version,
-      snapshot: route as unknown as Prisma.InputJsonValue,
-      createdById: userId,
-    },
-  })
+  // Save version snapshot only if something changed
+  if (hasChanges) {
+    await prisma.routeVersion.create({
+      data: {
+        routeId: route.id,
+        version: route.version,
+        snapshot: route as unknown as Prisma.InputJsonValue,
+        createdById: userId,
+      },
+    })
+  }
 
   return route
 }

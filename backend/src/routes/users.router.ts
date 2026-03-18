@@ -408,6 +408,24 @@ router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, ne
  *       404:
  *         description: User not found
  */
+router.post('/:id/restore', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    const user = await userService.restoreUser(req.params.id)
+    res.json({ success: true, data: user })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.post('/:id/disable-2fa', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    const user = await userService.adminDisable2FA(req.params.id)
+    res.json({ success: true, data: user })
+  } catch (err) {
+    next(err)
+  }
+})
+
 router.post('/:id/reset-password', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     const schema = z.object({ newPassword: z.string().min(8) })

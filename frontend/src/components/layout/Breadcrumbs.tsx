@@ -2,16 +2,56 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '@/lib/api'
+
+// Segments that are parent resource names — the next segment is an ID to resolve
+const RESOURCE_PARENTS = new Set(['routes', 'organizations', 'groups'])
 
 export function Breadcrumbs() {
   const pathname = usePathname()
 
   const segments = pathname.split('/').filter(Boolean)
 
+  // Detect if we have a resource ID segment (e.g. /routes/[id])
+  let resourceType: string | null = null
+  let resourceId: string | null = null
+  for (let i = 0; i < segments.length - 1; i++) {
+    if (RESOURCE_PARENTS.has(segments[i])) {
+      const candidate = segments[i + 1]
+      // IDs are cuid/uuid-like — not normal words like "edit"
+      if (candidate && candidate.length > 10 && !['edit', 'new'].includes(candidate)) {
+        resourceType = segments[i]
+        resourceId = candidate
+        break
+      }
+    }
+  }
+
+  // Fetch resource name if we have an ID in the breadcrumb
+  const { data: resourceData } = useQuery({
+    queryKey: ['breadcrumb', resourceType, resourceId],
+    queryFn: async () => {
+      if (resourceType === 'routes') return api.routes.getById(resourceId!)
+      if (resourceType === 'organizations') return api.organizations.getById(resourceId!)
+      if (resourceType === 'groups') return api.routeGroups.getById(resourceId!)
+      return null
+    },
+    enabled: !!resourceId,
+    staleTime: 60 * 1000,
+  })
+  const resourceName = (resourceData as any)?.data?.name
+
   // Build breadcrumb items from path segments
   const items = segments.map((segment, index) => {
     const href = '/' + segments.slice(0, index + 1).join('/')
-    const label = segment.charAt(0).toUpperCase() + segment.slice(1)
+    let label = segment.charAt(0).toUpperCase() + segment.slice(1)
+
+    // Replace ID with resolved name
+    if (segment === resourceId && resourceName) {
+      label = resourceName
+    }
+
     const isLast = index === segments.length - 1
     return { href, label, isLast }
   })

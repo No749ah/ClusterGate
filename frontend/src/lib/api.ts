@@ -307,6 +307,12 @@ class ApiClient {
     resetPassword: (id: string, newPassword: string) =>
       this.post<ApiResponse<null>>(`/api/users/${id}/reset-password`, { newPassword }),
 
+    restore: (id: string) =>
+      this.post<ApiResponse<User>>(`/api/users/${id}/restore`),
+
+    disable2FA: (id: string) =>
+      this.post<ApiResponse<User>>(`/api/users/${id}/disable-2fa`),
+
     invite: (email: string, role: string) =>
       this.post<ApiResponse<{ id: string; email: string; role: string; token: string; expiresAt: string }>>('/api/users/invite', { email, role }),
 
@@ -824,6 +830,9 @@ class ApiClient {
 
     count: () =>
       this.get<ApiResponse<{ count: number; total: number }>>('/api/achievements/count'),
+
+    triggerParty: () =>
+      this.post<ApiResponse<null>>('/api/achievements/party'),
   }
 
   // ============================================================================

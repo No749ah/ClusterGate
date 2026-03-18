@@ -135,6 +135,39 @@ export const achievementService = {
     await this.unlock(userId, 'party_animal')
   },
 
+  async checkSpeedDemon(userId: string) {
+    // Check if any route owned by this user has avg response time under 10ms
+    const result = await prisma.$queryRaw<Array<{ cnt: bigint }>>`
+      SELECT COUNT(*) as cnt FROM routes r
+      WHERE r."createdById" = ${userId} AND r."deletedAt" IS NULL
+      AND EXISTS (
+        SELECT 1 FROM request_logs rl
+        WHERE rl."routeId" = r.id
+        GROUP BY rl."routeId"
+        HAVING AVG(rl."responseTime") < 10
+      )
+    `
+    if (result[0]?.cnt > 0) {
+      await this.unlock(userId, 'speed_demon')
+    }
+  },
+
+  async checkZeroDowntime(userId: string) {
+    // Check if all active routes have had no failed health checks in the last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const failedChecks = await prisma.healthCheck.count({
+      where: {
+        status: 'UNHEALTHY',
+        createdAt: { gte: sevenDaysAgo },
+        route: { deletedAt: null },
+      },
+    })
+    const activeRoutes = await prisma.route.count({ where: { isActive: true, deletedAt: null } })
+    if (activeRoutes > 0 && failedChecks === 0) {
+      await this.unlock(userId, 'zero_downtime_7d')
+    }
+  },
+
   get totalCount() {
     return ACHIEVEMENTS.length
   },

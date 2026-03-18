@@ -275,14 +275,14 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       {/* Step indicator */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 overflow-x-auto">
         {STEPS.map((s, i) => (
-          <div key={s} className="flex items-center gap-2">
+          <div key={s} className="flex items-center gap-2 shrink-0">
             <button
               type="button"
               onClick={() => i < step && setStep(i)}
               className={cn(
-                'flex items-center justify-center w-7 h-7 rounded-full text-xs font-medium transition-colors',
+                'flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-xs font-medium transition-colors',
                 i === step
                   ? 'bg-primary text-primary-foreground'
                   : i < step
@@ -294,7 +294,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             </button>
             <span
               className={cn(
-                'text-xs hidden sm:block',
+                'text-xs hidden sm:block whitespace-nowrap',
                 i === step ? 'text-foreground font-medium' : 'text-muted-foreground'
               )}
             >
@@ -303,7 +303,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             {i < STEPS.length - 1 && (
               <div
                 className={cn(
-                  'h-px w-6 transition-colors',
+                  'h-px w-6 shrink-0 transition-colors',
                   i < step ? 'bg-green-600/50' : 'bg-border'
                 )}
               />

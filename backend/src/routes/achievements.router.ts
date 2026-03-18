@@ -25,4 +25,14 @@ router.get('/count', authenticate, async (req, res, next) => {
   }
 })
 
+// Trigger party mode achievement
+router.post('/party', authenticate, async (req, res, next) => {
+  try {
+    const result = await achievementService.checkPartyMode(req.user!.userId)
+    res.json({ success: true, data: result })
+  } catch (err) {
+    next(err)
+  }
+})
+
 export default router

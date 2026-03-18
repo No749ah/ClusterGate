@@ -16,10 +16,9 @@ export async function getUsers(pagination = { page: 1, pageSize: 20 }) {
 
   const [data, total] = await prisma.$transaction([
     prisma.user.findMany({
-      where: { isActive: true },
       skip,
       take: pageSize,
-      orderBy: { createdAt: 'desc' },
+      orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
       select: {
         id: true,
         email: true,
@@ -32,7 +31,7 @@ export async function getUsers(pagination = { page: 1, pageSize: 20 }) {
         updatedAt: true,
       },
     }),
-    prisma.user.count({ where: { isActive: true } }),
+    prisma.user.count(),
   ])
 
   return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) }
@@ -138,6 +137,49 @@ export async function deleteUser(id: string, requestingUserId: string) {
   await prisma.user.update({
     where: { id },
     data: { isActive: false, tokenVersion: { increment: 1 } },
+  })
+}
+
+export async function restoreUser(id: string) {
+  const user = await prisma.user.findUnique({ where: { id } })
+  if (!user) throw AppError.notFound('User')
+  if (user.isActive) throw AppError.badRequest('User is already active')
+
+  return prisma.user.update({
+    where: { id },
+    data: { isActive: true },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      isActive: true,
+      updatedAt: true,
+    },
+  })
+}
+
+export async function adminDisable2FA(id: string) {
+  const user = await prisma.user.findUnique({ where: { id } })
+  if (!user) throw AppError.notFound('User')
+  if (!user.twoFactorEnabled) throw AppError.badRequest('Two-factor authentication is not enabled')
+
+  return prisma.user.update({
+    where: { id },
+    data: {
+      twoFactorSecret: null,
+      twoFactorEnabled: false,
+      recoveryCodes: [],
+    },
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      role: true,
+      isActive: true,
+      twoFactorEnabled: true,
+      updatedAt: true,
+    },
   })
 }
 

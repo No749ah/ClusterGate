@@ -1,5 +1,7 @@
 import cron, { ScheduledTask } from 'node-cron'
 import { runAllHealthChecks } from '../services/healthService'
+import { achievementService } from '../services/achievementService'
+import { prisma } from '../lib/prisma'
 import { cleanOldLogs } from '../services/logService'
 import { runScheduledUpdateCheck } from '../services/updateService'
 import { createBackup, enforceRetentionPolicy } from '../services/backupService'
@@ -41,6 +43,21 @@ export function startCronJobs() {
   })
   jobs.push(updateCheckJob)
   logger.info('Update check cron started (every 6 hours)')
+
+  // Achievement checks daily at 3am (speed_demon, zero_downtime)
+  const achievementJob = cron.schedule('0 3 * * *', async () => {
+    try {
+      const users = await prisma.user.findMany({ where: { isActive: true }, select: { id: true } })
+      for (const user of users) {
+        await achievementService.checkSpeedDemon(user.id).catch(() => {})
+        await achievementService.checkZeroDowntime(user.id).catch(() => {})
+      }
+    } catch (err) {
+      logger.error('Achievement check cron failed', { error: (err as Error).message })
+    }
+  })
+  jobs.push(achievementJob)
+  logger.info('Achievement check cron started (daily at 3am)')
 
   // Scheduled backup (if enabled)
   if (config.BACKUP_CRON_ENABLED) {

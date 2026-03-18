@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Edit, Trash2, KeyRound, Link2, Copy, Check, X, Mail, Clock } from 'lucide-react'
+import { Plus, Edit, Trash2, KeyRound, Link2, Copy, Check, X, Mail, Clock, RotateCcw, ShieldOff } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -95,6 +95,24 @@ export default function UsersPage() {
       toast.success('Password reset successfully')
       setResetPasswordUser(null)
       setNewPassword('')
+    },
+    onError: (err: any) => toast.error(err.message),
+  })
+
+  const restoreMutation = useMutation({
+    mutationFn: (id: string) => api.users.restore(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('User restored')
+    },
+    onError: (err: any) => toast.error(err.message),
+  })
+
+  const disable2FAMutation = useMutation({
+    mutationFn: (id: string) => api.users.disable2FA(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      toast.success('2FA disabled for user')
     },
     onError: (err: any) => toast.error(err.message),
   })
@@ -216,40 +234,75 @@ export default function UsersPage() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => setEditUser(user)}
-                          title="Edit user"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          onClick={() => setResetPasswordUser(user)}
-                          title="Reset password"
-                        >
-                          <KeyRound className="w-3.5 h-3.5" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon-sm"
-                          className="text-destructive hover:text-destructive"
-                          disabled={deleteMutation.isPending}
-                          onClick={async () => {
-                            const ok = await confirm({
-                              title: 'Remove User',
-                              description: `Are you sure you want to remove "${user.name}"? This will deactivate their account.`,
-                              confirmLabel: 'Remove',
-                              variant: 'destructive',
-                            })
-                            if (ok) deleteMutation.mutate(user.id)
-                          }}
-                          title="Delete user"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
+                        {!user.isActive ? (
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-green-500 hover:text-green-500"
+                            disabled={restoreMutation.isPending}
+                            onClick={() => restoreMutation.mutate(user.id)}
+                            title="Restore user"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setEditUser(user)}
+                              title="Edit user"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setResetPasswordUser(user)}
+                              title="Reset password"
+                            >
+                              <KeyRound className="w-3.5 h-3.5" />
+                            </Button>
+                            {user.twoFactorEnabled && (
+                              <Button
+                                variant="ghost"
+                                size="icon-sm"
+                                className="text-amber-500 hover:text-amber-500"
+                                disabled={disable2FAMutation.isPending}
+                                onClick={async () => {
+                                  const ok = await confirm({
+                                    title: 'Disable 2FA',
+                                    description: `Disable two-factor authentication for "${user.name}"? They will need to set it up again.`,
+                                    confirmLabel: 'Disable 2FA',
+                                    variant: 'destructive',
+                                  })
+                                  if (ok) disable2FAMutation.mutate(user.id)
+                                }}
+                                title="Disable 2FA"
+                              >
+                                <ShieldOff className="w-3.5 h-3.5" />
+                              </Button>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              className="text-destructive hover:text-destructive"
+                              disabled={deleteMutation.isPending}
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: 'Remove User',
+                                  description: `Are you sure you want to remove "${user.name}"? This will deactivate their account.`,
+                                  confirmLabel: 'Remove',
+                                  variant: 'destructive',
+                                })
+                                if (ok) deleteMutation.mutate(user.id)
+                              }}
+                              title="Delete user"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </Button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

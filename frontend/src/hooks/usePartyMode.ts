@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { api } from '@/lib/api'
 
 const PARTY_KEY = 'clustergate-party-mode'
 const PARTY_DURATION = 30000 // 30 seconds
@@ -8,6 +9,7 @@ const PARTY_DURATION = 30000 // 30 seconds
 export function usePartyMode() {
   const [active, setActive] = useState(false)
   const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const achievementSent = useRef(false)
 
   const stopParty = useCallback(() => {
     setActive(false)
@@ -22,6 +24,11 @@ export function usePartyMode() {
     sessionStorage.setItem(PARTY_KEY, 'true')
     if (timerRef.current) clearTimeout(timerRef.current)
     timerRef.current = setTimeout(stopParty, duration)
+    // Trigger party_animal achievement (once per session)
+    if (!achievementSent.current) {
+      achievementSent.current = true
+      api.achievements.triggerParty().catch(() => {})
+    }
   }, [stopParty])
 
   useEffect(() => {
