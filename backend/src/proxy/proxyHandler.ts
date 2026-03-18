@@ -71,6 +71,23 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
       })
     }
 
+    // Per-route CORS
+    if (route.corsEnabled) {
+      const origin = req.get('origin')
+      const allowedOrigins = route.corsOrigins as string[]
+      if (origin && (allowedOrigins.length === 0 || allowedOrigins.includes(origin))) {
+        res.setHeader('Access-Control-Allow-Origin', origin)
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
+        res.setHeader('Access-Control-Allow-Methods', route.methods.length > 0 ? route.methods.join(', ') : 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-API-Key, X-Request-ID, X-Webhook-Signature, X-Hub-Signature-256')
+        res.setHeader('Access-Control-Max-Age', '86400')
+      }
+      // Handle preflight
+      if (req.method === 'OPTIONS') {
+        return res.status(204).end()
+      }
+    }
+
     // Check maintenance mode
     if (route.maintenanceMode) {
       return res.status(503).json({
