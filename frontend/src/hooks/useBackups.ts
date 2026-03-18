@@ -12,7 +12,7 @@ export function useBackups() {
 export function useCreateBackup() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: () => api.backups.create(),
+    mutationFn: (options?: { tags?: string[]; note?: string }) => api.backups.create(options),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['backups'] })
     },
