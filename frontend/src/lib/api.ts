@@ -292,8 +292,8 @@ class ApiClient {
   // ============================================================================
 
   users = {
-    list: (page = 1, pageSize = 20) =>
-      this.get<PaginatedResponse<User>>(`/api/users?page=${page}&pageSize=${pageSize}`),
+    list: (page = 1, pageSize = 20, includeInactive = false) =>
+      this.get<PaginatedResponse<User>>(`/api/users?page=${page}&pageSize=${pageSize}${includeInactive ? '&includeInactive=true' : ''}`),
 
     create: (data: { email: string; password: string; name: string; role: string }) =>
       this.post<ApiResponse<User>>('/api/users', data),

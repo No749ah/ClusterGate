@@ -59,6 +59,23 @@ export function startCronJobs() {
   jobs.push(achievementJob)
   logger.info('Achievement check cron started (daily at 3am)')
 
+  // Purge disabled users after 30 days (daily at 4am)
+  const userPurgeJob = cron.schedule('0 4 * * *', async () => {
+    try {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      const { count } = await prisma.user.deleteMany({
+        where: { isActive: false, updatedAt: { lte: thirtyDaysAgo } },
+      })
+      if (count > 0) {
+        logger.info('Purged inactive users', { count, olderThan: thirtyDaysAgo.toISOString() })
+      }
+    } catch (err) {
+      logger.error('User purge cron failed', { error: (err as Error).message })
+    }
+  })
+  jobs.push(userPurgeJob)
+  logger.info('User purge cron started (daily at 4am, 30-day retention)')
+
   // Scheduled backup (if enabled)
   if (config.BACKUP_CRON_ENABLED) {
     const backupJob = cron.schedule(config.BACKUP_CRON_SCHEDULE, async () => {

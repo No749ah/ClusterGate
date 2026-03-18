@@ -46,7 +46,7 @@ export default function UsersPage() {
 
   const { data, isLoading } = useQuery({
     queryKey: ['users'],
-    queryFn: () => api.users.list(),
+    queryFn: () => api.users.list(1, 100, true),
     staleTime: 30 * 1000,
   })
 

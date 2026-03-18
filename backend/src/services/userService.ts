@@ -10,12 +10,14 @@ export interface CreateUserData {
   role?: Role
 }
 
-export async function getUsers(pagination = { page: 1, pageSize: 20 }) {
+export async function getUsers(pagination = { page: 1, pageSize: 20 }, includeInactive = false) {
   const { page, pageSize } = pagination
   const skip = (page - 1) * pageSize
+  const where = includeInactive ? {} : { isActive: true }
 
   const [data, total] = await prisma.$transaction([
     prisma.user.findMany({
+      where,
       skip,
       take: pageSize,
       orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
@@ -31,7 +33,7 @@ export async function getUsers(pagination = { page: 1, pageSize: 20 }) {
         updatedAt: true,
       },
     }),
-    prisma.user.count(),
+    prisma.user.count({ where }),
   ])
 
   return { data, total, page, pageSize, totalPages: Math.ceil(total / pageSize) }
