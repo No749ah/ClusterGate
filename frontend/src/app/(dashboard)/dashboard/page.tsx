@@ -225,10 +225,10 @@ export default function DashboardPage() {
                   responseTime={route.healthChecks?.[0]?.responseTime}
                 />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors">
+                  <p className="text-sm font-medium text-foreground truncate group-hover:text-primary transition-colors" title={route.name}>
                     {route.name}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p className="text-xs text-muted-foreground truncate" title={route.publicPath}>
                     {route.publicPath}
                   </p>
                 </div>
@@ -285,7 +285,7 @@ export default function DashboardPage() {
                       <td className="py-2 pr-4 text-muted-foreground whitespace-nowrap">
                         {formatRelativeTime(log.createdAt)}
                       </td>
-                      <td className="py-2 pr-4 text-foreground max-w-[150px] truncate">
+                      <td className="py-2 pr-4 text-foreground max-w-[150px] truncate" title={log.route?.name ?? undefined}>
                         {log.route?.name ?? '—'}
                       </td>
                       <td className="py-2 pr-4">
@@ -293,7 +293,7 @@ export default function DashboardPage() {
                           {log.method}
                         </span>
                       </td>
-                      <td className="py-2 pr-4 text-muted-foreground font-mono text-xs max-w-[200px] truncate hidden sm:table-cell">
+                      <td className="py-2 pr-4 text-muted-foreground font-mono text-xs max-w-[200px] truncate hidden sm:table-cell" title={log.path}>
                         {log.path}
                       </td>
                       <td className="py-2 pr-4">

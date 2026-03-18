@@ -93,7 +93,7 @@ export function NotificationBell() {
                     <p className={cn('text-xs font-medium', !notif.isRead && 'text-foreground')}>
                       {notif.title}
                     </p>
-                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                    <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5" title={notif.message}>
                       {notif.message}
                     </p>
                     <div className="flex items-center gap-2 mt-1">

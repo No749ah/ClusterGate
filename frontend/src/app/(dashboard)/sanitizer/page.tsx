@@ -311,7 +311,7 @@ export default function SanitizerPage() {
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">regex</Badge>
                     </div>
                     <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-                      <span className="truncate">{p.pattern}</span>
+                      <span className="truncate" title={p.pattern}>{p.pattern}</span>
                       <ArrowRight className="w-3 h-3 flex-shrink-0" />
                       <span>{p.replacement}</span>
                     </div>

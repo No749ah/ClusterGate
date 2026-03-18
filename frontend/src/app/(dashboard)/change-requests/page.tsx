@@ -164,7 +164,7 @@ export default function ChangeRequestsPage() {
                       {formatDistanceToNow(new Date(cr.createdAt), { addSuffix: true })}
                     </span>
                     {cr.route && (
-                      <span className="truncate">{cr.route.name}</span>
+                      <span className="truncate" title={cr.route.name}>{cr.route.name}</span>
                     )}
                   </div>
                 </div>

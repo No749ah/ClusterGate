@@ -552,7 +552,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                     <div>
                       <p className="text-base font-semibold">{team.name}</p>
                       {team.description && (
-                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{team.description}</p>
+                        <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" title={team.description}>{team.description}</p>
                       )}
                     </div>
                     <div className="flex gap-1">

@@ -462,10 +462,10 @@ export default function AnalyticsPage() {
                             href={`/routes/${route.routeId}`}
                             className="hover:text-primary transition-colors"
                           >
-                            <p className="font-medium text-foreground truncate max-w-[200px]">
+                            <p className="font-medium text-foreground truncate max-w-[200px]" title={route.routeName}>
                               {route.routeName}
                             </p>
-                            <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]">
+                            <p className="text-xs text-muted-foreground font-mono truncate max-w-[200px]" title={route.publicPath}>
                               {route.publicPath}
                             </p>
                           </Link>

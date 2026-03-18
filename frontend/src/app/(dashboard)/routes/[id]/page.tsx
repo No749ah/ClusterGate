@@ -291,7 +291,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
                           <td className="py-2 pr-4">
                             <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{log.method}</span>
                           </td>
-                          <td className="py-2 pr-4 font-mono text-xs text-muted-foreground max-w-[200px] truncate">
+                          <td className="py-2 pr-4 font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={log.path}>
                             {log.path}
                           </td>
                           <td className="py-2 pr-4">

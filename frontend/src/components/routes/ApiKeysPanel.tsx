@@ -103,7 +103,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                 <Key className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{key.name}</p>
+                    <p className="text-sm font-medium text-foreground truncate" title={key.name}>{key.name}</p>
                     <Badge variant={key.isActive ? 'success' : 'secondary'}>
                       {key.isActive ? 'Active' : 'Revoked'}
                     </Badge>

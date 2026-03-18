@@ -206,7 +206,7 @@ export default function OrganizationsPage() {
                 </div>
               </div>
               {org.description && (
-                <p className="text-xs text-muted-foreground mb-3 line-clamp-2">{org.description}</p>
+                <p className="text-xs text-muted-foreground mb-3 line-clamp-2" title={org.description}>{org.description}</p>
               )}
               <div className="flex items-center gap-4 text-xs text-muted-foreground">
                 <div className="flex items-center gap-1.5">

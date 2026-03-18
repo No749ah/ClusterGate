@@ -45,7 +45,7 @@ export function RecentErrors() {
                   {log.responseStatus}
                 </span>
                 <span className="text-muted-foreground font-mono text-xs">{log.method}</span>
-                <span className="text-foreground truncate flex-1 font-mono text-xs">{log.path}</span>
+                <span className="text-foreground truncate flex-1 font-mono text-xs" title={log.path}>{log.path}</span>
                 <span className="text-muted-foreground text-xs whitespace-nowrap">{formatRelativeTime(log.createdAt)}</span>
               </div>
             ))}

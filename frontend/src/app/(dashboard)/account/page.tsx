@@ -89,8 +89,8 @@ function AchievementsCard() {
               <div className="flex items-center gap-2">
                 <span className="text-xl">{a.icon}</span>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{a.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">{a.description}</p>
+                  <p className="text-sm font-medium truncate" title={a.title}>{a.title}</p>
+                  <p className="text-xs text-muted-foreground truncate" title={a.description}>{a.description}</p>
                 </div>
               </div>
               <div className="flex items-center justify-between mt-2">

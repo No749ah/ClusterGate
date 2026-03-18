@@ -133,7 +133,7 @@ export default function AuditPage() {
                         <div className="flex items-center justify-center w-6 h-6 rounded-full bg-primary/20 text-primary text-xs font-semibold flex-shrink-0">
                           {log.user?.name?.charAt(0).toUpperCase() ?? '?'}
                         </div>
-                        <span className="text-xs text-foreground truncate max-w-[120px]">
+                        <span className="text-xs text-foreground truncate max-w-[120px]" title={log.user?.name ?? 'System'}>
                           {log.user?.name ?? 'System'}
                         </span>
                       </div>
@@ -148,7 +148,7 @@ export default function AuditPage() {
                         <FileText className="w-3 h-3 text-muted-foreground" />
                         <span className="text-xs text-foreground">{log.resource}</span>
                         {log.resourceId && (
-                          <span className="text-xs text-muted-foreground font-mono truncate max-w-[80px]">
+                          <span className="text-xs text-muted-foreground font-mono truncate max-w-[80px]" title={log.resourceId}>
                             #{log.resourceId.slice(-6)}
                           </span>
                         )}

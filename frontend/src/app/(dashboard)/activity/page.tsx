@@ -141,13 +141,13 @@ export default function LogsPage() {
                     <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                       {formatRelativeTime(log.createdAt)}
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-foreground max-w-[140px] truncate">
+                    <td className="px-4 py-2.5 text-xs text-foreground max-w-[140px] truncate" title={log.route?.name ?? undefined}>
                       {log.route?.name ?? '—'}
                     </td>
                     <td className="px-4 py-2.5">
                       <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{log.method}</span>
                     </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground max-w-[200px] truncate">
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={log.path}>
                       {log.path}
                     </td>
                     <td className="px-4 py-2.5">
