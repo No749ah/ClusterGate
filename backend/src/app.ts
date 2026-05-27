@@ -62,7 +62,7 @@ app.use(
   })
 )
 
-app.set('trust proxy', 1) // Trust first proxy (for correct IP in k8s)
+app.set('trust proxy', config.trustProxy) // Configurable: number of hops, or false for direct exposure
 
 // API version header — enables consumers to detect breaking changes
 app.use((_req, res, next) => {

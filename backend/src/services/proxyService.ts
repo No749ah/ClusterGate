@@ -1,8 +1,9 @@
 import axios, { AxiosError, AxiosRequestConfig } from 'axios'
 import https from 'https'
+import http from 'http'
 import { Request, Response } from 'express'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { validateWebhookSignature, isSafeRegex } from '../lib/security'
+import { validateWebhookSignature, isSafeRegex, safeLookup } from '../lib/security'
 import { Route, RouteTarget, TransformRule } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
@@ -228,7 +229,8 @@ export async function proxyRequest(
     validateStatus: () => true, // Don't throw on any HTTP status
     maxRedirects: 0, // Disable redirect following to prevent SSRF via open redirectors
     decompress: true,
-    httpsAgent: new https.Agent({ rejectUnauthorized: (route as any).sslVerify !== false }),
+    httpsAgent: new https.Agent({ rejectUnauthorized: (route as any).sslVerify !== false, lookup: safeLookup }),
+    httpAgent: new http.Agent({ lookup: safeLookup }),
   }
 
   let responseStatus: number | undefined
@@ -479,7 +481,7 @@ function validateRouteAuth(route: Route, req: Request): void {
   }
 }
 
-function isIpAllowed(clientIp: string, allowlist: string[]): boolean {
+export function isIpAllowed(clientIp: string, allowlist: string[]): boolean {
   // Simple exact match and CIDR support (basic)
   const ip = clientIp.replace(/^::ffff:/, '') // IPv4-mapped IPv6
 
