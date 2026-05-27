@@ -1,8 +1,11 @@
 import { IncomingMessage } from 'http'
 import { Socket } from 'net'
+import { URL } from 'url'
 import { createProxyServer } from 'http-proxy'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
+import { isIpAllowed } from '../services/proxyService'
+import { timingSafeCompare } from '../lib/security'
 
 const proxy = createProxyServer({
   ws: true,
@@ -33,7 +36,9 @@ export async function handleWebSocketUpgrade(req: IncomingMessage, socket: Socke
     return
   }
 
-  const path = url.slice(2) // Strip /r prefix
+  // Separate pathname from query string for matching and auth lookups
+  const parsedUrl = new URL(url, 'http://localhost')
+  const path = parsedUrl.pathname.slice(2) // Strip /r prefix
 
   try {
     const routes = await prisma.route.findMany({
@@ -61,6 +66,29 @@ export async function handleWebSocketUpgrade(req: IncomingMessage, socket: Socke
       return
     }
 
+    // ---- Enforce the same per-route security controls as the HTTP proxy ----
+    if (route.maintenanceMode) {
+      socket.destroy()
+      return
+    }
+
+    if (route.ipAllowlist.length > 0) {
+      const clientIp = req.socket.remoteAddress || ''
+      if (!isIpAllowed(clientIp, route.ipAllowlist)) {
+        logger.warn('WS upgrade blocked by IP allowlist', { route: route.name, ip: clientIp })
+        socket.destroy()
+        return
+      }
+    }
+
+    if ((route as any).requireAuth && (route as any).authType !== 'NONE') {
+      if (!isWsAuthorized(route, req, parsedUrl)) {
+        logger.warn('WS upgrade blocked: authentication failed', { route: route.name })
+        socket.destroy()
+        return
+      }
+    }
+
     // Build target path
     let targetPath = path
     const basePath = route.publicPath.endsWith('/*')
@@ -80,9 +108,40 @@ export async function handleWebSocketUpgrade(req: IncomingMessage, socket: Socke
 
     logger.info('WebSocket upgrade', { route: route.name, target })
 
-    proxy.ws(req, socket, head, { target })
+    // Honor the route's sslVerify setting instead of a global secure:false
+    proxy.ws(req, socket, head, { target, secure: (route as any).sslVerify !== false })
   } catch (err) {
     logger.error('WS upgrade error', { error: (err as Error).message })
     socket.destroy()
+  }
+}
+
+function isWsAuthorized(route: any, req: IncomingMessage, parsedUrl: URL): boolean {
+  const authType = route.authType as string
+  const authValue = route.authValue as string | null
+  if (!authValue) return false
+
+  const header = (name: string): string => {
+    const v = req.headers[name.toLowerCase()]
+    return Array.isArray(v) ? v[0] : v || ''
+  }
+
+  switch (authType) {
+    case 'API_KEY': {
+      const apiKey = header('x-api-key') || parsedUrl.searchParams.get('api_key') || ''
+      return !!apiKey && timingSafeCompare(apiKey, authValue)
+    }
+    case 'BASIC': {
+      const auth = header('authorization')
+      if (!auth.startsWith('Basic ')) return false
+      return timingSafeCompare(auth.slice(6), authValue)
+    }
+    case 'BEARER': {
+      const auth = header('authorization')
+      if (!auth.startsWith('Bearer ')) return false
+      return timingSafeCompare(auth.slice(7), authValue)
+    }
+    default:
+      return false
   }
 }
