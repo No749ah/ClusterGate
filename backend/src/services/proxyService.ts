@@ -33,12 +33,24 @@ const HOP_BY_HOP_HEADERS = new Set([
   'trailers',
   'transfer-encoding',
   'host',
+  // Body is re-serialized below, so the inbound length no longer applies.
+  // Forwarding a stale value risks truncation / request smuggling; axios sets
+  // the correct Content-Length from the outgoing data.
+  'content-length',
 ])
 
-export async function proxyRequest(route: RouteWithRelations | Route, req: Request, res: Response): Promise<void> {
+export async function proxyRequest(
+  route: RouteWithRelations | Route,
+  req: Request,
+  res: Response,
+  overridePath?: string
+): Promise<void> {
   const start = Date.now()
   const requestId = uuid()
   const routeExt = route as RouteWithRelations
+  // Express's req.path is a getter-only property and cannot be mutated, so the
+  // handler passes the full (/r-prefixed) public path explicitly for matching.
+  const proxyPath = overridePath ?? req.path
 
   // ---- Circuit Breaker check ----
   if (route.circuitBreakerEnabled) {
@@ -92,7 +104,7 @@ export async function proxyRequest(route: RouteWithRelations | Route, req: Reque
   }
 
   // Build target path — strip publicPath prefix, keep only the suffix
-  let targetPath = req.path
+  let targetPath = proxyPath
   const basePath = route.publicPath.endsWith('/*')
     ? route.publicPath.slice(0, -2)
     : route.publicPath
@@ -182,7 +194,17 @@ export async function proxyRequest(route: RouteWithRelations | Route, req: Reque
   // ---- Apply request transforms ----
   const transformRules = routeExt.transformRules
   if (transformRules && transformRules.length > 0) {
-    const transformed = applyRequestTransforms(transformRules, forwardHeaders, queryParams, requestBody ? JSON.parse(typeof requestBody === 'string' ? requestBody : '{}') : undefined)
+    let parsedBody: unknown = undefined
+    if (requestBody) {
+      try {
+        parsedBody = JSON.parse(typeof requestBody === 'string' ? requestBody : '{}')
+      } catch {
+        // Non-JSON body (form-encoded, plain text, binary) — leave undefined so
+        // body transforms are skipped rather than failing the whole request.
+        parsedBody = undefined
+      }
+    }
+    const transformed = applyRequestTransforms(transformRules, forwardHeaders, queryParams, parsedBody)
     Object.assign(forwardHeaders, transformed.headers)
     queryParams = transformed.queryParams
     if (transformed.body !== undefined) {
@@ -194,7 +216,7 @@ export async function proxyRequest(route: RouteWithRelations | Route, req: Reque
   const transformedQs = Object.keys(queryParams).length
     ? `?${new URLSearchParams(queryParams).toString()}`
     : ''
-  const resolvedUrl = `${fullTargetUrl.split('?')[0]}${transformedQs}`
+  let resolvedUrl = `${fullTargetUrl.split('?')[0]}${transformedQs}`
 
   const axiosConfig: AxiosRequestConfig = {
     method: req.method as AxiosRequestConfig['method'],
@@ -237,6 +259,29 @@ export async function proxyRequest(route: RouteWithRelations | Route, req: Reque
           response = axiosErr.response
           lastError = null
           break
+        }
+        // Target spoke plain HTTP on an https:// URL (e.g. n8n on :5678).
+        // OpenSSL reports this as EPROTO "packet length too long" / "wrong
+        // version number". Transparently fall back to http:// once.
+        if (isTlsProtocolMismatch(err) && typeof axiosConfig.url === 'string' && axiosConfig.url.startsWith('https://')) {
+          axiosConfig.url = 'http://' + axiosConfig.url.slice('https://'.length)
+          resolvedUrl = axiosConfig.url
+          logger.warn('HTTPS target spoke plain HTTP — retrying over http', {
+            routeId: route.id,
+            url: axiosConfig.url,
+          })
+          try {
+            response = await axios(axiosConfig)
+            lastError = null
+            break
+          } catch (httpErr) {
+            lastError = httpErr as Error
+            if ((httpErr as AxiosError).response) {
+              response = (httpErr as AxiosError).response
+              lastError = null
+              break
+            }
+          }
         }
       }
     }
@@ -300,7 +345,7 @@ export async function proxyRequest(route: RouteWithRelations | Route, req: Reque
       routeId: route.id,
       requestId,
       method: req.method,
-      path: req.path,
+      path: proxyPath,
       queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
       requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
@@ -348,7 +393,7 @@ export async function proxyRequest(route: RouteWithRelations | Route, req: Reque
       routeId: route.id,
       requestId,
       method: req.method,
-      path: req.path,
+      path: proxyPath,
       queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
       requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
@@ -365,6 +410,16 @@ export async function proxyRequest(route: RouteWithRelations | Route, req: Reque
       `Proxy error: ${error || 'Target service unavailable'}`
     )
   }
+}
+
+function isTlsProtocolMismatch(err: unknown): boolean {
+  const code = (err as { code?: string } | undefined)?.code
+  const message = (err as Error | undefined)?.message ?? ''
+  return (
+    code === 'EPROTO' ||
+    /packet length too long/i.test(message) ||
+    /wrong version number/i.test(message)
+  )
 }
 
 function safeEqual(a: string, b: string): boolean {

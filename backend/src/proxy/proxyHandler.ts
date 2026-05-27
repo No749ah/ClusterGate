@@ -47,7 +47,8 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
         routePath = routePath.slice(0, -2)
       }
       if (routePath === '/' || routePath === '') return true
-      return path === routePath || path.startsWith(routePath + '/') || path.startsWith(routePath)
+      // Match on full segments only — avoid /r/pcai capturing /r/pcaixyz
+      return path === routePath || path.startsWith(routePath + '/')
     })
 
     if (!route) {
@@ -106,11 +107,9 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
       target: route.targetUrl,
     })
 
-    // Restore the full path including /r prefix so proxyService can strip publicPath correctly
-    const originalPath = req.path
-    ;(req as any).path = `/r${originalPath}`
-    await proxyRequest(route, req, res)
-    ;(req as any).path = originalPath
+    // Pass the full path including /r prefix so proxyService can strip publicPath
+    // correctly. req.path is a getter-only property and must not be mutated.
+    await proxyRequest(route, req, res, `/r${path}`)
   } catch (err) {
     next(err)
   }
