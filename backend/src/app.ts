@@ -17,6 +17,7 @@ import { auditLogger } from './middleware/auditLogger'
 import { errorHandler, notFoundHandler } from './middleware/errorHandler'
 import { proxyHandler } from './proxy/proxyHandler'
 import { startCronJobs, stopCronJobs } from './cron/jobs'
+import { runMigrations } from './lib/migrate'
 
 // Route handlers
 import authRouter from './routes/auth.router'
@@ -174,6 +175,11 @@ app.use(errorHandler)
 
 async function start() {
   try {
+    // Apply pending database migrations before serving traffic
+    if (config.AUTO_MIGRATE && config.NODE_ENV !== 'test') {
+      runMigrations()
+    }
+
     // Test database connection
     await prisma.$connect()
     logger.info('Database connected')
