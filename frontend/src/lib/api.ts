@@ -198,6 +198,21 @@ class ApiClient {
     test: (id: string, params: { method?: string; path?: string; headers?: Record<string, string>; body?: string; skipAuth?: boolean }) =>
       this.post<ApiResponse<TestResult>>(`/api/routes/${id}/test`, params),
 
+    // Streaming test: returns the raw Response so the caller can read the body
+    // incrementally (used for routes with streamResponse enabled).
+    testStream: (id: string, params: { method?: string; path?: string; headers?: Record<string, string>; body?: string; skipAuth?: boolean }) => {
+      const csrf = this.getCsrfToken()
+      return fetch(`${this.baseUrl}/api/routes/${id}/test`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+        },
+        body: JSON.stringify(params),
+      })
+    },
+
     health: (id: string) =>
       this.get<ApiResponse<HealthCheck>>(`/api/routes/${id}/health`),
 

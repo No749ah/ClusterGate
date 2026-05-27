@@ -28,6 +28,7 @@ const routeSchema = z.object({
   retryDelay: z.coerce.number().int().min(100).max(10000).default(1000),
   stripPrefix: z.boolean().default(false),
   sslVerify: z.boolean().default(true),
+  streamResponse: z.boolean().default(false),
   requestBodyLimit: z.string().default('10mb'),
   addHeaders: z.array(z.object({ key: z.string(), value: z.string() })).default([]),
   removeHeaders: z.string().default(''),
@@ -110,6 +111,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       retryDelay: defaultValues?.retryDelay ?? 1000,
       stripPrefix: defaultValues?.stripPrefix ?? false,
       sslVerify: defaultValues?.sslVerify ?? true,
+      streamResponse: defaultValues?.streamResponse ?? false,
       requestBodyLimit: defaultValues?.requestBodyLimit ?? '10mb',
       addHeaders: Object.entries(defaultValues?.addHeaders ?? {}).map(([key, value]) => ({ key, value })),
       removeHeaders: defaultValues?.removeHeaders?.join(', ') ?? '',
@@ -528,6 +530,16 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               <Switch
                 checked={watch('sslVerify')}
                 onCheckedChange={(v) => setValue('sslVerify', v)}
+              />
+            </div>
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+              <div>
+                <p className="text-sm font-medium">Stream Response</p>
+                <p className="text-xs text-muted-foreground">Pipe the response through unbuffered for SSE / token streaming (e.g. n8n AI Agent)</p>
+              </div>
+              <Switch
+                checked={watch('streamResponse')}
+                onCheckedChange={(v) => setValue('streamResponse', v)}
               />
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">

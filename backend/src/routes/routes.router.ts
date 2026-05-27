@@ -29,6 +29,7 @@ const routeBodySchema = z.object({
   retryDelay: z.number().int().min(100).max(10000).default(1000),
   stripPrefix: z.boolean().default(false),
   sslVerify: z.boolean().default(true),
+  streamResponse: z.boolean().default(false),
   requestBodyLimit: z.string().default('10mb'),
   addHeaders: z.record(z.string()).default({}),
   removeHeaders: z.array(z.string()).default([]),
@@ -991,6 +992,25 @@ router.post('/:id/test', authenticate, async (req, res, next) => {
       get: (key: string) => (mockReq.headers as any)[key.toLowerCase()] || '',
       socket: { remoteAddress: req.ip },
     } as any
+
+    // Streaming routes: pipe the upstream response straight to the browser so
+    // the test panel can show tokens as they arrive (e.g. n8n AI Agent stream),
+    // instead of buffering the whole NDJSON body.
+    if ((route as any).streamResponse) {
+      try {
+        await proxyRequest(route, mockReq, res)
+      } catch (proxyErr) {
+        if (!res.headersSent) {
+          res.status(503).json({
+            success: true,
+            data: { status: 503, duration: 0, error: (proxyErr as Error).message, headers: {} },
+          })
+        } else {
+          res.end()
+        }
+      }
+      return
+    }
 
     const start = Date.now()
     let responseStatus: number | undefined
