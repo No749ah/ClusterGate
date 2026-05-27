@@ -125,6 +125,21 @@ export function safeLookup(
   })
 }
 
+/**
+ * Detect the OpenSSL error raised when a plain-HTTP server is spoken to over
+ * an https:// URL (e.g. n8n on :5678). Used to transparently fall back to
+ * http:// in the proxy and health checks.
+ */
+export function isTlsProtocolMismatch(err: unknown): boolean {
+  const code = (err as { code?: string } | undefined)?.code
+  const message = (err as Error | undefined)?.message ?? ''
+  return (
+    code === 'EPROTO' ||
+    /packet length too long/i.test(message) ||
+    /wrong version number/i.test(message)
+  )
+}
+
 // =============================================================================
 // Safe Regex — Prevent ReDoS via catastrophic backtracking
 // =============================================================================
