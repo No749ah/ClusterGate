@@ -3,7 +3,7 @@ import https from 'https'
 import http from 'http'
 import { Request, Response } from 'express'
 import { createHmac, timingSafeEqual } from 'crypto'
-import { validateWebhookSignature, isSafeRegex, safeLookup } from '../lib/security'
+import { validateWebhookSignature, isSafeRegex, safeLookup, isTlsProtocolMismatch } from '../lib/security'
 import { Route, RouteTarget, TransformRule } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
@@ -473,16 +473,6 @@ export async function proxyRequest(
       `Proxy error: ${error || 'Target service unavailable'}`
     )
   }
-}
-
-function isTlsProtocolMismatch(err: unknown): boolean {
-  const code = (err as { code?: string } | undefined)?.code
-  const message = (err as Error | undefined)?.message ?? ''
-  return (
-    code === 'EPROTO' ||
-    /packet length too long/i.test(message) ||
-    /wrong version number/i.test(message)
-  )
 }
 
 function safeEqual(a: string, b: string): boolean {
