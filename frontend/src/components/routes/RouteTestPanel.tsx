@@ -117,14 +117,15 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
     setResult(null)
     try {
       const res = await api.routes.testStream(routeId, params)
-      if (!res.body) {
-        setStreamError('No response stream')
-        return
-      }
-      // A non-streamed JSON error (e.g. SSRF block / proxy error before piping)
-      if ((res.headers.get('content-type') || '').includes('application/json')) {
+      // Only responses actually piped by the proxy carry this marker. Anything
+      // else is a pre-pipe JSON envelope (SSRF block / proxy error).
+      if (res.headers.get('X-ClusterGate-Stream') !== '1') {
         const json = await res.json().catch(() => null)
         setStreamError(json?.data?.error || `Request failed (${res.status})`)
+        return
+      }
+      if (!res.body) {
+        setStreamError('No response stream')
         return
       }
       const reader = res.body.getReader()
