@@ -52,7 +52,7 @@ export async function handleWebSocketUpgrade(req: IncomingMessage, socket: Socke
       else if (routePath.startsWith('/r')) routePath = routePath.slice(2) || '/'
       if (routePath.endsWith('/*')) routePath = routePath.slice(0, -2)
       if (routePath === '/' || routePath === '') return true
-      return path === routePath || path.startsWith(routePath + '/') || path.startsWith(routePath)
+      return path === routePath || path.startsWith(routePath + '/')
     })
 
     if (!route) {
