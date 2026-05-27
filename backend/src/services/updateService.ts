@@ -334,12 +334,18 @@ async function updateK8sDeployment(namespace: string, deploymentName: string, ne
   // initContainers must be included too — otherwise the `migrate` initContainer
   // keeps the old image and new DB migrations never run on self-update.
   const matchesImage = (img: string) => typeof img === 'string' && img.split(':')[0] === newImage
-  const containerPatches = containers
-    .filter((c: any) => matchesImage(c.image))
-    .map((c: any) => ({ name: c.name, image: `${newImage}:${newTag}` }))
-  const initContainerPatches = initContainers
-    .filter((c: any) => matchesImage(c.image))
-    .map((c: any) => ({ name: c.name, image: `${newImage}:${newTag}` }))
+  const toPatch = (c: any) => ({ name: c.name, image: `${newImage}:${newTag}` })
+
+  let containerPatches = containers.filter((c: any) => matchesImage(c.image)).map(toPatch)
+  // Fallback to the legacy behaviour (patch all main containers) if none match
+  // by image name — e.g. digest-pinned images or registry mirrors — so the
+  // update is never a silent no-op.
+  if (containerPatches.length === 0) {
+    containerPatches = containers.map(toPatch)
+  }
+  // initContainers are only patched when they match by image, so unrelated
+  // init steps (e.g. the busybox wait-for-postgres) are never overwritten.
+  const initContainerPatches = initContainers.filter((c: any) => matchesImage(c.image)).map(toPatch)
 
   // Strategic merge patch: update image tags + restart annotation
   const patch: any = {
