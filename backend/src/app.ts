@@ -60,6 +60,7 @@ app.use(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Webhook-Signature', 'X-Hub-Signature-256', 'X-CSRF-Token'],
+    exposedHeaders: ['X-ClusterGate-Stream', 'X-Request-ID', 'X-ClusterGate-Duration'],
   })
 )
 

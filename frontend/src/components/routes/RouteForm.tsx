@@ -279,19 +279,19 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       {/* Step indicator */}
-      <div className="flex items-center gap-2 overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-y-2 gap-x-2">
         {STEPS.map((s, i) => (
           <div key={s} className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => i < step && setStep(i)}
+              onClick={() => setStep(i)}
               className={cn(
-                'flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-xs font-medium transition-colors',
+                'flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-xs font-medium transition-colors cursor-pointer',
                 i === step
                   ? 'bg-primary text-primary-foreground'
                   : i < step
-                  ? 'bg-green-600/20 text-green-500 hover:bg-green-600/30 cursor-pointer'
-                  : 'bg-muted text-muted-foreground cursor-not-allowed'
+                  ? 'bg-green-600/20 text-green-500 hover:bg-green-600/30'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/70'
               )}
             >
               {i < step ? <Check className="w-3.5 h-3.5" /> : i + 1}
