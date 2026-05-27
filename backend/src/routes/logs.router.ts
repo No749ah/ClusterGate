@@ -7,6 +7,20 @@ import { safePageSize } from '../lib/security'
 
 const router = Router()
 
+// Request/response bodies and headers can contain sensitive payload data.
+// VIEWER is a read-only monitoring role, so it sees log metadata but not the
+// captured content; ADMIN/OPERATOR get the full detail.
+function redactForViewer<T extends Record<string, any>>(role: Role, entries: T[]): T[] {
+  if (role !== Role.VIEWER) return entries
+  return entries.map((e) => ({
+    ...e,
+    requestBody: e.requestBody ? '[REDACTED]' : e.requestBody,
+    responseBody: e.responseBody ? '[REDACTED]' : e.responseBody,
+    requestHeaders: e.requestHeaders ? { redacted: true } : e.requestHeaders,
+    responseHeaders: e.responseHeaders ? { redacted: true } : e.responseHeaders,
+  }))
+}
+
 /**
  * @openapi
  * /api/logs:
@@ -113,6 +127,7 @@ router.get('/', authenticate, async (req, res, next) => {
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )
 
+    result.data = redactForViewer(req.user!.role, result.data as any[])
     res.json({ success: true, ...result })
   } catch (err) {
     next(err)
@@ -160,7 +175,7 @@ router.get('/errors', authenticate, async (req, res, next) => {
       routeId as string,
       Math.min(parseInt(String(limit)) || 10, 100)
     )
-    res.json({ success: true, data: errors })
+    res.json({ success: true, data: redactForViewer(req.user!.role, errors as any[]) })
   } catch (err) {
     next(err)
   }

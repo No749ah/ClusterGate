@@ -33,8 +33,8 @@ export function startCronJobs() {
   jobs.push(logCleanupJob)
   logger.info('Log cleanup cron started (daily at 2am)')
 
-  // Update check every 6 hours
-  const updateCheckJob = cron.schedule('0 */6 * * *', async () => {
+  // Update check once daily at 5am
+  const updateCheckJob = cron.schedule('0 5 * * *', async () => {
     try {
       await runScheduledUpdateCheck()
     } catch (err) {
@@ -42,7 +42,7 @@ export function startCronJobs() {
     }
   })
   jobs.push(updateCheckJob)
-  logger.info('Update check cron started (every 6 hours)')
+  logger.info('Update check cron started (daily at 5am)')
 
   // Achievement checks daily at 3am (speed_demon, zero_downtime)
   const achievementJob = cron.schedule('0 3 * * *', async () => {

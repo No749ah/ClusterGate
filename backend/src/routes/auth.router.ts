@@ -2,7 +2,7 @@ import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { login, getCurrentUser, changePassword, isSetupComplete, setupInitialAdmin } from '../services/authService'
 import { validateInvite, acceptInvite } from '../services/inviteService'
-import { generateSetup, verifyAndEnable, verifyToken as verify2FAToken, disable as disable2FA } from '../services/twoFactorService'
+import { generateSetup, verifyAndEnable, verifyToken as verify2FAToken, disable as disable2FA, startLoginChallenge } from '../services/twoFactorService'
 import { authenticate } from '../middleware/authenticate'
 import { authLimiter } from '../middleware/rateLimiter'
 import { config } from '../config'
@@ -316,8 +316,16 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
 
     // Check if user has 2FA enabled
     if (result.user.twoFactorEnabled) {
-      // Don't set session cookie — issue a short-lived temp token instead
-      const tempToken = signShortLivedToken({ userId: result.user.id, purpose: '2fa' })
+      // Don't set session cookie — issue a short-lived, single-use temp token.
+      // The challenge nonce binds the token to one login attempt and is cleared
+      // on successful verification; tokenVersion invalidates it on logout/pw change.
+      const nonce = await startLoginChallenge(result.user.id)
+      const tempToken = signShortLivedToken({
+        userId: result.user.id,
+        purpose: '2fa',
+        nonce,
+        tokenVersion: result.user.tokenVersion,
+      })
 
       createAuditLog({
         userId: result.user.id,
@@ -425,6 +433,21 @@ router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next
     try {
       payload = verifyShortLivedToken(tempToken, '2fa')
     } catch {
+      throw AppError.unauthorized('Invalid or expired 2FA token')
+    }
+
+    // Enforce single-use: the temp token's nonce must match the stored challenge
+    // and its tokenVersion must still be current (invalidated on logout/pw change).
+    const challengeUser = await prisma.user.findUnique({
+      where: { id: payload.userId },
+      select: { twoFactorChallenge: true, tokenVersion: true },
+    })
+    if (
+      !challengeUser ||
+      !payload.nonce ||
+      challengeUser.twoFactorChallenge !== payload.nonce ||
+      payload.tokenVersion !== challengeUser.tokenVersion
+    ) {
       throw AppError.unauthorized('Invalid or expired 2FA token')
     }
 
