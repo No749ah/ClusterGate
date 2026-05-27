@@ -14,6 +14,8 @@ export interface JWTPayload {
 export interface ShortLivedPayload {
   userId: string
   purpose: string
+  nonce?: string
+  tokenVersion?: number
   iat?: number
   exp?: number
 }

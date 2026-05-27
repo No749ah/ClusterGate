@@ -2,6 +2,9 @@ import axios from 'axios'
 import { readFileSync } from 'fs'
 import { logger } from '../lib/logger'
 import { getVersion } from '../lib/version'
+import { prisma } from '../lib/prisma'
+
+const UPDATE_STATUS_KEY = 'updateStatus'
 
 const GHCR_OWNER = 'no749ah'
 const BACKEND_IMAGE = `ghcr.io/${GHCR_OWNER}/clustergate-backend`
@@ -30,14 +33,42 @@ export interface UpdateCheckResult {
   checkedAt: string
 }
 
-// In-memory cache for update check results
+// In-memory cache for update check results (fast path; backed by the DB so the
+// last check survives backend restarts and is shown after a page refresh).
 let cachedUpdateResult: UpdateCheckResult | null = null
 
 /**
- * Get the cached update check result (lightweight, no external calls).
+ * Persist the latest update check result so it survives process restarts.
  */
-export function getCachedUpdateStatus(): UpdateCheckResult | null {
-  return cachedUpdateResult
+async function persistUpdateResult(result: UpdateCheckResult): Promise<void> {
+  try {
+    await prisma.systemSetting.upsert({
+      where: { key: UPDATE_STATUS_KEY },
+      create: { key: UPDATE_STATUS_KEY, value: result as any },
+      update: { value: result as any },
+    })
+  } catch (err) {
+    logger.warn('Failed to persist update status', { error: (err as Error).message })
+  }
+}
+
+/**
+ * Get the last update check result. Returns the in-memory cache if present,
+ * otherwise loads the persisted result from the database (lightweight, no
+ * external calls).
+ */
+export async function getCachedUpdateStatus(): Promise<UpdateCheckResult | null> {
+  if (cachedUpdateResult) return cachedUpdateResult
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key: UPDATE_STATUS_KEY } })
+    if (row?.value) {
+      cachedUpdateResult = row.value as unknown as UpdateCheckResult
+      return cachedUpdateResult
+    }
+  } catch (err) {
+    logger.warn('Failed to load persisted update status', { error: (err as Error).message })
+  }
+  return null
 }
 
 /**
@@ -231,8 +262,9 @@ export async function checkForUpdates(): Promise<UpdateCheckResult> {
     checkedAt: now,
   }
 
-  // Update cache whenever a check completes
+  // Update cache and persist whenever a check completes
   cachedUpdateResult = result
+  await persistUpdateResult(result)
   return result
 }
 

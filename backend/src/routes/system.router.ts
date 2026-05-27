@@ -83,9 +83,13 @@ router.get('/version', (_req, res) => {
  *                       type: string
  *                       format: date-time
  */
-router.get('/update-status', (_req, res) => {
-  const cached = getCachedUpdateStatus()
-  res.json({ success: true, data: cached })
+router.get('/update-status', async (_req, res, next) => {
+  try {
+    const cached = await getCachedUpdateStatus()
+    res.json({ success: true, data: cached })
+  } catch (err) {
+    next(err)
+  }
 })
 
 /**

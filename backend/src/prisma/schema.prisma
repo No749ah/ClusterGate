@@ -101,6 +101,9 @@ model User {
   twoFactorSecret  String?
   twoFactorEnabled Boolean   @default(false)
   recoveryCodes    String[]  @default([])
+  twoFactorChallenge      String?   // single-use nonce binding a pending 2FA temp token
+  twoFactorFailedAttempts Int       @default(0)
+  twoFactorLockedUntil    DateTime?
   tokenVersion     Int       @default(0)
   lastLoginAt      DateTime?
   createdAt        DateTime  @default(now())

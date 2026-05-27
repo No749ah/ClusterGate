@@ -2,6 +2,7 @@ import { URL } from 'url'
 import dns from 'dns/promises'
 import { lookup as dnsLookup, LookupAddress } from 'dns'
 import { timingSafeEqual, createHmac } from 'crypto'
+import safeRegex from 'safe-regex2'
 
 // =============================================================================
 // SSRF Protection — Block cloud metadata endpoints only
@@ -136,6 +137,14 @@ export function isSafeRegex(pattern: string): boolean {
   // Test 1: Try to compile the regex
   try {
     new RegExp(pattern)
+  } catch {
+    return false
+  }
+
+  // Test 1b: Vetted star-height ReDoS detector (catches nested-quantifier
+  // blowups like (a+)+ more reliably than the heuristic below).
+  try {
+    if (!safeRegex(pattern)) return false
   } catch {
     return false
   }
