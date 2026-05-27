@@ -6,7 +6,7 @@ import { logger } from '../lib/logger'
 import { healthCheckStatus } from '../lib/metrics'
 import { notifyHealthDown } from './notificationService'
 import { incidentService } from './incidentService'
-import { validateTargetUrlSync } from '../lib/security'
+import { validateTargetUrlSync, isTlsProtocolMismatch } from '../lib/security'
 
 export async function checkRouteHealth(route: Route): Promise<{
   status: HealthStatus
@@ -33,38 +33,32 @@ export async function checkRouteHealth(route: Route): Promise<{
       rejectUnauthorized: (route as any).sslVerify !== false,
     })
 
-    // Try HEAD first, fall back to GET if HEAD is not supported (405/501)
+    // HEAD first, fall back to GET if HEAD is unsupported (405/501) or errors
+    const probe = async (url: string) => {
+      let res
+      try {
+        res = await axios({ method: 'HEAD', url, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
+        if (res.status === 405 || res.status === 501) {
+          res = await axios({ method: 'GET', url, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
+        }
+      } catch {
+        res = await axios({ method: 'GET', url, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
+      }
+      return res
+    }
+
     let response
     try {
-      response = await axios({
-        method: 'HEAD',
-        url: route.targetUrl,
-        timeout: 10000,
-        maxRedirects: 3,
-        validateStatus: () => true,
-        httpsAgent,
-      })
-      // If HEAD returns 405 or 501 (not supported), retry with GET
-      if (response.status === 405 || response.status === 501) {
-        response = await axios({
-          method: 'GET',
-          url: route.targetUrl,
-          timeout: 10000,
-          maxRedirects: 3,
-          validateStatus: () => true,
-          httpsAgent,
-        })
+      response = await probe(route.targetUrl)
+    } catch (err) {
+      // Target spoke plain HTTP on an https:// URL (e.g. n8n on :5678) — the
+      // proxy falls back to http://, so the health check must too, otherwise it
+      // reports the route unhealthy on every scheduled run.
+      if (isTlsProtocolMismatch(err) && route.targetUrl.startsWith('https://')) {
+        response = await probe('http://' + route.targetUrl.slice('https://'.length))
+      } else {
+        throw err
       }
-    } catch (headErr) {
-      // If HEAD fails with a network error, try GET as fallback
-      response = await axios({
-        method: 'GET',
-        url: route.targetUrl,
-        timeout: 10000,
-        maxRedirects: 3,
-        validateStatus: () => true,
-        httpsAgent,
-      })
     }
 
     const responseTime = Date.now() - start
