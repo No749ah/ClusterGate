@@ -279,40 +279,35 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
       {/* Step indicator */}
-      <div className="flex flex-wrap items-center gap-y-2 gap-x-2">
+      <div className="flex flex-wrap gap-2">
         {STEPS.map((s, i) => (
-          <div key={s} className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => setStep(i)}
+          <button
+            key={s}
+            type="button"
+            onClick={() => setStep(i)}
+            className={cn(
+              'flex items-center gap-2 rounded-full border py-1 pl-1.5 pr-3 text-xs font-medium transition-colors cursor-pointer',
+              i === step
+                ? 'border-primary bg-primary/10 text-foreground'
+                : i < step
+                ? 'border-green-600/30 bg-green-600/10 text-green-500 hover:bg-green-600/20'
+                : 'border-border bg-muted/40 text-muted-foreground hover:bg-muted'
+            )}
+          >
+            <span
               className={cn(
-                'flex items-center justify-center w-7 h-7 shrink-0 rounded-full text-xs font-medium transition-colors cursor-pointer',
+                'flex items-center justify-center w-5 h-5 shrink-0 rounded-full text-[10px] font-semibold',
                 i === step
                   ? 'bg-primary text-primary-foreground'
                   : i < step
-                  ? 'bg-green-600/20 text-green-500 hover:bg-green-600/30'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/70'
+                  ? 'bg-green-600/20 text-green-500'
+                  : 'bg-muted-foreground/20 text-muted-foreground'
               )}
             >
-              {i < step ? <Check className="w-3.5 h-3.5" /> : i + 1}
-            </button>
-            <span
-              className={cn(
-                'text-xs hidden sm:block whitespace-nowrap',
-                i === step ? 'text-foreground font-medium' : 'text-muted-foreground'
-              )}
-            >
-              {s}
+              {i < step ? <Check className="w-3 h-3" /> : i + 1}
             </span>
-            {i < STEPS.length - 1 && (
-              <div
-                className={cn(
-                  'h-px w-6 shrink-0 transition-colors',
-                  i < step ? 'bg-green-600/50' : 'bg-border'
-                )}
-              />
-            )}
-          </div>
+            {s}
+          </button>
         ))}
       </div>
 
