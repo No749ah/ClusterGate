@@ -9,7 +9,10 @@ FROM node:22-alpine AS base
 WORKDIR /app
 RUN apk add --no-cache curl openssl
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+# Allow scripts here so Prisma downloads its engine binaries (query + schema
+# engine). The schema engine is required by `prisma migrate deploy`, which runs
+# automatically on startup. Engines are then copied into the slim prod image.
+RUN npm ci
 
 # ---------------------------------------------------------------------------
 # Development stage
