@@ -179,6 +179,7 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
 
   // Check if any fields actually changed before creating a new version
   const versionableFields = ['name', 'publicPath', 'targetUrl', 'methods', 'isActive', 'stripPrefix',
+    'sslVerify', 'streamResponse',
     'addHeaders', 'removeHeaders', 'rewriteRules', 'timeout', 'retryCount', 'retryDelay',
     'maintenanceMode', 'maintenanceMessage', 'webhookSecret',
     'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',

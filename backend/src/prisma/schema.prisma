@@ -252,6 +252,7 @@ model Route {
 
   stripPrefix  Boolean     @default(false)
   sslVerify    Boolean     @default(true)
+  streamResponse Boolean   @default(false)
   requestBodyLimit String  @default("10mb")
 
   // Header rules
