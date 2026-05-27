@@ -80,8 +80,10 @@ app.use(express.json({ limit: '5mb' }))
 app.use(express.urlencoded({ extended: true, limit: '5mb' }))
 app.use(compression({
   filter: (req, res) => {
-    // Never compress SSE streams — compression buffers chunks and breaks real-time streaming
+    // Never compress SSE / proxied streams — compression buffers chunks and
+    // breaks real-time streaming.
     if (res.getHeader('Content-Type') === 'text/event-stream') return false
+    if (res.getHeader('X-ClusterGate-Stream') === '1') return false
     return compression.filter(req, res)
   },
 }))

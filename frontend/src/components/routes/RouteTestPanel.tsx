@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Switch } from '@/components/ui/switch'
 import { useTestRoute } from '@/hooks/useRoutes'
+import { api } from '@/lib/api'
 import { TestResult } from '@/types'
 import { cn, getStatusColor, formatDuration, copyToClipboard, formatJsonForDisplay } from '@/lib/utils'
 import { toast } from 'sonner'
@@ -18,9 +19,27 @@ interface RouteTestPanelProps {
   methods?: string[]
   requireAuth?: boolean
   authType?: string
+  streamResponse?: boolean
 }
 
-export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAuth, authType }: RouteTestPanelProps) {
+// Extract human-readable text from a streamed chunk. Handles n8n-style NDJSON
+// ({type:'item', content:'...'}) and plain text, so the test panel shows the
+// assembled message rather than raw protocol frames.
+function extractStreamText(line: string): string {
+  const trimmed = line.trim()
+  if (!trimmed) return ''
+  try {
+    const obj = JSON.parse(trimmed)
+    if (typeof obj.content === 'string') return obj.content
+    if (typeof obj.delta === 'string') return obj.delta
+    if (typeof obj.text === 'string') return obj.text
+    return ''
+  } catch {
+    return line
+  }
+}
+
+export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAuth, authType, streamResponse }: RouteTestPanelProps) {
   const [method, setMethod] = useState(methods?.[0] ?? 'GET')
   const [path, setPath] = useState(defaultPath)
   const [body, setBody] = useState('')
@@ -29,6 +48,14 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
   const [showRequestHeaders, setShowRequestHeaders] = useState(false)
   const [showResponseHeaders, setShowResponseHeaders] = useState(false)
   const [copied, setCopied] = useState(false)
+
+  // Streaming test state
+  const [streamText, setStreamText] = useState('')
+  const [streamRaw, setStreamRaw] = useState('')
+  const [showStreamRaw, setShowStreamRaw] = useState(false)
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [streamError, setStreamError] = useState<string | null>(null)
+  const [streamCopied, setStreamCopied] = useState(false)
 
   // Auth state
   const hasAuth = requireAuth === true && authType !== undefined && authType !== 'NONE'
@@ -40,41 +67,93 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
 
   const testMutation = useTestRoute(routeId)
 
-  const handleTest = async () => {
+  const buildHeaderMap = () => {
     const headerMap = Object.fromEntries(
       headers.filter((h) => h.key).map((h) => [h.key, h.value])
     )
-
     // Inject auth credentials as headers when auth is configured and not skipped
     if (hasAuth && !skipAuth) {
       switch (authType) {
         case 'API_KEY':
-          if (apiKeyValue) {
-            headerMap['X-API-Key'] = apiKeyValue
-          }
+          if (apiKeyValue) headerMap['X-API-Key'] = apiKeyValue
           break
         case 'BASIC':
           if (basicUsername || basicPassword) {
-            const encoded = btoa(`${basicUsername}:${basicPassword}`)
-            headerMap['Authorization'] = `Basic ${encoded}`
+            headerMap['Authorization'] = `Basic ${btoa(`${basicUsername}:${basicPassword}`)}`
           }
           break
         case 'BEARER':
-          if (bearerToken) {
-            headerMap['Authorization'] = `Bearer ${bearerToken}`
-          }
+          if (bearerToken) headerMap['Authorization'] = `Bearer ${bearerToken}`
           break
       }
     }
+    return headerMap
+  }
 
-    const res = await testMutation.mutateAsync({
+  const handleTest = async () => {
+    const headerMap = buildHeaderMap()
+    const params = {
       method,
       path,
       headers: headerMap,
       body: body || undefined,
       skipAuth: hasAuth && skipAuth ? true : undefined,
-    })
+    }
+
+    if (streamResponse) {
+      await handleStreamTest(params)
+      return
+    }
+
+    const res = await testMutation.mutateAsync(params)
     setResult(res.data)
+  }
+
+  const handleStreamTest = async (params: { method: string; path: string; headers: Record<string, string>; body?: string; skipAuth?: boolean }) => {
+    setIsStreaming(true)
+    setStreamText('')
+    setStreamRaw('')
+    setStreamError(null)
+    setResult(null)
+    try {
+      const res = await api.routes.testStream(routeId, params)
+      if (!res.body) {
+        setStreamError('No response stream')
+        return
+      }
+      // A non-streamed JSON error (e.g. SSRF block / proxy error before piping)
+      if ((res.headers.get('content-type') || '').includes('application/json')) {
+        const json = await res.json().catch(() => null)
+        setStreamError(json?.data?.error || `Request failed (${res.status})`)
+        return
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        const chunk = decoder.decode(value, { stream: true })
+        buffer += chunk
+        setStreamRaw((prev) => prev + chunk)
+        // Process complete lines for readable text extraction
+        const lines = buffer.split('\n')
+        buffer = lines.pop() ?? ''
+        for (const line of lines) {
+          const text = extractStreamText(line)
+          if (text) setStreamText((prev) => prev + text)
+        }
+      }
+      if (buffer.trim()) {
+        const text = extractStreamText(buffer)
+        if (text) setStreamText((prev) => prev + text)
+      }
+    } catch (err) {
+      setStreamError((err as Error).message)
+    } finally {
+      setIsStreaming(false)
+    }
   }
 
   const handleCopy = async () => {
@@ -244,14 +323,54 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
           </div>
         )}
 
-        <Button onClick={handleTest} disabled={testMutation.isPending} className="w-full">
-          {testMutation.isPending ? (
-            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Sending...</>
+        <Button onClick={handleTest} disabled={testMutation.isPending || isStreaming} className="w-full">
+          {testMutation.isPending || isStreaming ? (
+            <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isStreaming ? 'Streaming...' : 'Sending...'}</>
           ) : (
             <><Play className="w-4 h-4 mr-2" /> Send Request</>
           )}
         </Button>
       </div>
+
+      {/* Streaming response */}
+      {streamResponse && (isStreaming || streamText || streamRaw || streamError) && (
+        <div className="rounded-lg border border-border/50 overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/50">
+            <div className="flex items-center gap-2">
+              {isStreaming && <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />}
+              <span className="text-sm font-medium">{isStreaming ? 'Streaming response' : 'Streamed response'}</span>
+              {streamError && <span className="text-xs text-destructive">Error: {streamError}</span>}
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowStreamRaw((v) => !v)}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {showStreamRaw ? 'Show text' : 'Show raw (unstreamed)'}
+              </button>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                onClick={async () => {
+                  await copyToClipboard(showStreamRaw ? streamRaw : streamText)
+                  setStreamCopied(true)
+                  toast.success('Copied to clipboard')
+                  setTimeout(() => setStreamCopied(false), 2000)
+                }}
+              >
+                {streamCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+              </Button>
+            </div>
+          </div>
+          <div className="p-4 max-h-96 overflow-auto">
+            {showStreamRaw ? (
+              <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all">{streamRaw || '—'}</pre>
+            ) : (
+              <p className="text-sm text-foreground whitespace-pre-wrap break-words">{streamText || (isStreaming ? '' : '—')}</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Response */}
       {result && (

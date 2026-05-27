@@ -239,6 +239,67 @@ export async function proxyRequest(
   let error: string | undefined
 
   try {
+    // ---- Streaming mode: pipe the upstream response straight through so SSE /
+    // chunked / NDJSON bodies (e.g. n8n AI Agent token streams) reach the client
+    // incrementally instead of being buffered until completion. ----
+    if ((route as any).streamResponse) {
+      const streamConfig: AxiosRequestConfig = { ...axiosConfig, responseType: 'stream', decompress: false }
+      let resp: any
+      try {
+        resp = await axios(streamConfig)
+      } catch (err) {
+        const axiosErr = err as AxiosError
+        if (isTlsProtocolMismatch(err) && typeof streamConfig.url === 'string' && streamConfig.url.startsWith('https://')) {
+          streamConfig.url = 'http://' + streamConfig.url.slice('https://'.length)
+          resolvedUrl = streamConfig.url
+          logger.warn('HTTPS target spoke plain HTTP — retrying stream over http', { routeId: route.id, url: streamConfig.url })
+          resp = await axios(streamConfig)
+        } else if (axiosErr.response) {
+          resp = axiosErr.response
+        } else {
+          throw err
+        }
+      }
+
+      duration = Date.now() - start
+      responseStatus = resp.status
+
+      // Forward upstream headers as-is (Content-Encoding kept since we don't
+      // decompress; Content-Length dropped via HOP_BY_HOP so we can chunk).
+      for (const [key, value] of Object.entries(resp.headers as Record<string, string>)) {
+        if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+          res.setHeader(key, value)
+        }
+      }
+      res.setHeader('X-Request-ID', requestId)
+      res.setHeader('X-ClusterGate-Duration', String(duration))
+      res.setHeader('X-ClusterGate-Stream', '1') // disable our compression middleware
+      res.setHeader('X-Accel-Buffering', 'no') // disable proxy (nginx) buffering
+      res.status(responseStatus || 502)
+      if (typeof (res as any).flushHeaders === 'function') (res as any).flushHeaders()
+
+      if (route.circuitBreakerEnabled) recordSuccess(route.id).catch(() => {})
+      if (selectedTargetId) markTargetHealthy(selectedTargetId).catch(() => {})
+      proxyRequestsTotal.inc({ route_id: route.id, method: req.method, status: String(responseStatus) })
+      proxyRequestDuration.observe({ route_id: route.id }, duration / 1000)
+      logRequest({
+        routeId: route.id, requestId, method: req.method, path: proxyPath,
+        queryParams: req.query as Record<string, string>,
+        requestHeaders: sanitizeHeaders(forwardHeaders),
+        requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
+        responseStatus, responseHeaders: {}, responseBody: '[streamed]',
+        duration, targetUrl: resolvedUrl, ip: req.ip, userAgent: req.get('user-agent'),
+      })
+
+      await new Promise<void>((resolve, reject) => {
+        resp.data.on('end', resolve)
+        resp.data.on('error', reject)
+        res.on('close', resolve)
+        resp.data.pipe(res)
+      })
+      return
+    }
+
     let lastError: Error | null = null
     let response: any = null
 
