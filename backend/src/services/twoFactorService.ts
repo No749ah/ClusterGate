@@ -8,6 +8,22 @@ import { AppError } from '../lib/errors'
 const BCRYPT_ROUNDS = 12
 const ISSUER = 'ClusterGate'
 const RECOVERY_CODE_COUNT = 10
+const MAX_2FA_ATTEMPTS = 5
+const LOCKOUT_MS = 15 * 60 * 1000 // 15 minutes
+
+/**
+ * Issue a fresh single-use challenge nonce for a pending 2FA login and store
+ * it on the user. The nonce is embedded in the temp token and cleared on
+ * successful verification, making the temp token single-use.
+ */
+export async function startLoginChallenge(userId: string): Promise<string> {
+  const nonce = crypto.randomBytes(16).toString('hex')
+  await prisma.user.update({
+    where: { id: userId },
+    data: { twoFactorChallenge: nonce },
+  })
+  return nonce
+}
 
 function createTOTP(secret: string, email: string): TOTP {
   return new TOTP({
@@ -112,11 +128,18 @@ export async function verifyToken(userId: string, token: string): Promise<boolea
     throw AppError.badRequest('Two-factor authentication is not enabled')
   }
 
+  // Per-user lockout — independent of source IP, so rotating IPs can't evade it
+  if (user.twoFactorLockedUntil && user.twoFactorLockedUntil.getTime() > Date.now()) {
+    const mins = Math.ceil((user.twoFactorLockedUntil.getTime() - Date.now()) / 60000)
+    throw AppError.tooManyRequests(`Too many failed 2FA attempts. Try again in ${mins} minute(s).`)
+  }
+
   // Try TOTP verification first (6-digit codes)
   const totp = createTOTP(user.twoFactorSecret, user.email)
   const delta = totp.validate({ token, window: 1 })
 
   if (delta !== null) {
+    await onVerifySuccess(userId, user.recoveryCodes)
     return true
   }
 
@@ -124,18 +147,45 @@ export async function verifyToken(userId: string, token: string): Promise<boolea
   for (let i = 0; i < user.recoveryCodes.length; i++) {
     const match = await bcrypt.compare(token, user.recoveryCodes[i])
     if (match) {
-      // Remove the used recovery code
       const updatedCodes = [...user.recoveryCodes]
       updatedCodes.splice(i, 1)
-      await prisma.user.update({
-        where: { id: userId },
-        data: { recoveryCodes: updatedCodes },
-      })
+      await onVerifySuccess(userId, updatedCodes)
       return true
     }
   }
 
+  await onVerifyFailure(userId, user.twoFactorFailedAttempts)
   return false
+}
+
+async function onVerifySuccess(userId: string, recoveryCodes: string[]): Promise<void> {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      recoveryCodes,
+      twoFactorFailedAttempts: 0,
+      twoFactorLockedUntil: null,
+      twoFactorChallenge: null, // consume the single-use challenge
+    },
+  })
+}
+
+async function onVerifyFailure(userId: string, currentAttempts: number): Promise<void> {
+  const attempts = currentAttempts + 1
+  if (attempts >= MAX_2FA_ATTEMPTS) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        twoFactorFailedAttempts: 0,
+        twoFactorLockedUntil: new Date(Date.now() + LOCKOUT_MS),
+      },
+    })
+  } else {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { twoFactorFailedAttempts: attempts },
+    })
+  }
 }
 
 /**

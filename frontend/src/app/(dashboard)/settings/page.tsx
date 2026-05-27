@@ -113,6 +113,10 @@ export default function SettingsPage() {
     if (user?.role !== 'ADMIN') return
     fetchStats()
     fetchConfig()
+    // Load the last (persisted) update check so it survives page refreshes
+    api.system.updateStatus().then((res) => {
+      if (res.data) setUpdateInfo(res.data)
+    }).catch(() => {})
   }, [user?.role])
 
   const fetchStats = async () => {
