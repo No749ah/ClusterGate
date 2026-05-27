@@ -328,12 +328,18 @@ async function updateK8sDeployment(namespace: string, deploymentName: string, ne
     timeout: 15000,
   })
   const containers = current.data.spec.template.spec.containers || []
+  const initContainers = current.data.spec.template.spec.initContainers || []
 
-  // Build container image patches — update all containers to the new tag
-  const containerPatches = containers.map((c: any) => ({
-    name: c.name,
-    image: `${newImage}:${newTag}`,
-  }))
+  // Update any container/initContainer that runs this image to the new tag.
+  // initContainers must be included too — otherwise the `migrate` initContainer
+  // keeps the old image and new DB migrations never run on self-update.
+  const matchesImage = (img: string) => typeof img === 'string' && img.split(':')[0] === newImage
+  const containerPatches = containers
+    .filter((c: any) => matchesImage(c.image))
+    .map((c: any) => ({ name: c.name, image: `${newImage}:${newTag}` }))
+  const initContainerPatches = initContainers
+    .filter((c: any) => matchesImage(c.image))
+    .map((c: any) => ({ name: c.name, image: `${newImage}:${newTag}` }))
 
   // Strategic merge patch: update image tags + restart annotation
   const patch: any = {
@@ -346,6 +352,7 @@ async function updateK8sDeployment(namespace: string, deploymentName: string, ne
         },
         spec: {
           containers: containerPatches,
+          ...(initContainerPatches.length > 0 ? { initContainers: initContainerPatches } : {}),
         },
       },
     },

@@ -13,6 +13,9 @@ const envSchema = z.object({
   // and rate limiting). Defaults to 1 (single ingress/LB in front, e.g. k8s).
   TRUST_PROXY: z.string().default('1'),
   PROXY_TIMEOUT: z.coerce.number().default(30000),
+  // Run `prisma migrate deploy` automatically on backend startup. Default on so
+  // schema changes apply on every deploy/self-update without manual steps.
+  AUTO_MIGRATE: z.coerce.boolean().default(true),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_DIR: z.string().default('./logs'),
   METRICS_ENABLED: z.coerce.boolean().default(true),
