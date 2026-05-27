@@ -1,5 +1,6 @@
 import { URL } from 'url'
 import dns from 'dns/promises'
+import { lookup as dnsLookup, LookupAddress } from 'dns'
 import { timingSafeEqual, createHmac } from 'crypto'
 
 // =============================================================================
@@ -14,18 +15,21 @@ const BLOCKED_HOSTNAMES = new Set([
   '169.254.170.2',             // AWS ECS metadata
 ])
 
+// Additional known cloud metadata IPs (Alibaba/Oracle/DigitalOcean use 100.100.100.200)
+const BLOCKED_METADATA_IPS = new Set(['100.100.100.200'])
+
 /**
- * Check if an IP is a cloud metadata endpoint (169.254.169.254, 169.254.170.2)
+ * Check if an IP is a cloud metadata endpoint.
+ * Blocks the entire 169.254.0.0/16 link-local range (covers AWS/GCP/Azure
+ * 169.254.169.254, ECS 169.254.170.2 and any other link-local target) plus
+ * known provider metadata IPs.
  */
-function isMetadataIp(ip: string): boolean {
+export function isMetadataIp(ip: string): boolean {
+  if (BLOCKED_METADATA_IPS.has(ip)) return true
   const parts = ip.split('.').map(Number)
-  if (parts.length !== 4) return false
-  // 169.254.169.254 and 169.254.170.2 — cloud metadata endpoints
-  if (parts[0] === 169 && parts[1] === 254) {
-    if ((parts[2] === 169 && parts[3] === 254) || (parts[2] === 170 && parts[3] === 2)) {
-      return true
-    }
-  }
+  if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) return false
+  // 169.254.0.0/16 — IPv4 link-local (cloud metadata lives here)
+  if (parts[0] === 169 && parts[1] === 254) return true
   return false
 }
 
@@ -91,6 +95,33 @@ export function validateTargetUrlSync(targetUrl: string): void {
   if (BLOCKED_HOSTNAMES.has(hostname)) {
     throw new Error(`Blocked cloud metadata endpoint: ${hostname}`)
   }
+}
+
+/**
+ * A drop-in replacement for Node's dns.lookup that rejects resolution to cloud
+ * metadata IPs. Wiring this into the proxy's http/https agents enforces the
+ * SSRF guard at connection time on every request, closing the DNS-rebinding
+ * window left by validating only at route create/update time.
+ */
+export function safeLookup(
+  hostname: string,
+  options: any,
+  callback: (err: NodeJS.ErrnoException | null, address: string | LookupAddress[], family?: number) => void
+): void {
+  const cb = typeof options === 'function' ? options : callback
+  const opts = typeof options === 'function' ? {} : options
+  dnsLookup(hostname, opts, (err, address: any, family: any) => {
+    if (err) return cb(err, address, family)
+    const addrs: LookupAddress[] = Array.isArray(address)
+      ? address
+      : [{ address: address as string, family: family as number }]
+    for (const a of addrs) {
+      if (a.family === 4 && isMetadataIp(a.address)) {
+        return cb(new Error(`Blocked SSRF to cloud metadata IP ${a.address}`), address, family)
+      }
+    }
+    cb(null, address, family)
+  })
 }
 
 // =============================================================================

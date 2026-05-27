@@ -76,7 +76,10 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
     if (route.corsEnabled) {
       const origin = req.get('origin')
       const allowedOrigins = route.corsOrigins as string[]
-      if (origin && (allowedOrigins.length === 0 || allowedOrigins.includes(origin))) {
+      // Only reflect an explicitly allowlisted origin. An empty allowlist means
+      // "deny" — never reflect arbitrary origins alongside credentials.
+      if (origin && allowedOrigins.includes(origin)) {
+        res.setHeader('Vary', 'Origin')
         res.setHeader('Access-Control-Allow-Origin', origin)
         res.setHeader('Access-Control-Allow-Credentials', 'true')
         res.setHeader('Access-Control-Allow-Methods', route.methods.length > 0 ? route.methods.join(', ') : 'GET, POST, PUT, PATCH, DELETE, HEAD, OPTIONS')

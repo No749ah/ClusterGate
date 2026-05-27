@@ -7,6 +7,11 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   JWT_EXPIRES_IN: z.string().default('7d'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
+  // Express 'trust proxy' setting. Number = number of trusted proxy hops,
+  // 'false' = trust none (use when ClusterGate is exposed directly to the
+  // internet so clients cannot spoof X-Forwarded-For to defeat IP allowlists
+  // and rate limiting). Defaults to 1 (single ingress/LB in front, e.g. k8s).
+  TRUST_PROXY: z.string().default('1'),
   PROXY_TIMEOUT: z.coerce.number().default(30000),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_DIR: z.string().default('./logs'),
@@ -34,4 +39,12 @@ export const config = {
   isDev: parsed.data.NODE_ENV === 'development',
   isProd: parsed.data.NODE_ENV === 'production',
   allowedOrigins: parsed.data.ALLOWED_ORIGINS.split(',').map((s) => s.trim()),
+  trustProxy: parseTrustProxy(parsed.data.TRUST_PROXY),
+}
+
+function parseTrustProxy(value: string): boolean | number {
+  if (value === 'false') return false
+  if (value === 'true') return true
+  const n = parseInt(value, 10)
+  return Number.isNaN(n) ? 1 : n
 }

@@ -107,8 +107,14 @@ export function applyResponseTransforms(
   return { statusCode, headers, body }
 }
 
+const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
+
 function setNestedValue(obj: any, path: string, value: any): void {
   const parts = path.split('.')
+  if (parts.some((p) => FORBIDDEN_KEYS.has(p))) {
+    // Prevent prototype pollution via crafted transform paths
+    return
+  }
   let current = obj
   for (let i = 0; i < parts.length - 1; i++) {
     if (!current[parts[i]] || typeof current[parts[i]] !== 'object') {
