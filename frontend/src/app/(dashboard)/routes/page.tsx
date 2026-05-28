@@ -68,6 +68,34 @@ function MethodBadge({ method }: { method: string }) {
   )
 }
 
+const METHOD_PRIORITY = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS']
+
+// Show the 3 most common methods; collapse the rest behind a clickable "+N".
+function MethodBadges({ methods }: { methods: string[] }) {
+  const [expanded, setExpanded] = useState(false)
+  const sorted = [...methods].sort((a, b) => {
+    const ia = METHOD_PRIORITY.indexOf(a), ib = METHOD_PRIORITY.indexOf(b)
+    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib)
+  })
+  const shown = expanded ? sorted : sorted.slice(0, 3)
+  const hidden = sorted.length - shown.length
+  return (
+    <div className="flex gap-1 flex-wrap items-center">
+      {shown.map((m) => <MethodBadge key={m} method={m} />)}
+      {!expanded && hidden > 0 && (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); e.preventDefault(); setExpanded(true) }}
+          title={sorted.slice(3).join(', ')}
+          className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-mono font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-muted"
+        >
+          +{hidden}
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function RoutesPage() {
   const { user } = useAuth()
   const [search, setSearch] = useState('')
@@ -355,8 +383,8 @@ export default function RoutesPage() {
                     onDeactivate={() => deactivate.mutate(route.id)}
                     onDuplicate={() => duplicate.mutate(route.id)}
                     onDelete={async () => {
-                      if (route.status === 'PUBLISHED') {
-                        toast.error('Deactivate this published route before deleting it')
+                      if (route.isActive) {
+                        toast.error('Deactivate this route before deleting it')
                         return
                       }
                       if (route.protected) {
@@ -506,11 +534,7 @@ function RouteRow({
         </span>
       </td>
       <td className="px-4 py-3">
-        <div className="flex gap-1 flex-wrap">
-          {route.methods.map((m) => (
-            <MethodBadge key={m} method={m} />
-          ))}
-        </div>
+        <MethodBadges methods={route.methods} />
       </td>
       <td className="px-4 py-3">
         <RouteStatusBadge status={route.status} isActive={route.isActive} />

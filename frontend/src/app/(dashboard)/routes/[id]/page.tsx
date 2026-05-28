@@ -4,7 +4,8 @@ import { useState, use } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth } from '@/hooks/useRoutes'
+import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth, useDeleteRoute } from '@/hooks/useRoutes'
+import { useRouter } from 'next/navigation'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
 import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
@@ -42,6 +43,29 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   const publish = usePublishRoute()
   const deactivate = useDeactivateRoute()
   const duplicate = useDuplicateRoute()
+  const deleteRoute = useDeleteRoute()
+  const router = useRouter()
+
+  const handleDelete = async (route: any) => {
+    if (route.isActive) {
+      toast.error('Deactivate this route before deleting it')
+      return
+    }
+    if (route.protected) {
+      const typed = window.prompt(`This route is protected. Type the route name to confirm deletion:\n\n${route.name}`)
+      if (typed == null) return
+      if (typed !== route.name) { toast.error('Name did not match — deletion cancelled'); return }
+      deleteRoute.mutate({ id: route.id, confirm: typed }, { onSuccess: () => router.push('/routes') })
+      return
+    }
+    const ok = await confirm({
+      title: 'Delete Route',
+      description: `Are you sure you want to delete "${route.name}"? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      variant: 'destructive',
+    })
+    if (ok) deleteRoute.mutate(route.id, { onSuccess: () => router.push('/routes') })
+  }
   const healthCheck = useRouteHealth(id)
   const restoreVersion = useRestoreRouteVersion(id)
 
@@ -129,6 +153,17 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
               <Edit className="w-3.5 h-3.5 mr-2" />
               Edit
             </Link>
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-red-500 hover:text-red-500 hover:bg-red-500/10"
+            onClick={() => handleDelete(route)}
+            disabled={deleteRoute.isPending}
+            title={route.isActive ? 'Deactivate before deleting' : 'Delete route'}
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-2" />
+            Delete
           </Button>
         </div>
       </div>

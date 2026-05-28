@@ -255,10 +255,10 @@ export async function deleteRoute(id: string, confirmName?: string) {
   const route = await prisma.route.findUnique({ where: { id, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
 
-  // A published route is live — require deactivation first to avoid taking down
-  // production traffic by accident.
-  if (route.status === 'PUBLISHED') {
-    throw AppError.badRequest('Deactivate this published route before deleting it')
+  // A live route can't be deleted — deactivate it first to avoid taking down
+  // production traffic by accident. (Deactivated/published-but-inactive is fine.)
+  if (route.isActive) {
+    throw AppError.badRequest('Deactivate this route before deleting it')
   }
   // Protected (production) routes require typing the exact name to confirm.
   if ((route as any).protected && confirmName !== route.name) {
