@@ -144,6 +144,31 @@ jobs:
         id: version
         run: echo "VERSION=v$(node -p "require('./backend/package.json').version")" >> $GITHUB_OUTPUT
 
+      - name: Generate changelog from commits
+        id: changelog
+        run: |
+          # Previous release tag (before this build) — newest existing v* tag
+          PREV=$(git tag --list 'v*' --sort=-version:refname | head -n 1 || true)
+          if [ -n "$PREV" ] && git rev-parse "$PREV" >/dev/null 2>&1; then
+            RANGE="$PREV..HEAD"
+          else
+            RANGE=""
+          fi
+          {
+            echo "CHANGELOG<<__CHANGELOG_EOF__"
+            git log $RANGE --no-merges --pretty=format:'%s%x09%an%x09%ae' | while IFS=$'\t' read -r subj name email; do
+              handle="$name"
+              case "$email" in
+                *@users.noreply.github.com)
+                  h="${email%@users.noreply.github.com}"
+                  handle="${h##*+}" ;;
+              esac
+              echo "- ${subj} (@${handle})"
+            done
+            echo ""
+            echo "__CHANGELOG_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check if tag exists
         id: check_tag
         run: |
@@ -169,6 +194,10 @@ jobs:
             ## ClusterGate ${{ steps.version.outputs.VERSION }}
 
             Kubernetes Routing Gateway Platform — expose internal Kubernetes services over public domains.
+
+            ### What's Changed
+
+            ${{ steps.changelog.outputs.CHANGELOG }}
 
             ### Docker Images
 

@@ -158,4 +158,14 @@ router.post('/:id/reject', authenticate, authorize([Role.ADMIN, Role.OPERATOR]),
   }
 })
 
+// Delete a resolved change request (admins only)
+router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    await changeRequestService.delete(req.params.id)
+    res.json({ success: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
 export default router
