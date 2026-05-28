@@ -119,11 +119,21 @@ export async function checkRouteHealth(route: Route): Promise<{
 }
 
 export async function runAllHealthChecks(): Promise<void> {
-  const routes = await prisma.route.findMany({
+  const all = await prisma.route.findMany({
     where: { isActive: true, deletedAt: null },
+    include: { healthChecks: { orderBy: { createdAt: 'desc' }, take: 1 } },
   })
 
-  logger.info(`Running health checks for ${routes.length} routes`)
+  // Only check routes whose per-route interval has elapsed (cron runs every 5m,
+  // which is the finest granularity). 30s slack avoids skipping due to jitter.
+  const now = Date.now()
+  const routes = all.filter((r) => {
+    const intervalMs = ((r as any).healthCheckInterval || 5) * 60_000
+    const last = r.healthChecks[0]?.createdAt ? new Date(r.healthChecks[0].createdAt).getTime() : 0
+    return now - last >= intervalMs - 30_000
+  })
+
+  logger.info(`Running health checks for ${routes.length}/${all.length} due routes`)
 
   const results = await Promise.allSettled(
     routes.map((route) => checkRouteHealth(route))

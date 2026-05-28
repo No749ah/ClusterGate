@@ -46,6 +46,8 @@ const routeSchema = z.object({
   healthCheckMethod: z.enum(['HEAD', 'GET', 'POST']).default('HEAD'),
   healthCheckPath: z.string().optional(),
   healthCheckBody: z.string().optional(),
+  healthCheckInterval: z.coerce.number().default(5),
+  protected: z.boolean().default(false),
   webhookSecret: z.string().optional(),
   rateLimitEnabled: z.boolean().default(false),
   rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
@@ -136,6 +138,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       healthCheckMethod: (defaultValues as any)?.healthCheckMethod ?? 'HEAD',
       healthCheckPath: (defaultValues as any)?.healthCheckPath ?? '',
       healthCheckBody: (defaultValues as any)?.healthCheckBody ?? '',
+      healthCheckInterval: (defaultValues as any)?.healthCheckInterval ?? 5,
+      protected: (defaultValues as any)?.protected ?? false,
       webhookSecret: defaultValues?.webhookSecret ?? '',
       rateLimitEnabled: defaultValues?.rateLimitEnabled ?? false,
       rateLimitMax: defaultValues?.rateLimitMax ?? 100,
@@ -596,6 +600,18 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 <p className="text-sm font-medium">Health Check</p>
                 <p className="text-xs text-muted-foreground">How ClusterGate probes the target (POST + body works for n8n)</p>
               </div>
+              <Field label="Interval">
+                <Select value={String(watch('healthCheckInterval'))} onValueChange={(v) => setValue('healthCheckInterval', Number(v))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="5">Every 5 minutes</SelectItem>
+                    <SelectItem value="15">Every 15 minutes</SelectItem>
+                    <SelectItem value="60">Every hour</SelectItem>
+                    <SelectItem value="720">Every 12 hours</SelectItem>
+                    <SelectItem value="1440">Every 24 hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
               <div className="grid grid-cols-2 gap-2">
                 <Field label="Method">
                   <Select value={watch('healthCheckMethod')} onValueChange={(v) => setValue('healthCheckMethod', v as any)}>
@@ -874,6 +890,16 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         {/* Step 5: Maintenance */}
         {step === 5 && (
           <div className="space-y-4">
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+              <div>
+                <p className="text-sm font-medium">Protected (production)</p>
+                <p className="text-xs text-muted-foreground">Require typing the route name to delete — guards against accidental deletion</p>
+              </div>
+              <Switch
+                checked={watch('protected')}
+                onCheckedChange={(v) => setValue('protected', v)}
+              />
+            </div>
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
               <div>
                 <p className="text-sm font-medium">Maintenance Mode</p>

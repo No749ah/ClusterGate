@@ -64,7 +64,8 @@ export function useDeleteRoute() {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (id: string) => api.routes.delete(id),
+    mutationFn: (args: string | { id: string; confirm?: string }) =>
+      typeof args === 'string' ? api.routes.delete(args) : api.routes.delete(args.id, args.confirm),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['routes'] })
       toast.success('Route deleted successfully')

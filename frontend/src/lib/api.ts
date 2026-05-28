@@ -183,8 +183,8 @@ class ApiClient {
     update: (id: string, data: Partial<RouteFormData>) =>
       this.put<ApiResponse<Route>>(`/api/routes/${id}`, data),
 
-    delete: (id: string) =>
-      this.delete<ApiResponse<null>>(`/api/routes/${id}`),
+    delete: (id: string, confirm?: string) =>
+      this.delete<ApiResponse<null>>(`/api/routes/${id}${confirm ? `?confirm=${encodeURIComponent(confirm)}` : ''}`),
 
     publish: (id: string) =>
       this.post<ApiResponse<Route>>(`/api/routes/${id}/publish`),

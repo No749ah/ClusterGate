@@ -53,7 +53,8 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Two-Factor Authentication** — TOTP-based 2FA with recovery codes, single-use login token, and per-user brute-force lockout
 - **Analytics Dashboard** — Latency trends (p50/p95/p99), error rates, traffic heatmap, status distribution (org-scoped for non-admins)
 - **Security** — JWT auth (httpOnly cookies), bcrypt, CSRF (double-submit cookie), session revocation (tokenVersion), generated per-route API keys / Basic / Bearer, **route secrets encrypted at rest (AES-256-GCM)**, HA rate limiting, IP allowlists, webhook secrets, CORS, SSRF guard, password policy
-- **Configurable Health Checks** — Per-route method/path/body (POST + body works for n8n); auto HTTPS→HTTP fallback
+- **Configurable Health Checks** — Per-route method/path/body and interval (5 min / 15 min / 1 h / 12 h / 24 h); POST + body and n8n auto-`chatInput`/`sessionId`; auto HTTPS→HTTP fallback
+- **Deletion Safety** — Published routes can't be deleted (deactivate first); routes can be marked **Protected (production)** to require typing the exact name before deletion
 - **Automatic Migrations** — Pending DB migrations applied on startup (Helm, raw manifests, and self-update)
 - **Monitoring** — Paginated request logs (bodies redacted for VIEWER), error tracking, Prometheus metrics, automated health checks, in-app notifications (dismissible) incl. API-key expiry warnings
 - **Database Backups** — Create, download, restore, and manage backups from the UI (Prisma-based JSON export, no pg_dump needed)
@@ -635,6 +636,7 @@ Route secrets — inbound auth values, upstream credentials, and webhook secrets
 - [ ] Enable audit logging (enabled by default)
 - [ ] Set up monitoring alerts on error rate metrics
 - [ ] Review IP allowlists for sensitive routes
+- [ ] Mark critical/production routes as **Protected** so they can't be deleted by accident
 - [ ] Enable route-level auth (API key / Basic / Bearer) for sensitive endpoints
 - [ ] Enable webhook secrets for webhook routes
 - [ ] Set up regular database backups

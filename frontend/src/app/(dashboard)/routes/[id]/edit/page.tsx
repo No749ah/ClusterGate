@@ -48,11 +48,11 @@ export default function EditRoutePage({ params }: { params: Promise<{ id: string
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" asChild>
+      <div>
+        <Button variant="outline" size="sm" asChild className="gap-2 rounded-full pl-2.5">
           <Link href={`/routes/${id}`}>
-            <ArrowLeft className="w-4 h-4 mr-2" />
-            Back
+            <ArrowLeft className="w-4 h-4" />
+            Back to route
           </Link>
         </Button>
       </div>

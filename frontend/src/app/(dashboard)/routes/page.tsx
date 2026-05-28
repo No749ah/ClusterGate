@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
 import Link from 'next/link'
 import {
   Plus,
@@ -354,6 +355,17 @@ export default function RoutesPage() {
                     onDeactivate={() => deactivate.mutate(route.id)}
                     onDuplicate={() => duplicate.mutate(route.id)}
                     onDelete={async () => {
+                      if (route.status === 'PUBLISHED') {
+                        toast.error('Deactivate this published route before deleting it')
+                        return
+                      }
+                      if (route.protected) {
+                        const typed = window.prompt(`This route is protected. Type the route name to confirm deletion:\n\n${route.name}`)
+                        if (typed == null) return
+                        if (typed !== route.name) { toast.error('Name did not match — deletion cancelled'); return }
+                        deleteRoute.mutate({ id: route.id, confirm: typed })
+                        return
+                      }
                       const ok = await confirm({
                         title: 'Delete Route',
                         description: `Are you sure you want to delete "${route.name}"? This action cannot be undone.`,

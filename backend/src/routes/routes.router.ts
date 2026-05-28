@@ -53,6 +53,8 @@ const routeBodySchema = z.object({
   healthCheckMethod: z.enum(['HEAD', 'GET', 'POST']).default('HEAD'),
   healthCheckPath: z.string().optional(),
   healthCheckBody: z.string().optional(),
+  healthCheckInterval: z.coerce.number().int().min(1).max(10080).default(5),
+  protected: z.boolean().default(false),
   webhookSecret: z.string().optional(),
   rateLimitEnabled: z.boolean().default(false),
   rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
@@ -913,7 +915,8 @@ router.delete('/:id', authenticate, async (req, res, next) => {
       return res.status(403).json({ success: false, error: { message: 'You need Owner role in this route\'s organization to delete routes' } })
     }
 
-    await routeService.deleteRoute(req.params.id)
+    const confirmName = (req.query.confirm as string) || (req.body && req.body.confirm)
+    await routeService.deleteRoute(req.params.id, confirmName)
     res.json({ success: true, message: 'Route deleted successfully' })
   } catch (err) {
     next(err)

@@ -627,6 +627,9 @@ const DIFF_FIELDS = [
   'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
   'lbStrategy', 'webhookSecret', 'organizationId', 'routeGroupId',
   'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
+  'streamResponse', 'targetType', 'upstreamAuthType', 'upstreamAuthHeader',
+  'healthCheckMethod', 'healthCheckPath', 'healthCheckBody', 'healthCheckInterval',
+  'protected',
 ] as const
 
 function VersionDiffDialog({

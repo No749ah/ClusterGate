@@ -20,10 +20,10 @@ export default function NewRoutePage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" asChild>
+      <div>
+        <Button variant="outline" size="sm" asChild className="gap-2 rounded-full pl-2.5">
           <Link href="/routes">
-            <ArrowLeft className="w-4 h-4 mr-2" />
+            <ArrowLeft className="w-4 h-4" />
             Back to Routes
           </Link>
         </Button>

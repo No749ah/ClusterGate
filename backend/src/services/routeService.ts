@@ -221,7 +221,8 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
     'lbStrategy', 'requireAuth', 'authType', 'authValue',
     'upstreamAuthType', 'upstreamAuthValue', 'upstreamAuthHeader', 'targetType',
-    'healthCheckMethod', 'healthCheckPath', 'healthCheckBody', 'streamResponse',
+    'healthCheckMethod', 'healthCheckPath', 'healthCheckBody', 'healthCheckInterval',
+    'protected', 'streamResponse',
     'corsEnabled', 'corsOrigins', 'ipAllowlist',
     'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
     'organizationId', 'routeGroupId'] as const
@@ -256,9 +257,19 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
   return route
 }
 
-export async function deleteRoute(id: string) {
+export async function deleteRoute(id: string, confirmName?: string) {
   const route = await prisma.route.findUnique({ where: { id, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
+
+  // A published route is live — require deactivation first to avoid taking down
+  // production traffic by accident.
+  if (route.status === 'PUBLISHED') {
+    throw AppError.badRequest('Deactivate this published route before deleting it')
+  }
+  // Protected (production) routes require typing the exact name to confirm.
+  if ((route as any).protected && confirmName !== route.name) {
+    throw AppError.badRequest('This route is protected — confirm the exact route name to delete it')
+  }
 
   // Free the publicPath so it can be reused — the DB unique constraint covers
   // soft-deleted rows too, so we mangle the path on the deleted record.

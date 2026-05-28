@@ -56,6 +56,11 @@ export interface Route {
   upstreamAuthValue?: string
   upstreamAuthHeader?: string
   targetType?: 'GENERIC' | 'N8N'
+  healthCheckMethod?: 'HEAD' | 'GET' | 'POST'
+  healthCheckPath?: string
+  healthCheckBody?: string
+  healthCheckInterval?: number
+  protected?: boolean
 
   // Header rules
   addHeaders: Record<string, string>
@@ -227,6 +232,11 @@ export interface RouteFormData {
   upstreamAuthValue?: string
   upstreamAuthHeader?: string
   targetType?: 'GENERIC' | 'N8N'
+  healthCheckMethod?: 'HEAD' | 'GET' | 'POST'
+  healthCheckPath?: string
+  healthCheckBody?: string
+  healthCheckInterval?: number
+  protected?: boolean
   addHeaders: Record<string, string>
   removeHeaders: string[]
   rewriteRules: RewriteRule[]
