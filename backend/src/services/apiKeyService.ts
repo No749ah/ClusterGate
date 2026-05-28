@@ -41,6 +41,30 @@ function invalidateCache() {
   validCache.clear()
 }
 
+// Cross-replica invalidation: revokes bump a DB epoch; every pod polls it and
+// clears its local cache when it changes, so a revoked key stops working on all
+// pods within the poll interval (rather than only after the per-entry TTL).
+let lastSeenEpoch = ''
+async function bumpRevokeEpoch() {
+  try {
+    await prisma.systemSetting.upsert({
+      where: { key: 'apiKeyRevokeEpoch' },
+      create: { key: 'apiKeyRevokeEpoch', value: { v: Date.now() } },
+      update: { value: { v: Date.now() } },
+    })
+  } catch { /* best effort */ }
+}
+async function pollRevokeEpoch() {
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'apiKeyRevokeEpoch' } })
+    const v = row?.value ? String((row.value as any).v) : ''
+    if (lastSeenEpoch && v !== lastSeenEpoch) invalidateCache()
+    lastSeenEpoch = v
+  } catch { /* ignore */ }
+}
+const epochTimer = setInterval(() => { pollRevokeEpoch().catch(() => {}) }, 10_000)
+if (typeof epochTimer.unref === 'function') epochTimer.unref()
+
 export async function getApiKeys(routeId: string) {
   const route = await prisma.route.findUnique({ where: { id: routeId, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
@@ -81,6 +105,7 @@ export async function revokeApiKey(keyId: string, routeId: string) {
   const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } })
   if (!apiKey || apiKey.routeId !== routeId) throw AppError.notFound('API Key')
   invalidateCache()
+  bumpRevokeEpoch().catch(() => {})
   return prisma.apiKey.update({ where: { id: keyId }, data: { isActive: false } })
 }
 
@@ -88,6 +113,7 @@ export async function deleteApiKey(keyId: string, routeId: string) {
   const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } })
   if (!apiKey || apiKey.routeId !== routeId) throw AppError.notFound('API Key')
   invalidateCache()
+  bumpRevokeEpoch().catch(() => {})
   return prisma.apiKey.delete({ where: { id: keyId } })
 }
 

@@ -19,7 +19,7 @@ export async function selectTarget(
 
   switch (strategy) {
     case 'ROUND_ROBIN':
-      return roundRobin(routeId, healthy)
+      return await roundRobin(routeId, healthy)
     case 'WEIGHTED':
       return weighted(healthy)
     case 'FAILOVER':
@@ -29,10 +29,20 @@ export async function selectTarget(
   }
 }
 
-function roundRobin(routeId: string, targets: RouteTarget[]): { url: string; targetId: string } {
-  const idx = rrIndexMap.get(routeId) || 0
+// Round-robin index is persisted per route (atomic increment) so distribution
+// stays consistent across replicas. Falls back to in-memory on DB error.
+async function roundRobin(routeId: string, targets: RouteTarget[]): Promise<{ url: string; targetId: string }> {
+  let idx: number
+  try {
+    const rows = await prisma.$queryRaw<Array<{ lbRrIndex: number }>>`
+      UPDATE "routes" SET "lbRrIndex" = ("lbRrIndex" + 1) WHERE "id" = ${routeId}
+      RETURNING "lbRrIndex"`
+    idx = Number(rows[0]?.lbRrIndex ?? 0)
+  } catch {
+    idx = rrIndexMap.get(routeId) || 0
+    rrIndexMap.set(routeId, idx + 1)
+  }
   const target = targets[idx % targets.length]
-  rrIndexMap.set(routeId, (idx + 1) % targets.length)
   return { url: target.url, targetId: target.id }
 }
 

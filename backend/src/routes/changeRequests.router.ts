@@ -158,6 +158,22 @@ router.post('/:id/reject', authenticate, authorize([Role.ADMIN, Role.OPERATOR]),
   }
 })
 
+/**
+ * @openapi
+ * /api/change-requests/{id}:
+ *   delete:
+ *     tags: [Change Requests]
+ *     summary: Delete a resolved change request (admin)
+ *     description: Permanently deletes a non-pending change request. Requires ADMIN.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Deleted }
+ *       400: { description: Cannot delete a pending change request }
+ */
 // Delete a resolved change request (admins only)
 router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {

@@ -15,6 +15,10 @@ const envSchema = z.object({
   PROXY_TIMEOUT: z.coerce.number().default(30000),
   // Max request body size forwarded through the proxy (raw passthrough)
   PROXY_BODY_LIMIT: z.string().default('50mb'),
+  // Stream request bodies straight to the target (unbuffered) for large uploads.
+  // Bodies are still buffered when a route needs them (webhook signature or
+  // request transforms). Off by default (uses the buffered raw parser).
+  PROXY_STREAM_REQUESTS: z.coerce.boolean().default(false),
   // Run `prisma migrate deploy` automatically on backend startup. Default on so
   // schema changes apply on every deploy/self-update without manual steps.
   AUTO_MIGRATE: z.coerce.boolean().default(true),

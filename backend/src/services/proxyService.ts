@@ -76,7 +76,7 @@ export async function proxyRequest(
   // Rate limit check
   if ((route as any).rateLimitEnabled && (route as any).rateLimitMax > 0) {
     const rateLimitIp = req.ip || req.socket.remoteAddress || ''
-    const result = checkRateLimit(route.id, rateLimitIp, (route as any).rateLimitMax, (route as any).rateLimitWindow)
+    const result = await checkRateLimit(route.id, rateLimitIp, (route as any).rateLimitMax, (route as any).rateLimitWindow)
     if (!result.allowed) {
       res.setHeader('X-RateLimit-Limit', String((route as any).rateLimitMax))
       res.setHeader('X-RateLimit-Remaining', '0')
@@ -94,15 +94,35 @@ export async function proxyRequest(
     await validateRouteAuth(route, req)
   }
 
+  // ---- Acquire the request body: buffer when the route needs it (webhook
+  // signature or transforms), otherwise keep the stream for unbuffered relay ----
+  const needBufferedBody = !!route.webhookSecret || !!(routeExt.transformRules && routeExt.transformRules.length > 0)
+  let rawBodyBuffer: Buffer | undefined
+  let requestStream: any = undefined
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    if (Buffer.isBuffer(req.body)) {
+      rawBodyBuffer = req.body.length > 0 ? req.body : undefined
+    } else if (req.body !== undefined && !(typeof req.body === 'object' && Object.keys(req.body).length === 0)) {
+      // Pre-parsed object/string (test/mock path)
+      rawBodyBuffer = Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body))
+    } else if (typeof (req as any).pipe === 'function') {
+      // Unconsumed raw stream (streaming mode)
+      if (needBufferedBody) {
+        rawBodyBuffer = await readRawBody(req)
+        if (rawBodyBuffer.length === 0) rawBodyBuffer = undefined
+      } else {
+        requestStream = req
+      }
+    }
+  }
+
   // Validate webhook secret (timing-safe comparison)
   if (route.webhookSecret) {
     const signature = req.get('X-Hub-Signature-256') || req.get('X-Webhook-Signature')
     if (!signature) {
       throw AppError.unauthorized('Missing webhook signature')
     }
-    const body = Buffer.isBuffer(req.body)
-      ? req.body.toString('utf8')
-      : typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+    const body = rawBodyBuffer ? rawBodyBuffer.toString('utf8') : ''
     const secret = decryptSecret(route.webhookSecret) || ''
     if (!validateWebhookSignature(body, secret, signature)) {
       throw AppError.unauthorized('Invalid webhook signature')
@@ -201,20 +221,10 @@ export async function proxyRequest(
   forwardHeaders['X-ClusterGate-Route-ID'] = route.id
   forwardHeaders['X-Request-ID'] = requestId
 
-  // Get request body. For proxy routes req.body is the raw Buffer (any content
-  // type passes through unchanged); the management API delivers parsed objects.
-  let requestBody: any = undefined
-  if (req.body && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
-    if (Buffer.isBuffer(req.body)) {
-      requestBody = req.body.length > 0 ? req.body : undefined
-    } else if (typeof req.body === 'string') {
-      requestBody = req.body
-    } else {
-      requestBody = JSON.stringify(req.body)
-    }
-  }
+  // Buffered body (Buffer) acquired above; streamed bodies are piped directly
+  let requestBody: any = rawBodyBuffer
 
-  // ---- Apply request transforms ----
+  // ---- Apply request transforms (only runs when we have a buffered body) ----
   const transformRules = routeExt.transformRules
   if (transformRules && transformRules.length > 0) {
     let parsedBody: unknown = undefined
@@ -242,12 +252,21 @@ export async function proxyRequest(
     : ''
   let resolvedUrl = `${fullTargetUrl.split('?')[0]}${transformedQs}`
 
+  // Streamed bodies are piped straight through; preserve Content-Length so the
+  // target knows the size (axios would otherwise fall back to chunked).
+  if (requestStream) {
+    const cl = req.get('content-length')
+    if (cl) forwardHeaders['Content-Length'] = cl
+  }
+
   const axiosConfig: AxiosRequestConfig = {
     method: req.method as AxiosRequestConfig['method'],
     url: resolvedUrl,
     headers: forwardHeaders,
-    data: requestBody,
+    data: requestStream ?? requestBody,
     timeout: route.timeout,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
     responseType: 'arraybuffer',
     validateStatus: () => true, // Don't throw on any HTTP status
     maxRedirects: 0, // Disable redirect following to prevent SSRF via open redirectors
@@ -327,7 +346,8 @@ export async function proxyRequest(
     let response: any = null
 
     // Retry logic
-    const maxAttempts = 1 + (route.retryCount || 0)
+    // A consumed request stream can't be replayed, so don't retry streamed bodies
+    const maxAttempts = requestStream ? 1 : 1 + (route.retryCount || 0)
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
       if (attempt > 0) {
         await sleep(route.retryDelay || 1000)
@@ -605,6 +625,17 @@ function sanitizeHeaders(headers: Record<string, string>): Record<string, string
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+// Read an unconsumed request stream into a Buffer (used when a streamed route
+// still needs the full body for webhook signature checks or transforms).
+function readRawBody(req: Request): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    req.on('data', (c: Buffer) => chunks.push(c))
+    req.on('end', () => resolve(Buffer.concat(chunks)))
+    req.on('error', reject)
+  })
 }
 
 async function logRequest(data: {

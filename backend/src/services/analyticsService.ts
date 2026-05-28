@@ -59,16 +59,24 @@ function buildDateFilter(days: number): Date {
   return since
 }
 
+// Combined route filter: a specific routeId and/or an org-scope allowlist.
+// scopeRouteIds is undefined for admins (no scoping) and an array for org-scoped
+// users (empty array → no accessible routes → no data).
+function buildRouteFilter(routeId?: string, scopeRouteIds?: string[]): Prisma.Sql {
+  const clauses: Prisma.Sql[] = []
+  if (routeId) clauses.push(Prisma.sql`AND "routeId" = ${routeId}`)
+  if (scopeRouteIds) clauses.push(Prisma.sql`AND "routeId" = ANY(${scopeRouteIds})`)
+  return clauses.length ? Prisma.join(clauses, ' ') : Prisma.empty
+}
+
 // ============================================================================
 // Service Functions
 // ============================================================================
 
-export async function getOverview(routeId?: string, days = 7): Promise<OverviewResult> {
+export async function getOverview(routeId?: string, days = 7, scopeRouteIds?: string[]): Promise<OverviewResult> {
   const since = buildDateFilter(days)
 
-  const routeFilter = routeId
-    ? Prisma.sql`AND "routeId" = ${routeId}`
-    : Prisma.empty
+  const routeFilter = buildRouteFilter(routeId, scopeRouteIds)
 
   const result = await prisma.$queryRaw<
     {
@@ -110,13 +118,12 @@ export async function getOverview(routeId?: string, days = 7): Promise<OverviewR
 export async function getLatencyTrend(
   routeId?: string,
   days = 7,
-  granularity: 'hour' | 'day' = 'hour'
+  granularity: 'hour' | 'day' = 'hour',
+  scopeRouteIds?: string[]
 ): Promise<LatencyTrendPoint[]> {
   const since = buildDateFilter(days)
 
-  const routeFilter = routeId
-    ? Prisma.sql`AND "routeId" = ${routeId}`
-    : Prisma.empty
+  const routeFilter = buildRouteFilter(routeId, scopeRouteIds)
 
   const truncExpr =
     granularity === 'day'
@@ -155,12 +162,10 @@ export async function getLatencyTrend(
   }))
 }
 
-export async function getErrorRateTrend(routeId?: string, days = 7): Promise<ErrorTrendPoint[]> {
+export async function getErrorRateTrend(routeId?: string, days = 7, scopeRouteIds?: string[]): Promise<ErrorTrendPoint[]> {
   const since = buildDateFilter(days)
 
-  const routeFilter = routeId
-    ? Prisma.sql`AND "routeId" = ${routeId}`
-    : Prisma.empty
+  const routeFilter = buildRouteFilter(routeId, scopeRouteIds)
 
   const rows = await prisma.$queryRaw<
     {
@@ -192,12 +197,10 @@ export async function getErrorRateTrend(routeId?: string, days = 7): Promise<Err
   })
 }
 
-export async function getTrafficHeatmap(routeId?: string, days = 28): Promise<HeatmapCell[]> {
+export async function getTrafficHeatmap(routeId?: string, days = 28, scopeRouteIds?: string[]): Promise<HeatmapCell[]> {
   const since = buildDateFilter(days)
 
-  const routeFilter = routeId
-    ? Prisma.sql`AND "routeId" = ${routeId}`
-    : Prisma.empty
+  const routeFilter = buildRouteFilter(routeId, scopeRouteIds)
 
   const rows = await prisma.$queryRaw<
     {
@@ -237,8 +240,9 @@ export async function getTrafficHeatmap(routeId?: string, days = 28): Promise<He
   return result
 }
 
-export async function getSlowestRoutes(limit = 10): Promise<SlowestRoute[]> {
+export async function getSlowestRoutes(limit = 10, scopeRouteIds?: string[]): Promise<SlowestRoute[]> {
   const since = buildDateFilter(7)
+  const scopeClause = scopeRouteIds ? Prisma.sql`AND r.id = ANY(${scopeRouteIds})` : Prisma.empty
 
   const rows = await prisma.$queryRaw<
     {
@@ -262,6 +266,7 @@ export async function getSlowestRoutes(limit = 10): Promise<SlowestRoute[]> {
     WHERE l."createdAt" >= ${since}
       AND l.duration IS NOT NULL
       AND r."deletedAt" IS NULL
+      ${scopeClause}
     GROUP BY r.id, r.name, r."publicPath"
     ORDER BY avg_duration DESC
     LIMIT ${limit}
@@ -277,9 +282,10 @@ export async function getSlowestRoutes(limit = 10): Promise<SlowestRoute[]> {
   }))
 }
 
-export async function getDashboardSummary(days = 7) {
+export async function getDashboardSummary(days = 7, scopeRouteIds?: string[]) {
   const since = new Date(Date.now() - days * 86400000)
   const prevSince = new Date(Date.now() - days * 2 * 86400000)
+  const scoped = scopeRouteIds !== undefined
 
   // Current period
   const current = await prisma.$queryRawUnsafe<any[]>(`
@@ -288,8 +294,8 @@ export async function getDashboardSummary(days = 7) {
       AVG(duration)::float as "avgResponseTime",
       (COUNT(*) FILTER (WHERE "responseStatus" >= 400 OR error IS NOT NULL)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
     FROM request_logs
-    WHERE "createdAt" >= $1
-  `, since)
+    WHERE "createdAt" >= $1${scoped ? ' AND "routeId" = ANY($2::text[])' : ''}
+  `, ...(scoped ? [since, scopeRouteIds] : [since]))
 
   // Previous period
   const previous = await prisma.$queryRawUnsafe<any[]>(`
@@ -298,8 +304,8 @@ export async function getDashboardSummary(days = 7) {
       AVG(duration)::float as "avgResponseTime",
       (COUNT(*) FILTER (WHERE "responseStatus" >= 400 OR error IS NOT NULL)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
     FROM request_logs
-    WHERE "createdAt" >= $1 AND "createdAt" < $2
-  `, prevSince, since)
+    WHERE "createdAt" >= $1 AND "createdAt" < $2${scoped ? ' AND "routeId" = ANY($3::text[])' : ''}
+  `, ...(scoped ? [prevSince, since, scopeRouteIds] : [prevSince, since]))
 
   const c = current[0] || { totalRequests: 0, avgResponseTime: 0, errorRate: 0 }
   const p = previous[0] || { totalRequests: 0, avgResponseTime: 0, errorRate: 0 }
@@ -314,12 +320,10 @@ export async function getDashboardSummary(days = 7) {
   }
 }
 
-export async function getStatusDistribution(routeId?: string, days = 7): Promise<StatusBucket[]> {
+export async function getStatusDistribution(routeId?: string, days = 7, scopeRouteIds?: string[]): Promise<StatusBucket[]> {
   const since = buildDateFilter(days)
 
-  const routeFilter = routeId
-    ? Prisma.sql`AND "routeId" = ${routeId}`
-    : Prisma.empty
+  const routeFilter = buildRouteFilter(routeId, scopeRouteIds)
 
   const rows = await prisma.$queryRaw<
     {

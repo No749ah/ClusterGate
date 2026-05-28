@@ -1,5 +1,8 @@
-import { Router } from 'express'
+import { Router, Request } from 'express'
+import { Role } from '@prisma/client'
 import { authenticate } from '../middleware/authenticate'
+import { getUserOrgIds } from '../services/orgAccessService'
+import { prisma } from '../lib/prisma'
 import {
   getOverview,
   getLatencyTrend,
@@ -14,6 +17,20 @@ const router = Router()
 
 // All analytics routes require authentication
 router.use(authenticate)
+
+// Resolve the route IDs a user may see in analytics. Admins (and users without
+// any org membership) are unscoped (undefined); org members are limited to
+// routes in their organizations.
+async function getScopeRouteIds(req: Request): Promise<string[] | undefined> {
+  if (req.user!.role === Role.ADMIN) return undefined
+  const orgIds = await getUserOrgIds(req.user!.userId)
+  if (orgIds.length === 0) return undefined
+  const routes = await prisma.route.findMany({
+    where: { organizationId: { in: orgIds }, deletedAt: null },
+    select: { id: true },
+  })
+  return routes.map((r) => r.id)
+}
 
 /**
  * @openapi
@@ -59,7 +76,7 @@ router.use(authenticate)
 router.get('/dashboard-summary', async (req, res, next) => {
   try {
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 7
-    const data = await getDashboardSummary(days)
+    const data = await getDashboardSummary(days, await getScopeRouteIds(req))
     res.json({ success: true, data })
   } catch (err) {
     next(err)
@@ -117,7 +134,7 @@ router.get('/overview', async (req, res, next) => {
   try {
     const routeId = req.query.routeId as string | undefined
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 7
-    const data = await getOverview(routeId, days)
+    const data = await getOverview(routeId, days, await getScopeRouteIds(req))
     res.json({ success: true, data })
   } catch (err) {
     next(err)
@@ -178,7 +195,7 @@ router.get('/latency-trend', async (req, res, next) => {
     const routeId = req.query.routeId as string | undefined
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 7
     const granularity = (req.query.granularity as 'hour' | 'day') || 'hour'
-    const data = await getLatencyTrend(routeId, days, granularity)
+    const data = await getLatencyTrend(routeId, days, granularity, await getScopeRouteIds(req))
     res.json({ success: true, data })
   } catch (err) {
     next(err)
@@ -230,7 +247,7 @@ router.get('/error-trend', async (req, res, next) => {
   try {
     const routeId = req.query.routeId as string | undefined
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 7
-    const data = await getErrorRateTrend(routeId, days)
+    const data = await getErrorRateTrend(routeId, days, await getScopeRouteIds(req))
     res.json({ success: true, data })
   } catch (err) {
     next(err)
@@ -281,7 +298,7 @@ router.get('/heatmap', async (req, res, next) => {
   try {
     const routeId = req.query.routeId as string | undefined
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 28
-    const data = await getTrafficHeatmap(routeId, days)
+    const data = await getTrafficHeatmap(routeId, days, await getScopeRouteIds(req))
     res.json({ success: true, data })
   } catch (err) {
     next(err)
@@ -328,7 +345,7 @@ router.get('/heatmap', async (req, res, next) => {
 router.get('/slowest', async (req, res, next) => {
   try {
     const limit = req.query.limit ? parseInt(req.query.limit as string, 10) : 10
-    const data = await getSlowestRoutes(limit)
+    const data = await getSlowestRoutes(limit, await getScopeRouteIds(req))
     res.json({ success: true, data })
   } catch (err) {
     next(err)
@@ -378,7 +395,7 @@ router.get('/status-distribution', async (req, res, next) => {
   try {
     const routeId = req.query.routeId as string | undefined
     const days = req.query.days ? parseInt(req.query.days as string, 10) : 7
-    const data = await getStatusDistribution(routeId, days)
+    const data = await getStatusDistribution(routeId, days, await getScopeRouteIds(req))
     res.json({ success: true, data })
   } catch (err) {
     next(err)

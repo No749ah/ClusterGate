@@ -3,6 +3,7 @@ import { runAllHealthChecks } from '../services/healthService'
 import { achievementService } from '../services/achievementService'
 import { prisma } from '../lib/prisma'
 import { cleanOldLogs } from '../services/logService'
+import { cleanupRateLimitCounters } from '../lib/rateLimitStore'
 import { runScheduledUpdateCheck } from '../services/updateService'
 import { getKeysExpiringSoon } from '../services/apiKeyService'
 import { notifyKeyExpiring } from '../services/notificationService'
@@ -28,6 +29,7 @@ export function startCronJobs() {
   const logCleanupJob = cron.schedule('0 2 * * *', async () => {
     try {
       await cleanOldLogs(config.LOG_RETENTION_DAYS)
+      await cleanupRateLimitCounters()
     } catch (err) {
       logger.error('Log cleanup cron failed', { error: (err as Error).message })
     }

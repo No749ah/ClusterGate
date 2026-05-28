@@ -309,6 +309,7 @@ model Route {
 
   // Load balancing
   lbStrategy   LBStrategy  @default(ROUND_ROBIN)
+  lbRrIndex    Int         @default(0)
 
   // Soft delete
   deletedAt    DateTime?

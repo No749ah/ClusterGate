@@ -81,7 +81,11 @@ app.use(cookieParser())
 // text, binary, uploads) are forwarded to the target unchanged. The JSON /
 // urlencoded parsers only apply to the management API.
 const isProxyPath = (req: express.Request) => req.path === '/r' || req.path.startsWith('/r/')
-app.use('/r', express.raw({ type: () => true, limit: config.PROXY_BODY_LIMIT }))
+// Buffer proxy bodies by default. When streaming is enabled the proxy reads the
+// raw stream itself (buffering only when a route needs the full body).
+if (!config.PROXY_STREAM_REQUESTS) {
+  app.use('/r', express.raw({ type: () => true, limit: config.PROXY_BODY_LIMIT }))
+}
 app.use((req, res, next) => (isProxyPath(req) ? next() : express.json({ limit: '5mb' })(req, res, next)))
 app.use((req, res, next) => (isProxyPath(req) ? next() : express.urlencoded({ extended: true, limit: '5mb' })(req, res, next)))
 app.use(compression({

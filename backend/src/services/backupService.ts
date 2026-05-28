@@ -1,6 +1,7 @@
 import { logger } from '../lib/logger'
 import { AppError } from '../lib/errors'
 import { prisma } from '../lib/prisma'
+import { decryptSecret } from '../lib/crypto'
 
 export interface BackupMeta {
   filename: string
@@ -116,6 +117,7 @@ export async function restoreBackup(filename: string): Promise<void> {
   try {
     const data = backup.data as Record<string, any[]>
     const deleteOrder = [...BACKUP_MODELS].reverse()
+    let secretsCleared = 0
 
     await prisma.$transaction(async (tx: any) => {
       for (const model of deleteOrder) {
@@ -138,6 +140,18 @@ export async function restoreBackup(filename: string): Promise<void> {
                 converted[key] = new Date(value)
               }
             }
+            // Restoring on an instance with a different encryption key would
+            // leave undecryptable ciphertext that gets used as a literal secret.
+            // Clear such values so they fail safe and can be re-entered.
+            if (model === 'route') {
+              for (const f of ['authValue', 'upstreamAuthValue', 'webhookSecret']) {
+                const v = converted[f]
+                if (typeof v === 'string' && v.startsWith('enc:v1:') && decryptSecret(v) === v) {
+                  converted[f] = null
+                  secretsCleared++
+                }
+              }
+            }
             return converted
           })
 
@@ -146,7 +160,10 @@ export async function restoreBackup(filename: string): Promise<void> {
       }
     }, { timeout: 300000 })
 
-    logger.info('Database restored from backup', { filename })
+    logger.info('Database restored from backup', { filename, secretsCleared })
+    if (secretsCleared > 0) {
+      logger.warn(`${secretsCleared} route secret(s) could not be decrypted with this instance's key and were cleared — re-enter them`, { filename })
+    }
   } catch (err) {
     logger.error('Backup restore failed', { filename, error: (err as Error).message })
     throw AppError.internal(`Restore failed: ${(err as Error).message}`)

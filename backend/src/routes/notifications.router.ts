@@ -164,6 +164,28 @@ router.post('/read-all', authenticate, async (req, res, next) => {
   }
 })
 
+/**
+ * @openapi
+ * /api/notifications/{id}:
+ *   delete:
+ *     tags: [Notifications]
+ *     summary: Dismiss a notification
+ *     description: Permanently deletes one of the current user's notifications.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Deleted }
+ * /api/notifications:
+ *   delete:
+ *     tags: [Notifications]
+ *     summary: Clear read notifications
+ *     description: Deletes all of the current user's already-read notifications.
+ *     responses:
+ *       200: { description: Cleared }
+ */
 // Delete a single notification (dismiss)
 router.delete('/:id', authenticate, async (req, res, next) => {
   try {
