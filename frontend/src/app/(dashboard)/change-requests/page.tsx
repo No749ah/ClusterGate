@@ -53,7 +53,7 @@ export default function ChangeRequestsPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const isAdmin = user?.role === 'ADMIN'
-  const [statusFilter, setStatusFilter] = useState<string>('all')
+  const [statusFilter, setStatusFilter] = useState<string>('PENDING')
   const [page, setPage] = useState(1)
   const [selectedCR, setSelectedCR] = useState<ChangeRequest | null>(null)
   const [reviewComment, setReviewComment] = useState('')
@@ -130,11 +130,11 @@ export default function ChangeRequestsPage() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="PENDING">Pending</SelectItem>
+            <SelectItem value="PENDING">Open (pending)</SelectItem>
+            <SelectItem value="all">All statuses</SelectItem>
             <SelectItem value="APPROVED">Approved</SelectItem>
-            <SelectItem value="REJECTED">Rejected</SelectItem>
             <SelectItem value="APPLIED">Applied</SelectItem>
+            <SelectItem value="REJECTED">Rejected</SelectItem>
           </SelectContent>
         </Select>
       </div>

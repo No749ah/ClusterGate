@@ -616,21 +616,33 @@ router.post('/bulk/deactivate', authenticate, authorize([Role.ADMIN, Role.OPERAT
  *       400:
  *         description: Validation error
  */
-router.post('/bulk/delete', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.post('/bulk/delete', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const { ids } = bulkIdsSchema.parse(req.body)
-    const count = await routeService.bulkDelete(ids)
+
+    // Only delete routes the caller may delete and that aren't live/protected.
+    const routes = await prisma.route.findMany({
+      where: { id: { in: ids }, deletedAt: null },
+      select: { id: true, status: true, protected: true },
+    })
+    const eligible: string[] = []
+    for (const r of routes) {
+      if (r.status === 'PUBLISHED' || (r as any).protected) continue
+      if (await canDeleteRoute(req.user!.userId, req.user!.role, r.id)) eligible.push(r.id)
+    }
+    const count = eligible.length ? await routeService.bulkDelete(eligible) : 0
+    const skipped = ids.length - count
 
     createAuditLog({
       userId: req.user!.userId,
       action: 'route.bulk_delete',
       resource: 'route',
-      details: { ids, count },
+      details: { ids, count, skipped },
       ip: req.ip || req.socket.remoteAddress,
       userAgent: req.get('user-agent'),
     })
 
-    res.json({ success: true, data: { count } })
+    res.json({ success: true, data: { count, skipped } })
   } catch (err) {
     next(err)
   }

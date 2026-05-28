@@ -221,7 +221,12 @@ export function useBulkDelete() {
     mutationFn: (ids: string[]) => api.routes.bulkDelete(ids),
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['routes'] })
-      toast.success(`${res.data.count} route(s) deleted`)
+      const { count, skipped } = res.data as { count: number; skipped?: number }
+      if (count > 0) {
+        toast.success(`${count} route(s) deleted${skipped ? ` · ${skipped} skipped (published, protected, or no permission)` : ''}`)
+      } else {
+        toast.error('No routes deleted — they are published, protected, or you lack permission')
+      }
     },
     onError: (err: any) => {
       toast.error(err.message || 'Bulk delete failed')

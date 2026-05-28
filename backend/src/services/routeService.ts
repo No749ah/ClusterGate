@@ -213,21 +213,15 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     }
   }
 
-  // Check if any fields actually changed before creating a new version
-  const versionableFields = ['name', 'publicPath', 'targetUrl', 'methods', 'isActive', 'stripPrefix',
-    'sslVerify', 'streamResponse',
-    'addHeaders', 'removeHeaders', 'rewriteRules', 'timeout', 'retryCount', 'retryDelay',
-    'maintenanceMode', 'maintenanceMessage', 'webhookSecret',
-    'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
-    'lbStrategy', 'requireAuth', 'authType', 'authValue',
-    'upstreamAuthType', 'upstreamAuthValue', 'upstreamAuthHeader', 'targetType',
-    'healthCheckMethod', 'healthCheckPath', 'healthCheckBody', 'healthCheckInterval',
-    'protected', 'streamResponse',
-    'corsEnabled', 'corsOrigins', 'ipAllowlist',
-    'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
-    'organizationId', 'routeGroupId'] as const
-  const hasChanges = versionableFields.some((field) => {
-    if (!(field in data)) return false
+  // Create a new version whenever any configuration field actually changes.
+  // We diff every field in the update payload except volatile/runtime ones, so
+  // new config fields are versioned automatically without maintaining a list.
+  const NON_VERSIONED = new Set([
+    'id', 'createdAt', 'updatedAt', 'version', 'deletedAt', 'createdById', 'updatedById',
+    'cbState', 'cbFailureCount', 'cbLastFailureAt', 'lbRrIndex',
+  ])
+  const hasChanges = Object.keys(data).some((field) => {
+    if (NON_VERSIONED.has(field)) return false
     const oldVal = JSON.stringify((existing as any)[field])
     const newVal = JSON.stringify((data as any)[field])
     return oldVal !== newVal
