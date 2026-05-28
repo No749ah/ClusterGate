@@ -52,6 +52,31 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
   )
   const [generatingKey, setGeneratingKey] = useState(false)
 
+  // Switch body editor mode, carrying values across so nothing is lost
+  const switchToJson = () => {
+    const obj: Record<string, string> = {}
+    for (const f of bodyFields) {
+      if (f.key.trim()) obj[f.key.trim()] = f.value
+    }
+    if (Object.keys(obj).length) setBody(JSON.stringify(obj, null, 2))
+    setBodyMode('json')
+  }
+  const switchToFields = () => {
+    try {
+      const parsed = JSON.parse(body)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        const entries = Object.entries(parsed).map(([k, v]) => ({
+          key: k,
+          value: typeof v === 'string' ? v : JSON.stringify(v),
+        }))
+        setBodyFields(entries.length ? entries : [{ key: '', value: '' }])
+      }
+    } catch {
+      // invalid JSON — keep the current fields
+    }
+    setBodyMode('fields')
+  }
+
   // Build the request body from either the JSON textarea or the field rows
   const buildBody = (): string | undefined => {
     if (bodyMode === 'json') return body || undefined
@@ -359,14 +384,14 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
               <div className="flex items-center gap-1 text-xs">
                 <button
                   type="button"
-                  onClick={() => setBodyMode('fields')}
+                  onClick={switchToFields}
                   className={cn('px-2 py-0.5 rounded', bodyMode === 'fields' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground')}
                 >
                   Fields
                 </button>
                 <button
                   type="button"
-                  onClick={() => setBodyMode('json')}
+                  onClick={switchToJson}
                   className={cn('px-2 py-0.5 rounded', bodyMode === 'json' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground')}
                 >
                   JSON

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, Copy, Check, Key, Ban, Loader2, RefreshCw } from 'lucide-react'
+import { Plus, Trash2, Copy, Check, Key, Ban, Loader2, RefreshCw, X } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from '@/hooks/useApiKeys'
 import { Button } from '@/components/ui/button'
@@ -63,8 +63,9 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
     if (newKeyValue) {
       await copyToClipboard(newKeyValue)
       setCopied(true)
-      toast.success('API key copied')
-      setTimeout(() => setCopied(false), 2000)
+      toast.success('API key copied — store it safely, it won’t be shown again')
+      // Close the banner shortly after copying so it can't linger on screen
+      setTimeout(() => { setCopied(false); setNewKeyValue(null) }, 1000)
     }
   }
 
@@ -94,12 +95,13 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
             </Button>
           </div>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className="mt-2 text-xs"
+            className="mt-2"
             onClick={() => setNewKeyValue(null)}
           >
-            Dismiss
+            <X className="w-3.5 h-3.5 mr-1" />
+            Done — I've copied it
           </Button>
         </div>
       )}
