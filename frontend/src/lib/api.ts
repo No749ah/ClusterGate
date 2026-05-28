@@ -836,6 +836,9 @@ class ApiClient {
 
     reject: (id: string, comment?: string) =>
       this.post<ApiResponse<ChangeRequest>>(`/api/change-requests/${id}/reject`, { comment }),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/change-requests/${id}`),
   }
 
   // ============================================================================
