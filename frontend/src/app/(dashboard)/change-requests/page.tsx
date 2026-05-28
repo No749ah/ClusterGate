@@ -199,6 +199,18 @@ export default function ChangeRequestsPage() {
         <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
           {cr && (
             <>
+              {/* Delete resolved change requests (admins only) — top-right, left of the close X */}
+              {isAdmin && cr.status !== 'PENDING' && (
+                <button
+                  type="button"
+                  title="Delete change request"
+                  onClick={() => deleteMutation.mutate(cr.id)}
+                  disabled={deleteMutation.isPending}
+                  className="absolute right-12 top-3.5 text-muted-foreground hover:text-red-500 transition-colors disabled:opacity-50"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2">
                   <GitPullRequest className="w-5 h-5" />
@@ -288,20 +300,6 @@ export default function ChangeRequestsPage() {
                   </div>
                 )}
 
-                {/* Delete resolved change requests (admins only) */}
-                {isAdmin && cr.status !== 'PENDING' && (
-                  <div className="border-t border-border pt-4">
-                    <Button
-                      variant="outline"
-                      className="w-full text-red-500 hover:text-red-500 hover:bg-red-500/10"
-                      onClick={() => deleteMutation.mutate(cr.id)}
-                      disabled={deleteMutation.isPending}
-                    >
-                      <Trash2 className="w-4 h-4 mr-2" />
-                      Delete change request
-                    </Button>
-                  </div>
-                )}
               </div>
             </>
           )}

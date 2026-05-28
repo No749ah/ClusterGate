@@ -33,6 +33,22 @@ function formatMB(mb: number): string {
   return `${(mb / 1024).toFixed(1)} GB`
 }
 
+// Pull just the "What's Changed" section out of a GitHub release body so the
+// in-app update window shows the changelog, not the Docker/Quick-Start boilerplate.
+function extractChangelog(body: string): string {
+  if (!body) return body
+  const start = body.search(/^#{1,6}\s*What['’`]?s Changed/im)
+  if (start === -1) return body
+  const rest = body.slice(start)
+  const lines = rest.split('\n')
+  let offset = lines[0].length + 1 // skip the "What's Changed" heading itself
+  for (let i = 1; i < lines.length; i++) {
+    if (/^#{1,6}\s+/.test(lines[i])) return rest.slice(0, offset).trim()
+    offset += lines[i].length + 1
+  }
+  return rest.trim()
+}
+
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400)
   const hours = Math.floor((seconds % 86400) / 3600)
@@ -886,7 +902,7 @@ export default function SettingsPage() {
               <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
                 <p className="text-sm font-medium text-foreground">What&apos;s new in {releaseNotes.name || releaseNotes.tag}:</p>
                 <div className="text-xs text-muted-foreground prose prose-sm prose-invert max-w-none [&_ul]:list-disc [&_ul]:list-inside [&_ul]:space-y-1 [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:text-foreground [&_h1]:mt-2 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-foreground [&_h3]:mt-2 [&_h4]:text-xs [&_h4]:font-medium [&_h4]:text-foreground [&_p]:mt-1 [&_code]:text-foreground [&_a]:text-primary [&_a]:underline max-h-60 overflow-y-auto">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{releaseNotes.body}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{extractChangelog(releaseNotes.body)}</ReactMarkdown>
                 </div>
               </div>
             ) : (
