@@ -105,14 +105,14 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="flex items-start gap-4 min-w-0">
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex items-start gap-3 min-w-0 flex-1">
           <Button variant="ghost" size="sm" asChild>
             <Link href="/routes"><ArrowLeft className="w-4 h-4" /></Link>
           </Button>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-foreground">{route.name}</h1>
+          <div className="min-w-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <h1 className="text-2xl font-bold text-foreground truncate">{route.name}</h1>
               <RouteStatusBadge status={route.status} isActive={route.isActive} />
               <HealthIndicator status={health?.status} responseTime={health?.responseTime} error={health?.error} showLabel />
             </div>
@@ -127,7 +127,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
