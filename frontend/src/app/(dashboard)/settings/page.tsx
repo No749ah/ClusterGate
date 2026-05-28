@@ -23,6 +23,8 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { formatDate } from '@/lib/utils'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { Confetti } from '@/components/fun/Confetti'
 import { useRouter } from 'next/navigation'
 
@@ -205,6 +207,25 @@ export default function SettingsPage() {
   const [showUpdateSuccess, setShowUpdateSuccess] = useState(false)
   const [updateNewVersion, setUpdateNewVersion] = useState<string | null>(null)
 
+  // After an update the backend has just restarted on the new version, but the
+  // cached update status still says "update available". Force a fresh check so
+  // the version display and the global banner reflect the new version.
+  const refreshAfterUpdate = async () => {
+    for (let i = 0; i < 12; i++) {
+      try {
+        const res = await api.system.updateCheck()
+        setUpdateInfo(res.data)
+        const v = await api.system.version().catch(() => null)
+        if (v) setCurrentVersion(v.data.version)
+        try { localStorage.removeItem('clustergate-update-dismissed') } catch {}
+        window.dispatchEvent(new Event('clustergate:update-applied'))
+        return
+      } catch {
+        await new Promise((r) => setTimeout(r, 3000))
+      }
+    }
+  }
+
   const handleUpdate = async () => {
     setIsUpdating(true)
     setUpdateSteps([])
@@ -234,6 +255,7 @@ export default function SettingsPage() {
           setUpdateComplete({ success: event.success, message: event.message, environment: event.environment })
           if (event.success) {
             setShowUpdateSuccess(true)
+            refreshAfterUpdate()
           } else {
             toast.error(event.message)
           }
@@ -246,6 +268,7 @@ export default function SettingsPage() {
       // Connection lost = backend restarted with new version (expected for backend updates)
       setUpdateComplete({ success: true, message: 'Backend restarted with the new version.', environment: 'kubernetes' })
       setShowUpdateSuccess(true)
+      refreshAfterUpdate()
     } finally {
       setIsUpdating(false)
     }
@@ -862,8 +885,8 @@ export default function SettingsPage() {
             {releaseNotes?.body ? (
               <div className="rounded-lg border border-border/50 bg-muted/30 p-3 space-y-2">
                 <p className="text-sm font-medium text-foreground">What&apos;s new in {releaseNotes.name || releaseNotes.tag}:</p>
-                <div className="text-xs text-muted-foreground prose prose-sm prose-invert max-w-none [&_ul]:list-disc [&_ul]:list-inside [&_ul]:space-y-1 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-medium [&_p]:mt-1 whitespace-pre-wrap max-h-60 overflow-y-auto">
-                  {releaseNotes.body}
+                <div className="text-xs text-muted-foreground prose prose-sm prose-invert max-w-none [&_ul]:list-disc [&_ul]:list-inside [&_ul]:space-y-1 [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:text-foreground [&_h1]:mt-2 [&_h2]:text-xs [&_h2]:font-semibold [&_h2]:text-foreground [&_h2]:mt-2 [&_h3]:text-xs [&_h3]:font-medium [&_h3]:text-foreground [&_h3]:mt-2 [&_h4]:text-xs [&_h4]:font-medium [&_h4]:text-foreground [&_p]:mt-1 [&_code]:text-foreground [&_a]:text-primary [&_a]:underline max-h-60 overflow-y-auto">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{releaseNotes.body}</ReactMarkdown>
                 </div>
               </div>
             ) : (

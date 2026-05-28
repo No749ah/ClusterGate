@@ -44,7 +44,17 @@ export function UpdateBanner() {
   useEffect(() => {
     checkStatus()
     const interval = setInterval(checkStatus, POLL_INTERVAL)
-    return () => clearInterval(interval)
+    // Hide immediately once an update has been applied, then re-verify
+    const onApplied = () => {
+      setLatestVersion(null)
+      setDismissed(true)
+      checkStatus()
+    }
+    window.addEventListener('clustergate:update-applied', onApplied)
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('clustergate:update-applied', onApplied)
+    }
   }, [checkStatus])
 
   if (dismissed || !latestVersion || user?.role !== 'ADMIN') return null
