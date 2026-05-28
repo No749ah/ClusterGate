@@ -114,12 +114,13 @@ export function startCronJobs() {
     logger.info(`Scheduled backup cron started (${config.BACKUP_CRON_SCHEDULE}), retention: ${config.BACKUP_RETENTION_COUNT}`)
   }
 
-  // Run initial update check after 30 seconds (let the server start up first)
+  // Run an initial update check shortly after startup so the cached status
+  // reflects the running version quickly (e.g. right after a self-update).
   setTimeout(() => {
     runScheduledUpdateCheck().catch((err) => {
       logger.error('Initial update check failed', { error: (err as Error).message })
     })
-  }, 30000)
+  }, 8000)
 }
 
 export function stopCronJobs() {

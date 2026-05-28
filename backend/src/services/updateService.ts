@@ -58,12 +58,24 @@ async function persistUpdateResult(result: UpdateCheckResult): Promise<void> {
  * external calls).
  */
 export async function getCachedUpdateStatus(): Promise<UpdateCheckResult | null> {
-  if (cachedUpdateResult) return cachedUpdateResult
+  const fresh = (r: UpdateCheckResult | null): UpdateCheckResult | null => {
+    // If the cache predates the running version (we just updated), it's stale —
+    // don't report a phantom "update available". Trigger a refresh in the
+    // background and report no cached status for now.
+    if (r && r.currentVersion !== CURRENT_VERSION) {
+      cachedUpdateResult = null
+      runScheduledUpdateCheck().catch(() => {})
+      return null
+    }
+    return r
+  }
+
+  if (cachedUpdateResult) return fresh(cachedUpdateResult)
   try {
     const row = await prisma.systemSetting.findUnique({ where: { key: UPDATE_STATUS_KEY } })
     if (row?.value) {
       cachedUpdateResult = row.value as unknown as UpdateCheckResult
-      return cachedUpdateResult
+      return fresh(cachedUpdateResult)
     }
   } catch (err) {
     logger.warn('Failed to load persisted update status', { error: (err as Error).message })

@@ -7,6 +7,7 @@ import { healthCheckStatus } from '../lib/metrics'
 import { notifyHealthDown } from './notificationService'
 import { incidentService } from './incidentService'
 import { validateTargetUrlSync, isTlsProtocolMismatch } from '../lib/security'
+import { isN8nTarget } from '../lib/targetDetect'
 
 export async function checkRouteHealth(route: Route): Promise<{
   status: HealthStatus
@@ -34,10 +35,16 @@ export async function checkRouteHealth(route: Route): Promise<{
     })
 
     // Per-route health check config (method/path/body); defaults to HEAD on the
-    // target root. A configured body sends application/json (handy for n8n).
-    const method = ((route as any).healthCheckMethod || 'HEAD').toUpperCase()
+    // target root. n8n targets must receive chatInput + sessionId or they error,
+    // so for n8n we default to a POST with that body when none is configured.
+    const n8n = isN8nTarget((route as any).targetType, route.targetUrl)
     const hcPath = (route as any).healthCheckPath || ''
-    const hcBody = (route as any).healthCheckBody || undefined
+    let method = ((route as any).healthCheckMethod || 'HEAD').toUpperCase()
+    let hcBody = (route as any).healthCheckBody || undefined
+    if (n8n && !hcBody) {
+      method = 'POST'
+      hcBody = JSON.stringify({ chatInput: 'ClusterGate health check', sessionId: 'clustergate-healthcheck' })
+    }
     const headers = hcBody ? { 'content-type': 'application/json' } : undefined
 
     const probe = async (base: string) => {
