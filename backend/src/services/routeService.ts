@@ -222,9 +222,11 @@ export async function deleteRoute(id: string) {
   const route = await prisma.route.findUnique({ where: { id, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
 
+  // Free the publicPath so it can be reused — the DB unique constraint covers
+  // soft-deleted rows too, so we mangle the path on the deleted record.
   await prisma.route.update({
     where: { id },
-    data: { deletedAt: new Date(), isActive: false },
+    data: { deletedAt: new Date(), isActive: false, publicPath: `${route.publicPath}__deleted_${id}` },
   })
 
   await updateActiveRoutesMetric()
@@ -397,11 +399,21 @@ export async function bulkDeactivate(ids: string[], userId: string) {
 }
 
 export async function bulkDelete(ids: string[]) {
-  const result = await prisma.route.updateMany({
+  const routes = await prisma.route.findMany({
     where: { id: { in: ids }, deletedAt: null },
-    data: { deletedAt: new Date() },
+    select: { id: true, publicPath: true },
   })
-  return result.count
+  const now = new Date()
+  // Mangle each publicPath individually so the freed paths can be reused.
+  await prisma.$transaction(
+    routes.map((r) =>
+      prisma.route.update({
+        where: { id: r.id },
+        data: { deletedAt: now, isActive: false, publicPath: `${r.publicPath}__deleted_${r.id}` },
+      })
+    )
+  )
+  return routes.length
 }
 
 async function updateActiveRoutesMetric() {

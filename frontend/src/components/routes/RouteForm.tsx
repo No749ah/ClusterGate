@@ -278,15 +278,16 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
-      {/* Step indicator */}
-      <div className="flex flex-wrap gap-2">
+      {/* Step indicator — single row, scrolls horizontally on narrow screens
+          without a visible scrollbar */}
+      <div className="flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {STEPS.map((s, i) => (
           <button
             key={s}
             type="button"
             onClick={() => setStep(i)}
             className={cn(
-              'flex items-center gap-2 rounded-full border py-1 pl-1.5 pr-3 text-xs font-medium transition-colors cursor-pointer',
+              'flex items-center gap-1.5 shrink-0 rounded-full border py-1 pl-1 pr-2.5 text-xs font-medium transition-colors cursor-pointer',
               i === step
                 ? 'border-primary bg-primary/10 text-foreground'
                 : i < step
@@ -306,7 +307,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             >
               {i < step ? <Check className="w-3 h-3" /> : i + 1}
             </span>
-            {s}
+            <span className="whitespace-nowrap">{s}</span>
           </button>
         ))}
       </div>

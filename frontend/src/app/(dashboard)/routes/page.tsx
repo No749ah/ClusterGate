@@ -503,7 +503,7 @@ function RouteRow({
       <td className="px-4 py-3">
         <RouteStatusBadge status={route.status} isActive={route.isActive} />
       </td>
-      <td className="px-4 py-3">
+      <td className="px-4 py-3 whitespace-nowrap">
         <HealthIndicator
           status={health?.status}
           responseTime={health?.responseTime}

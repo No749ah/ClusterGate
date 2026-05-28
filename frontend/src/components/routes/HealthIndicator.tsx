@@ -51,12 +51,12 @@ export function HealthIndicator({ status, responseTime, error, className, showLa
         })}
       />
       {showLabel && (
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 whitespace-nowrap">
           <span className={cn('text-xs font-medium', textColor)}>
             {label}
           </span>
           {responseTime ? (
-            <span className="text-xs text-muted-foreground">· {responseTime}ms</span>
+            <span className="text-xs text-muted-foreground tabular-nums">{responseTime} ms</span>
           ) : null}
           {error && resolvedStatus === 'UNHEALTHY' ? (
             <span className="relative group">

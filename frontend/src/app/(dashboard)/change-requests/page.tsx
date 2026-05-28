@@ -14,6 +14,7 @@ import {
   Filter,
   Eye,
   User,
+  Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -94,6 +95,15 @@ export default function ChangeRequestsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['change-requests'] })
       queryClient.invalidateQueries({ queryKey: ['change-request'] })
+      setSelectedCR(null)
+      setReviewComment('')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.changeRequests.delete(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['change-requests'] })
       setSelectedCR(null)
       setReviewComment('')
     },
@@ -275,6 +285,21 @@ export default function ChangeRequestsPage() {
                         Reject
                       </Button>
                     </div>
+                  </div>
+                )}
+
+                {/* Delete resolved change requests (admins only) */}
+                {isAdmin && cr.status !== 'PENDING' && (
+                  <div className="border-t border-border pt-4">
+                    <Button
+                      variant="outline"
+                      className="w-full text-red-500 hover:text-red-500 hover:bg-red-500/10"
+                      onClick={() => deleteMutation.mutate(cr.id)}
+                      disabled={deleteMutation.isPending}
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete change request
+                    </Button>
                   </div>
                 )}
               </div>

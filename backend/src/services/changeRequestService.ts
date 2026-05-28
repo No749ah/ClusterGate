@@ -1,4 +1,5 @@
 import { PrismaClient, ChangeRequestStatus, OrgRole } from '@prisma/client'
+import { AppError } from '../lib/errors'
 
 const prisma = new PrismaClient()
 
@@ -275,5 +276,16 @@ export const changeRequestService = {
 
   async pendingCount() {
     return prisma.changeRequest.count({ where: { status: 'PENDING' } })
+  },
+
+  // Delete a resolved (non-pending) change request. Pending ones must be
+  // approved/rejected first so they aren't silently dropped.
+  async delete(id: string) {
+    const cr = await prisma.changeRequest.findUnique({ where: { id } })
+    if (!cr) throw AppError.notFound('Change request')
+    if (cr.status === 'PENDING') {
+      throw AppError.badRequest('Cannot delete a pending change request — approve or reject it first')
+    }
+    await prisma.changeRequest.delete({ where: { id } })
   },
 }
