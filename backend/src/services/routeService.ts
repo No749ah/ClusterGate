@@ -109,6 +109,22 @@ export async function getRouteById(id: string) {
   return route
 }
 
+// A soft-deleted route still occupies its publicPath in the unique index.
+// Mangle that deleted record's path so a new route can reuse it. Handles routes
+// deleted before path-freeing was added on delete.
+async function freeSoftDeletedPublicPath(publicPath: string) {
+  const stale = await prisma.route.findFirst({
+    where: { publicPath, deletedAt: { not: null } },
+    select: { id: true, publicPath: true },
+  })
+  if (stale) {
+    await prisma.route.update({
+      where: { id: stale.id },
+      data: { publicPath: `${stale.publicPath}__deleted_${stale.id}` },
+    })
+  }
+}
+
 export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId: string) {
   // Validate target URL (format + SSRF protection)
   try {
@@ -116,6 +132,8 @@ export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId
   } catch (err) {
     throw AppError.badRequest((err as Error).message)
   }
+
+  await freeSoftDeletedPublicPath(data.publicPath as string)
 
   // Validate path starts with /
   const publicPath = data.publicPath as string
@@ -165,6 +183,11 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     } catch (err) {
       throw AppError.badRequest((err as Error).message)
     }
+  }
+
+  // If the publicPath is changing to one held by a soft-deleted route, free it
+  if (typeof data.publicPath === 'string' && data.publicPath !== existing.publicPath) {
+    await freeSoftDeletedPublicPath(data.publicPath)
   }
 
   // Validate rewrite rules if changed

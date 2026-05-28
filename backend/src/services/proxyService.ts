@@ -496,12 +496,12 @@ function validateRouteAuth(route: Route, req: Request): void {
 
   switch (authType) {
     case 'API_KEY': {
-      const apiKey = req.get('X-API-Key') || req.query.api_key as string
+      const apiKey = req.get('X-API-Key')
       if (!apiKey) {
-        throw AppError.unauthorized('API key required — provide via X-API-Key header or api_key query parameter')
+        throw AppError.unauthorized('API key required — provide it via the X-API-Key header')
       }
       if (!safeEqual(apiKey, authValue)) {
-        throw AppError.unauthorized('Invalid API key')
+        throw AppError.unauthorized('Invalid API key — provide a valid key via the X-API-Key header')
       }
       break
     }

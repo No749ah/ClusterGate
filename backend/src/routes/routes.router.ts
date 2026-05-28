@@ -976,6 +976,13 @@ router.post('/:id/test', authenticate, async (req, res, next) => {
       ;(route as any).requireAuth = false
     }
 
+    // Lowercase incoming header keys so case-insensitive lookups (req.get) and
+    // auth checks (e.g. X-API-Key) find them regardless of the casing the
+    // client sent.
+    const normalizedHeaders = Object.fromEntries(
+      Object.entries(headers as Record<string, string>).map(([k, v]) => [k.toLowerCase(), v])
+    )
+
     // Build a mock request-like object for the proxy
     const mockReq = {
       method: method.toUpperCase(),
@@ -986,7 +993,7 @@ router.post('/:id/test', authenticate, async (req, res, next) => {
       query: {},
       headers: {
         'content-type': 'application/json',
-        ...headers,
+        ...normalizedHeaders,
       },
       body: body || undefined,
       get: (key: string) => (mockReq.headers as any)[key.toLowerCase()] || '',

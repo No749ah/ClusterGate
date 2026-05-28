@@ -230,12 +230,13 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       [], // Security
       [], // Maintenance
     ]
-    const valid = await trigger(stepFields[step])
+    const fields = stepFields[step] ?? []
+    const valid = fields.length === 0 ? true : await trigger(fields)
     // Block non-admins from proceeding without an org on step 0
     if (step === 0 && !isAdmin && orgs.length > 0 && !form.getValues('organizationId')) {
       return
     }
-    if (valid) setStep((s) => s + 1)
+    if (valid) setStep((s) => Math.min(s + 1, STEPS.length - 1))
   }
 
   const handleFormSubmit = async (data: RouteFormValues) => {
