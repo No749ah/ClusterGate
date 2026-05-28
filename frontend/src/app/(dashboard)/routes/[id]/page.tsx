@@ -127,7 +127,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center justify-end gap-2 ml-auto">
           <Button
             variant="outline"
             size="sm"

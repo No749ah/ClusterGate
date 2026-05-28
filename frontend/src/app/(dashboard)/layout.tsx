@@ -61,11 +61,17 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="flex min-h-screen bg-background">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:text-primary-foreground"
+      >
+        Skip to content
+      </a>
       <Sidebar />
       <div className={`flex-1 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
         <UpdateBanner />
         <Header />
-        <main className="flex-1 p-4 md:p-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 p-4 md:p-6">
           <Breadcrumbs />
           <Suspense fallback={<PageFallback />}>
             {children}

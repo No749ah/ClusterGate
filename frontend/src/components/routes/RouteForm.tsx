@@ -295,6 +295,19 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
     if (valid) setStep((s) => Math.min(s + 1, STEPS.length - 1))
   }
 
+  // Keyboard: Enter advances to the next step (instead of submitting) on every
+  // step except the last. Textareas keep their normal newline behaviour, and
+  // Radix Select/popover handle Enter themselves (they stop propagation).
+  const handleFormKeyDown = (e: React.KeyboardEvent<HTMLFormElement>) => {
+    if (e.key !== 'Enter' || e.shiftKey) return
+    const target = e.target as HTMLElement
+    if (target.tagName === 'TEXTAREA') return
+    if (step < STEPS.length - 1) {
+      e.preventDefault()
+      handleNext()
+    }
+  }
+
   const handleFormSubmit = async (data: RouteFormValues) => {
     // Prevent accidental submit when not on the last step (e.g. Enter key in input)
     if (step < STEPS.length - 1) return
@@ -334,7 +347,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
     )
 
   return (
-    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-6">
+    <form onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handleFormKeyDown} className="space-y-6">
       {/* Step indicator — single row, scrolls horizontally on narrow screens
           without a visible scrollbar */}
       <div className="flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
