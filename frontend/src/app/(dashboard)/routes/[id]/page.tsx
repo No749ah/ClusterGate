@@ -105,8 +105,8 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between">
-        <div className="flex items-start gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div className="flex items-start gap-4 min-w-0">
           <Button variant="ghost" size="sm" asChild>
             <Link href="/routes"><ArrowLeft className="w-4 h-4" /></Link>
           </Button>
@@ -127,7 +127,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 shrink-0">
           <Button
             variant="outline"
             size="sm"
