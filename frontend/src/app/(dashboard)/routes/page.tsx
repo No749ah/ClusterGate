@@ -388,10 +388,14 @@ export default function RoutesPage() {
                         return
                       }
                       if (route.protected) {
-                        const typed = window.prompt(`This route is protected. Type the route name to confirm deletion:\n\n${route.name}`)
-                        if (typed == null) return
-                        if (typed !== route.name) { toast.error('Name did not match — deletion cancelled'); return }
-                        deleteRoute.mutate({ id: route.id, confirm: typed })
+                        const ok = await confirm({
+                          title: 'Delete protected route',
+                          description: `"${route.name}" is protected (production). This action cannot be undone.`,
+                          confirmLabel: 'Delete',
+                          variant: 'destructive',
+                          requireText: route.name,
+                        })
+                        if (ok) deleteRoute.mutate({ id: route.id, confirm: route.name })
                         return
                       }
                       const ok = await confirm({
@@ -598,6 +602,8 @@ function RouteRow({
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onClick={onDelete}
+                disabled={route.isActive}
+                title={route.isActive ? 'Deactivate the route before deleting' : undefined}
                 className="text-destructive focus:text-destructive"
               >
                 <Trash2 className="w-4 h-4 mr-2" />

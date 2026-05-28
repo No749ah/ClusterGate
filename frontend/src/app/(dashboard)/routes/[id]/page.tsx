@@ -52,10 +52,14 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
       return
     }
     if (route.protected) {
-      const typed = window.prompt(`This route is protected. Type the route name to confirm deletion:\n\n${route.name}`)
-      if (typed == null) return
-      if (typed !== route.name) { toast.error('Name did not match — deletion cancelled'); return }
-      deleteRoute.mutate({ id: route.id, confirm: typed }, { onSuccess: () => router.push('/routes') })
+      const ok = await confirm({
+        title: 'Delete protected route',
+        description: `"${route.name}" is protected (production). This action cannot be undone.`,
+        confirmLabel: 'Delete',
+        variant: 'destructive',
+        requireText: route.name,
+      })
+      if (ok) deleteRoute.mutate({ id: route.id, confirm: route.name }, { onSuccess: () => router.push('/routes') })
       return
     }
     const ok = await confirm({
@@ -159,8 +163,8 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
             size="sm"
             className="text-red-500 hover:text-red-500 hover:bg-red-500/10"
             onClick={() => handleDelete(route)}
-            disabled={deleteRoute.isPending}
-            title={route.isActive ? 'Deactivate before deleting' : 'Delete route'}
+            disabled={deleteRoute.isPending || route.isActive}
+            title={route.isActive ? 'Deactivate the route before deleting' : 'Delete route'}
           >
             <Trash2 className="w-3.5 h-3.5 mr-2" />
             Delete

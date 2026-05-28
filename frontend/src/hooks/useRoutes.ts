@@ -170,7 +170,7 @@ export function useRestoreRouteVersion(routeId: string) {
 
 export function useRouteUptime(id: string) {
   return useQuery({
-    queryKey: ['route-uptime', id],
+    queryKey: ['routes', id, 'uptime'],
     queryFn: () => api.routes.getUptime(id),
     staleTime: 60 * 1000,
     refetchInterval: 60 * 1000,

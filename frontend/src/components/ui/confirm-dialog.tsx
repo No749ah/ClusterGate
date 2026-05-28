@@ -3,6 +3,7 @@
 import { useState, useCallback, createContext, useContext, useRef } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Dialog,
   DialogContent,
@@ -18,6 +19,8 @@ interface ConfirmOptions {
   confirmLabel?: string
   cancelLabel?: string
   variant?: 'default' | 'destructive'
+  // When set, the user must type this exact value to enable the confirm button.
+  requireText?: string
 }
 
 type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>
@@ -32,6 +35,7 @@ export function useConfirm(): ConfirmFn {
 
 export function ConfirmDialogProvider({ children }: { children: React.ReactNode }) {
   const [open, setOpen] = useState(false)
+  const [typed, setTyped] = useState('')
   const [options, setOptions] = useState<ConfirmOptions>({
     title: '',
     description: '',
@@ -40,6 +44,7 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
 
   const confirm = useCallback<ConfirmFn>((opts) => {
     setOptions(opts)
+    setTyped('')
     setOpen(true)
     return new Promise<boolean>((resolve) => {
       resolveRef.current = resolve
@@ -48,9 +53,12 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
 
   const handleClose = (result: boolean) => {
     setOpen(false)
+    setTyped('')
     resolveRef.current?.(result)
     resolveRef.current = null
   }
+
+  const confirmDisabled = !!options.requireText && typed !== options.requireText
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -66,6 +74,20 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
             <DialogTitle>{options.title}</DialogTitle>
             <DialogDescription>{options.description}</DialogDescription>
           </DialogHeader>
+          {options.requireText && (
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">
+                Type <span className="font-mono font-medium text-foreground">{options.requireText}</span> to confirm
+              </p>
+              <Input
+                value={typed}
+                onChange={(e) => setTyped(e.target.value)}
+                placeholder={options.requireText}
+                autoFocus
+                onKeyDown={(e) => { if (e.key === 'Enter' && !confirmDisabled) handleClose(true) }}
+              />
+            </div>
+          )}
           <DialogFooter className="gap-2 sm:gap-0">
             <Button variant="outline" onClick={() => handleClose(false)}>
               {options.cancelLabel || 'Cancel'}
@@ -73,6 +95,7 @@ export function ConfirmDialogProvider({ children }: { children: React.ReactNode 
             <Button
               variant={options.variant === 'destructive' ? 'destructive' : 'default'}
               onClick={() => handleClose(true)}
+              disabled={confirmDisabled}
             >
               {options.confirmLabel || 'Confirm'}
             </Button>
