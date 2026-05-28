@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { Bell, CheckCheck, AlertTriangle, Activity, Zap } from 'lucide-react'
-import { useNotifications, useUnreadCount, useMarkAsRead, useMarkAllAsRead } from '@/hooks/useNotifications'
+import { Bell, CheckCheck, AlertTriangle, Activity, Zap, X } from 'lucide-react'
+import { useNotifications, useUnreadCount, useMarkAsRead, useMarkAllAsRead, useDeleteNotification } from '@/hooks/useNotifications'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -31,6 +31,7 @@ export function NotificationBell() {
   const notifQuery = useNotifications()
   const markRead = useMarkAsRead()
   const markAllRead = useMarkAllAsRead()
+  const deleteNotif = useDeleteNotification()
 
   const count = countData?.data?.count ?? 0
   const notifications = notifQuery.data?.data ?? []
@@ -117,6 +118,16 @@ export function NotificationBell() {
                   {!notif.isRead && (
                     <div className="w-2 h-2 rounded-full bg-primary flex-shrink-0 mt-1.5" />
                   )}
+                  <button
+                    title="Dismiss"
+                    className="flex-shrink-0 text-muted-foreground hover:text-foreground transition-colors mt-0.5"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteNotif.mutate(notif.id)
+                    }}
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               )
             })

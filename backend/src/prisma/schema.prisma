@@ -39,6 +39,11 @@ enum TargetType {
   N8N
 }
 
+enum KeyScope {
+  READ
+  FULL
+}
+
 enum HealthStatus {
   HEALTHY
   UNHEALTHY
@@ -281,6 +286,9 @@ model Route {
   upstreamAuthValue  String?
   upstreamAuthHeader String?  @default("X-API-Key")
   targetType   TargetType  @default(GENERIC)
+  healthCheckMethod String? @default("HEAD")
+  healthCheckPath   String?
+  healthCheckBody   String?
   webhookSecret String?
 
   // Maintenance
@@ -428,6 +436,7 @@ model ApiKey {
   name       String
   keyHash    String    @unique
   isActive   Boolean   @default(true)
+  scope      KeyScope  @default(FULL)
   lastUsedAt DateTime?
   lastUsedIp String?
   usageCount Int       @default(0)

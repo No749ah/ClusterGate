@@ -35,6 +35,18 @@ export async function markAllAsRead(userId: string) {
   })
 }
 
+export async function deleteNotification(notificationId: string, userId: string) {
+  return prisma.notification.deleteMany({
+    where: { id: notificationId, userId },
+  })
+}
+
+export async function deleteAllRead(userId: string) {
+  return prisma.notification.deleteMany({
+    where: { userId, isRead: true },
+  })
+}
+
 export async function createNotification(data: {
   userId?: string
   type: string
@@ -88,6 +100,29 @@ export async function notifyRouteError(routeId: string, routeName: string, error
     type: 'route.error',
     title: `Route Error: ${routeName}`,
     message: `Proxy error on route "${routeName}": ${error.slice(0, 200)}`,
+    routeId,
+  })
+}
+
+export async function notifyKeyExpiring(routeId: string, routeName: string, keyName: string, expiresAt: Date) {
+  // Throttle: at most one expiring notification per route per ~20h
+  try {
+    const existing = await prisma.notification.findFirst({
+      where: {
+        type: 'apikey.expiring',
+        routeId,
+        createdAt: { gte: new Date(Date.now() - 20 * 60 * 60 * 1000) },
+      },
+    })
+    if (existing) return
+  } catch {
+    // ignore
+  }
+
+  await createNotification({
+    type: 'apikey.expiring',
+    title: `API key expiring: ${routeName}`,
+    message: `API key "${keyName}" for route "${routeName}" expires ${expiresAt.toISOString().slice(0, 10)}.`,
     routeId,
   })
 }

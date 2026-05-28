@@ -4,6 +4,7 @@ import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as apiKeyService from '../services/apiKeyService'
 import { createAuditLog } from '../services/auditService'
+import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
@@ -129,15 +130,17 @@ router.get('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERA
  */
 router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
-    const { name, expiresAt } = z.object({
+    const { name, expiresAt, scope } = z.object({
       name: z.string().min(1, 'Name is required').max(100),
       expiresAt: z.string().datetime().optional(),
+      scope: z.enum(['READ', 'FULL']).default('FULL'),
     }).parse(req.body)
 
     const key = await apiKeyService.createApiKey(
       req.params.routeId,
       name,
-      expiresAt ? new Date(expiresAt) : undefined
+      expiresAt ? new Date(expiresAt) : undefined,
+      scope
     )
     createAuditLog({
       userId: req.user!.userId,
@@ -148,6 +151,7 @@ router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPER
       ip: req.ip || req.socket.remoteAddress,
       userAgent: req.get('user-agent'),
     })
+    achievementService.checkApiKey(req.user!.userId).catch(() => {})
     res.status(201).json({ success: true, data: key })
   } catch (err) {
     next(err)

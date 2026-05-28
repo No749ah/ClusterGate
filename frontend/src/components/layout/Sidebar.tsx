@@ -9,7 +9,6 @@ import {
   ScrollText,
   Users,
   Settings,
-  ChevronRight,
   Shield,
   PanelLeftClose,
   PanelLeftOpen,
@@ -156,7 +155,6 @@ export function Sidebar() {
           )}
         />
         {isMobileOrExpanded && <span className="flex-1">{item.label}</span>}
-        {isMobileOrExpanded && active && <ChevronRight className="w-3 h-3 text-primary opacity-60" />}
       </Link>
     )
   }

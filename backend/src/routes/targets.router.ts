@@ -29,9 +29,6 @@ router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERA
     const data = targetSchema.parse(req.body)
     const target = await lbService.addTarget(req.params.routeId, data)
 
-    // Achievement: Load Balancer (add a target)
-    achievementService.checkLoadBalancer(req.user!.userId).catch(() => {})
-
     res.status(201).json({ success: true, data: target })
   } catch (err) {
     next(err)

@@ -33,15 +33,18 @@ export async function checkRouteHealth(route: Route): Promise<{
       rejectUnauthorized: (route as any).sslVerify !== false,
     })
 
-    // HEAD first, fall back to GET if HEAD is unsupported (405/501) or errors
-    const probe = async (url: string) => {
-      let res
-      try {
-        res = await axios({ method: 'HEAD', url, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
-        if (res.status === 405 || res.status === 501) {
-          res = await axios({ method: 'GET', url, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
-        }
-      } catch {
+    // Per-route health check config (method/path/body); defaults to HEAD on the
+    // target root. A configured body sends application/json (handy for n8n).
+    const method = ((route as any).healthCheckMethod || 'HEAD').toUpperCase()
+    const hcPath = (route as any).healthCheckPath || ''
+    const hcBody = (route as any).healthCheckBody || undefined
+    const headers = hcBody ? { 'content-type': 'application/json' } : undefined
+
+    const probe = async (base: string) => {
+      const url = `${base.replace(/\/$/, '')}${hcPath}`
+      let res = await axios({ method, url, data: hcBody, headers, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
+      // Fall back to GET only when HEAD isn't supported
+      if (method === 'HEAD' && (res.status === 405 || res.status === 501)) {
         res = await axios({ method: 'GET', url, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
       }
       return res

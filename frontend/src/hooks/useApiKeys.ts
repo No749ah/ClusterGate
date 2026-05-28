@@ -14,7 +14,7 @@ export function useCreateApiKey(routeId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { name: string; expiresAt?: string }) =>
+    mutationFn: (data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL' }) =>
       api.apiKeys.create(routeId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiKeys', routeId] })

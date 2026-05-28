@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { activeRoutesTotal } from '../lib/metrics'
 import { validateTargetUrl, isSafeRegex } from '../lib/security'
+import { encryptSecret } from '../lib/crypto'
 
 export interface RouteFilters {
   search?: string
@@ -135,6 +136,11 @@ export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId
 
   await freeSoftDeletedPublicPath(data.publicPath as string)
 
+  // Encrypt secrets at rest
+  for (const f of ['authValue', 'upstreamAuthValue', 'webhookSecret'] as const) {
+    if ((data as any)[f]) (data as any)[f] = encryptSecret((data as any)[f])
+  }
+
   // Validate path starts with /
   const publicPath = data.publicPath as string
   if (!publicPath.startsWith('/')) {
@@ -185,9 +191,11 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     }
   }
 
-  // Don't overwrite secrets with the masked placeholder returned by GET
+  // Don't overwrite secrets with the masked placeholder returned by GET;
+  // encrypt any real new secret values at rest.
   for (const field of ['authValue', 'webhookSecret', 'upstreamAuthValue'] as const) {
     if ((data as any)[field] === '••••••••') delete (data as any)[field]
+    else if ((data as any)[field]) (data as any)[field] = encryptSecret((data as any)[field])
   }
 
   // If the publicPath is changing to one held by a soft-deleted route, free it
@@ -213,6 +221,7 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
     'lbStrategy', 'requireAuth', 'authType', 'authValue',
     'upstreamAuthType', 'upstreamAuthValue', 'upstreamAuthHeader', 'targetType',
+    'healthCheckMethod', 'healthCheckPath', 'healthCheckBody', 'streamResponse',
     'corsEnabled', 'corsOrigins', 'ipAllowlist',
     'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
     'organizationId', 'routeGroupId'] as const
@@ -376,6 +385,8 @@ export async function exportRoutes() {
       retryCount: true,
       retryDelay: true,
       stripPrefix: true,
+      sslVerify: true,
+      streamResponse: true,
       requestBodyLimit: true,
       addHeaders: true,
       removeHeaders: true,
@@ -385,6 +396,12 @@ export async function exportRoutes() {
       ipAllowlist: true,
       requireAuth: true,
       authType: true,
+      upstreamAuthType: true,
+      upstreamAuthHeader: true,
+      targetType: true,
+      healthCheckMethod: true,
+      healthCheckPath: true,
+      healthCheckBody: true,
       maintenanceMode: true,
       maintenanceMessage: true,
     },

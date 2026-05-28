@@ -43,6 +43,9 @@ const routeSchema = z.object({
   upstreamAuthValue: z.string().optional(),
   upstreamAuthHeader: z.string().default('X-API-Key'),
   targetType: z.enum(['GENERIC', 'N8N']).default('GENERIC'),
+  healthCheckMethod: z.enum(['HEAD', 'GET', 'POST']).default('HEAD'),
+  healthCheckPath: z.string().optional(),
+  healthCheckBody: z.string().optional(),
   webhookSecret: z.string().optional(),
   rateLimitEnabled: z.boolean().default(false),
   rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
@@ -130,6 +133,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       upstreamAuthValue: defaultValues?.upstreamAuthValue ?? '',
       upstreamAuthHeader: defaultValues?.upstreamAuthHeader ?? 'X-API-Key',
       targetType: defaultValues?.targetType ?? 'GENERIC',
+      healthCheckMethod: (defaultValues as any)?.healthCheckMethod ?? 'HEAD',
+      healthCheckPath: (defaultValues as any)?.healthCheckPath ?? '',
+      healthCheckBody: (defaultValues as any)?.healthCheckBody ?? '',
       webhookSecret: defaultValues?.webhookSecret ?? '',
       rateLimitEnabled: defaultValues?.rateLimitEnabled ?? false,
       rateLimitMax: defaultValues?.rateLimitMax ?? 100,
@@ -584,6 +590,32 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 checked={watch('streamResponse')}
                 onCheckedChange={(v) => setValue('streamResponse', v)}
               />
+            </div>
+            <div className="space-y-3 rounded-lg border border-border/50 p-3">
+              <div>
+                <p className="text-sm font-medium">Health Check</p>
+                <p className="text-xs text-muted-foreground">How ClusterGate probes the target (POST + body works for n8n)</p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <Field label="Method">
+                  <Select value={watch('healthCheckMethod')} onValueChange={(v) => setValue('healthCheckMethod', v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="HEAD">HEAD</SelectItem>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Path (optional)">
+                  <input {...register('healthCheckPath')} placeholder="/health" className={fieldClass()} />
+                </Field>
+              </div>
+              {watch('healthCheckMethod') === 'POST' && (
+                <Field label="Body (JSON, optional)">
+                  <Textarea {...register('healthCheckBody')} placeholder='{"chatInput":"ping","sessionId":"healthcheck"}' rows={2} className="font-mono text-sm" />
+                </Field>
+              )}
             </div>
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
               <div>

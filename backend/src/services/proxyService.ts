@@ -4,7 +4,8 @@ import http from 'http'
 import { Request, Response } from 'express'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { validateWebhookSignature, isSafeRegex, safeLookup, isTlsProtocolMismatch } from '../lib/security'
-import { validateApiKey } from './apiKeyService'
+import { verifyApiKey } from './apiKeyService'
+import { decryptSecret } from '../lib/crypto'
 import { Route, RouteTarget, TransformRule } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
@@ -102,7 +103,8 @@ export async function proxyRequest(
     const body = Buffer.isBuffer(req.body)
       ? req.body.toString('utf8')
       : typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
-    if (!validateWebhookSignature(body, route.webhookSecret, signature)) {
+    const secret = decryptSecret(route.webhookSecret) || ''
+    if (!validateWebhookSignature(body, secret, signature)) {
       throw AppError.unauthorized('Invalid webhook signature')
     }
   }
@@ -186,9 +188,10 @@ export async function proxyRequest(
   const uType = (route as any).upstreamAuthType as string | undefined
   const uVal = (route as any).upstreamAuthValue as string | null
   if (uType && uType !== 'NONE' && uVal) {
-    if (uType === 'BEARER') forwardHeaders['Authorization'] = `Bearer ${uVal}`
-    else if (uType === 'BASIC') forwardHeaders['Authorization'] = `Basic ${uVal}`
-    else if (uType === 'API_KEY') forwardHeaders[(route as any).upstreamAuthHeader || 'X-API-Key'] = uVal
+    const v = decryptSecret(uVal) || ''
+    if (uType === 'BEARER') forwardHeaders['Authorization'] = `Bearer ${v}`
+    else if (uType === 'BASIC') forwardHeaders['Authorization'] = `Basic ${v}`
+    else if (uType === 'API_KEY') forwardHeaders[(route as any).upstreamAuthHeader || 'X-API-Key'] = v
   }
 
   // Set proxy identification headers
@@ -506,20 +509,25 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB)
 }
 
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
 async function validateRouteAuth(route: Route, req: Request): Promise<void> {
   const authType = (route as any).authType as string
-  const authValue = (route as any).authValue as string | null
+  const authValue = decryptSecret((route as any).authValue)
 
   // API key auth is satisfied by route-scoped generated keys (hashed, with
-  // expiry + usage tracking) — not the legacy static value.
+  // expiry + usage tracking + scope) — not the legacy static value.
   if (authType === 'API_KEY') {
     const apiKey = req.get('X-API-Key')
     if (!apiKey) {
       throw AppError.unauthorized('API key required — provide it via the X-API-Key header')
     }
-    const ok = await validateApiKey(apiKey, route.id, req.ip || req.socket?.remoteAddress)
-    if (!ok) {
+    const key = await verifyApiKey(apiKey, route.id, req.ip || req.socket?.remoteAddress)
+    if (!key) {
       throw AppError.unauthorized('Invalid API key — generate one for this route and send it via the X-API-Key header')
+    }
+    if (key.scope === 'READ' && !SAFE_METHODS.has(req.method)) {
+      throw AppError.forbidden('This API key is read-only and cannot perform write requests')
     }
     return
   }

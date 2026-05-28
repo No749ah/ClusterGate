@@ -4,6 +4,8 @@ import { achievementService } from '../services/achievementService'
 import { prisma } from '../lib/prisma'
 import { cleanOldLogs } from '../services/logService'
 import { runScheduledUpdateCheck } from '../services/updateService'
+import { getKeysExpiringSoon } from '../services/apiKeyService'
+import { notifyKeyExpiring } from '../services/notificationService'
 import { createBackup, enforceRetentionPolicy } from '../services/backupService'
 import { logger } from '../lib/logger'
 import { config } from '../config'
@@ -43,6 +45,22 @@ export function startCronJobs() {
   })
   jobs.push(updateCheckJob)
   logger.info('Update check cron started (daily at 5am)')
+
+  // Notify admins about API keys expiring within 7 days (daily at 6am)
+  const keyExpiryJob = cron.schedule('0 6 * * *', async () => {
+    try {
+      const keys = await getKeysExpiringSoon(7)
+      for (const k of keys) {
+        if (k.expiresAt && k.route) {
+          await notifyKeyExpiring(k.route.id, k.route.name, k.name, k.expiresAt)
+        }
+      }
+    } catch (err) {
+      logger.error('API key expiry check cron failed', { error: (err as Error).message })
+    }
+  })
+  jobs.push(keyExpiryJob)
+  logger.info('API key expiry cron started (daily at 6am)')
 
   // Achievement checks daily at 3am (speed_demon, zero_downtime)
   const achievementJob = cron.schedule('0 3 * * *', async () => {

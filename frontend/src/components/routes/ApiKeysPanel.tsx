@@ -28,6 +28,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
   const [createOpen, setCreateOpen] = useState(false)
   const [keyName, setKeyName] = useState('')
   const [expiresInDays, setExpiresInDays] = useState('0')
+  const [scope, setScope] = useState<'READ' | 'FULL'>('FULL')
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -37,10 +38,11 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
     days !== '0' ? new Date(Date.now() + parseInt(days) * 86400000).toISOString() : undefined
 
   const handleCreate = async () => {
-    const result = await createKey.mutateAsync({ name: keyName, expiresAt: computeExpiry(expiresInDays) })
+    const result = await createKey.mutateAsync({ name: keyName, expiresAt: computeExpiry(expiresInDays), scope })
     setNewKeyValue(result.data.key)
     setKeyName('')
     setExpiresInDays('0')
+    setScope('FULL')
     setCreateOpen(false)
   }
 
@@ -129,6 +131,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                       if (expired) return <Badge variant="outline" className="text-amber-500 border-amber-500/30">Expired</Badge>
                       return <Badge variant="success">Active</Badge>
                     })()}
+                    {key.scope === 'READ' && <Badge variant="outline" className="text-xs">Read-only</Badge>}
                   </div>
                   <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
                     <span>Created {formatRelativeTime(key.createdAt)}</span>
@@ -219,6 +222,16 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                   <SelectItem value="30">30 days</SelectItem>
                   <SelectItem value="90">90 days</SelectItem>
                   <SelectItem value="365">1 year</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Scope</label>
+              <Select value={scope} onValueChange={(v) => setScope(v as 'READ' | 'FULL')}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="FULL">Full (all methods)</SelectItem>
+                  <SelectItem value="READ">Read-only (GET/HEAD)</SelectItem>
                 </SelectContent>
               </Select>
             </div>

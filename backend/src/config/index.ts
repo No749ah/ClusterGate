@@ -13,6 +13,8 @@ const envSchema = z.object({
   // and rate limiting). Defaults to 1 (single ingress/LB in front, e.g. k8s).
   TRUST_PROXY: z.string().default('1'),
   PROXY_TIMEOUT: z.coerce.number().default(30000),
+  // Max request body size forwarded through the proxy (raw passthrough)
+  PROXY_BODY_LIMIT: z.string().default('50mb'),
   // Run `prisma migrate deploy` automatically on backend startup. Default on so
   // schema changes apply on every deploy/self-update without manual steps.
   AUTO_MIGRATE: z.coerce.boolean().default(true),

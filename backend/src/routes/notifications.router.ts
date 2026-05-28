@@ -164,4 +164,24 @@ router.post('/read-all', authenticate, async (req, res, next) => {
   }
 })
 
+// Delete a single notification (dismiss)
+router.delete('/:id', authenticate, async (req, res, next) => {
+  try {
+    await notificationService.deleteNotification(req.params.id, req.user!.userId)
+    res.json({ success: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Delete all read notifications
+router.delete('/', authenticate, async (req, res, next) => {
+  try {
+    await notificationService.deleteAllRead(req.user!.userId)
+    res.json({ success: true })
+  } catch (err) {
+    next(err)
+  }
+})
+
 export default router

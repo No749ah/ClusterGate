@@ -389,7 +389,7 @@ class ApiClient {
     list: (routeId: string) =>
       this.get<ApiResponse<ApiKey[]>>(`/api/routes/${routeId}/api-keys`),
 
-    create: (routeId: string, data: { name: string; expiresAt?: string }) =>
+    create: (routeId: string, data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL' }) =>
       this.post<ApiResponse<ApiKey & { key: string }>>(`/api/routes/${routeId}/api-keys`, data),
 
     revoke: (routeId: string, keyId: string) =>
@@ -623,6 +623,12 @@ class ApiClient {
 
     markAllAsRead: () =>
       this.post<ApiResponse<null>>('/api/notifications/read-all'),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/notifications/${id}`),
+
+    deleteAllRead: () =>
+      this.delete<ApiResponse<null>>('/api/notifications'),
   }
 
   // ============================================================================

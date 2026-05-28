@@ -153,6 +153,7 @@ export interface ApiKey {
   routeId: string
   name: string
   isActive: boolean
+  scope?: 'READ' | 'FULL'
   lastUsedAt: string | null
   lastUsedIp?: string | null
   usageCount?: number
