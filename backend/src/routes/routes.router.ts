@@ -306,7 +306,7 @@ router.post('/test-connection', authenticate, authorize([Role.ADMIN, Role.OPERAT
     // n8n chat endpoints reject requests without chatInput + sessionId
     let data = cfg.body
     if (isN8n) {
-      data = { chatInput: 'ClusterGate connection test', sessionId: `clustergate-test-${Date.now()}`, ...(data || {}) }
+      data = { chatInput: 'Hello World', sessionId: `clustergate-test-${Date.now()}`, ...(data || {}) }
     }
 
     const makeReq = (url: string) => axios({

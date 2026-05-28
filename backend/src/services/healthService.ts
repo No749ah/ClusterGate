@@ -43,7 +43,7 @@ export async function checkRouteHealth(route: Route): Promise<{
     let hcBody = (route as any).healthCheckBody || undefined
     if (n8n && !hcBody) {
       method = 'POST'
-      hcBody = JSON.stringify({ chatInput: 'ClusterGate health check', sessionId: 'clustergate-healthcheck' })
+      hcBody = JSON.stringify({ chatInput: 'Hello World', sessionId: 'clustergate-healthcheck' })
     }
     const headers = hcBody ? { 'content-type': 'application/json' } : undefined
 
