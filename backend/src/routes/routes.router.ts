@@ -13,6 +13,7 @@ import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync, isTlsPr
 import axios, { AxiosError } from 'axios'
 import https from 'https'
 import http from 'http'
+import { isN8nTarget } from '../lib/targetDetect'
 import { achievementService } from '../services/achievementService'
 import { changeRequestService } from '../services/changeRequestService'
 import { getUserOrgIds, canManageRoute, canManageOrgRoutes, canDeleteRoute } from '../services/orgAccessService'
@@ -48,6 +49,7 @@ const routeBodySchema = z.object({
   upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   upstreamAuthValue: z.string().optional(),
   upstreamAuthHeader: z.string().default('X-API-Key'),
+  targetType: z.enum(['GENERIC', 'N8N']).default('GENERIC'),
   webhookSecret: z.string().optional(),
   rateLimitEnabled: z.boolean().default(false),
   rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
@@ -243,24 +245,40 @@ router.get('/check-path', authenticate, async (req, res, next) => {
   }
 })
 
-// Detect n8n targets — their chat/webhook endpoints require chatInput + sessionId
-function looksLikeN8n(targetUrl: string): boolean {
-  try {
-    const u = new URL(targetUrl)
-    return /(^|\.)n8n\./i.test(u.hostname) || /n8n/i.test(u.hostname) || u.pathname.includes('/webhook/')
-  } catch {
-    return false
-  }
-}
-
-// Test connectivity to an (unsaved) target with optional upstream auth. Used by
-// the route form's "Test connection" button before saving.
+/**
+ * @openapi
+ * /api/routes/test-connection:
+ *   post:
+ *     tags: [Routes]
+ *     summary: Test connectivity to a target
+ *     description: Sends a probe request to an (unsaved) target with optional upstream auth, before saving the route. n8n targets are auto-detected and sent chatInput + sessionId. Requires ADMIN or OPERATOR.
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [targetUrl]
+ *             properties:
+ *               targetUrl: { type: string, format: uri }
+ *               method: { type: string, default: POST }
+ *               sslVerify: { type: boolean, default: true }
+ *               targetType: { type: string, enum: [GENERIC, N8N] }
+ *               upstreamAuthType: { type: string, enum: [NONE, API_KEY, BASIC, BEARER] }
+ *               upstreamAuthValue: { type: string }
+ *               upstreamAuthHeader: { type: string, default: X-API-Key }
+ *               body: {}
+ *     responses:
+ *       200:
+ *         description: Probe result (ok, status, detectedTool)
+ */
 router.post('/test-connection', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const schema = z.object({
       targetUrl: z.string().url(),
       method: z.string().default('POST'),
       sslVerify: z.boolean().default(true),
+      targetType: z.enum(['GENERIC', 'N8N']).optional(),
       upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
       upstreamAuthValue: z.string().optional(),
       upstreamAuthHeader: z.string().default('X-API-Key'),
@@ -281,7 +299,7 @@ router.post('/test-connection', authenticate, authorize([Role.ADMIN, Role.OPERAT
       else if (cfg.upstreamAuthType === 'API_KEY') headers[cfg.upstreamAuthHeader || 'X-API-Key'] = cfg.upstreamAuthValue
     }
 
-    const isN8n = looksLikeN8n(cfg.targetUrl)
+    const isN8n = isN8nTarget(cfg.targetType, cfg.targetUrl)
     // n8n chat endpoints reject requests without chatInput + sessionId
     let data = cfg.body
     if (isN8n) {
@@ -330,6 +348,30 @@ router.post('/test-connection', authenticate, authorize([Role.ADMIN, Role.OPERAT
   }
 })
 
+/**
+ * @openapi
+ * /api/routes/api-key-policy:
+ *   get:
+ *     tags: [Routes]
+ *     summary: Get the global API-key policy
+ *     description: Returns whether new routes require an API key by default.
+ *     responses:
+ *       200: { description: "{ forceApiKeys: boolean }" }
+ *   put:
+ *     tags: [Routes]
+ *     summary: Set the global API-key policy (admin)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [forceApiKeys]
+ *             properties:
+ *               forceApiKeys: { type: boolean }
+ *     responses:
+ *       200: { description: "{ forceApiKeys: boolean }" }
+ */
 // Global API-key policy — whether new routes require an API key by default.
 router.get('/api-key-policy', authenticate, async (_req, res, next) => {
   try {

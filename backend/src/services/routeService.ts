@@ -212,7 +212,7 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     'maintenanceMode', 'maintenanceMessage', 'webhookSecret',
     'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
     'lbStrategy', 'requireAuth', 'authType', 'authValue',
-    'upstreamAuthType', 'upstreamAuthValue', 'upstreamAuthHeader',
+    'upstreamAuthType', 'upstreamAuthValue', 'upstreamAuthHeader', 'targetType',
     'corsEnabled', 'corsOrigins', 'ipAllowlist',
     'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
     'organizationId', 'routeGroupId'] as const

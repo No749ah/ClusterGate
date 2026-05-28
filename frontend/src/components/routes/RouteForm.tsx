@@ -42,6 +42,7 @@ const routeSchema = z.object({
   upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   upstreamAuthValue: z.string().optional(),
   upstreamAuthHeader: z.string().default('X-API-Key'),
+  targetType: z.enum(['GENERIC', 'N8N']).default('GENERIC'),
   webhookSecret: z.string().optional(),
   rateLimitEnabled: z.boolean().default(false),
   rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
@@ -128,6 +129,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       upstreamAuthType: defaultValues?.upstreamAuthType ?? 'NONE',
       upstreamAuthValue: defaultValues?.upstreamAuthValue ?? '',
       upstreamAuthHeader: defaultValues?.upstreamAuthHeader ?? 'X-API-Key',
+      targetType: defaultValues?.targetType ?? 'GENERIC',
       webhookSecret: defaultValues?.webhookSecret ?? '',
       rateLimitEnabled: defaultValues?.rateLimitEnabled ?? false,
       rateLimitMax: defaultValues?.rateLimitMax ?? 100,
@@ -189,6 +191,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         targetUrl: form.getValues('targetUrl'),
         method: 'POST',
         sslVerify: form.getValues('sslVerify'),
+        targetType: form.getValues('targetType'),
         upstreamAuthType: form.getValues('upstreamAuthType'),
         upstreamAuthValue: form.getValues('upstreamAuthValue') || undefined,
         upstreamAuthHeader: form.getValues('upstreamAuthHeader'),
@@ -754,6 +757,17 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   )}
                 </div>
               )}
+
+              {/* Target type */}
+              <Field label="Target Type" hint="n8n targets get chatInput + sessionId sent automatically when testing">
+                <Select value={watch('targetType')} onValueChange={(v) => setValue('targetType', v as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GENERIC">Generic</SelectItem>
+                    <SelectItem value="N8N">n8n</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
 
               {/* Upstream Authentication */}
               <div className="space-y-3 rounded-lg border border-border/50 p-3">

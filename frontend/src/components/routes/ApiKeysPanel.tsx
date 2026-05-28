@@ -123,13 +123,18 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-medium text-foreground truncate" title={key.name}>{key.name}</p>
-                    <Badge variant={key.isActive ? 'success' : 'secondary'}>
-                      {key.isActive ? 'Active' : 'Revoked'}
-                    </Badge>
+                    {(() => {
+                      const expired = !!key.expiresAt && new Date(key.expiresAt) < new Date()
+                      if (!key.isActive) return <Badge variant="secondary">Revoked</Badge>
+                      if (expired) return <Badge variant="outline" className="text-amber-500 border-amber-500/30">Expired</Badge>
+                      return <Badge variant="success">Active</Badge>
+                    })()}
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5">
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
                     <span>Created {formatRelativeTime(key.createdAt)}</span>
                     {key.lastUsedAt && <span>Last used {formatRelativeTime(key.lastUsedAt)}</span>}
+                    {typeof key.usageCount === 'number' && <span>{key.usageCount} use{key.usageCount === 1 ? '' : 's'}</span>}
+                    {key.lastUsedIp && <span>from {key.lastUsedIp}</span>}
                     {key.expiresAt && <span>Expires {formatDate(key.expiresAt)}</span>}
                   </div>
                 </div>

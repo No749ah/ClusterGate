@@ -18,6 +18,8 @@ export async function getApiKeys(routeId: string) {
       name: true,
       isActive: true,
       lastUsedAt: true,
+      lastUsedIp: true,
+      usageCount: true,
       expiresAt: true,
       createdAt: true,
     },
@@ -69,7 +71,7 @@ export async function deleteApiKey(keyId: string, routeId: string) {
   return prisma.apiKey.delete({ where: { id: keyId } })
 }
 
-export async function validateApiKey(key: string, routeId: string): Promise<boolean> {
+export async function validateApiKey(key: string, routeId: string, ip?: string): Promise<boolean> {
   const keyHash = hashKey(key)
   const apiKey = await prisma.apiKey.findFirst({
     where: {
@@ -85,10 +87,10 @@ export async function validateApiKey(key: string, routeId: string): Promise<bool
 
   if (!apiKey) return false
 
-  // Update last used
+  // Track usage: timestamp, count, and last source IP
   await prisma.apiKey.update({
     where: { id: apiKey.id },
-    data: { lastUsedAt: new Date() },
+    data: { lastUsedAt: new Date(), usageCount: { increment: 1 }, ...(ip ? { lastUsedIp: ip } : {}) },
   })
 
   return true

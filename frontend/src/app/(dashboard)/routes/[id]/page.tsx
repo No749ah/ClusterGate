@@ -257,7 +257,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
               <CardTitle>Test Route</CardTitle>
             </CardHeader>
             <CardContent>
-              <RouteTestPanel routeId={id} defaultPath={route.publicPath} methods={route.methods} requireAuth={route.requireAuth} authType={route.authType} streamResponse={route.streamResponse} />
+              <RouteTestPanel routeId={id} defaultPath={route.publicPath} methods={route.methods} requireAuth={route.requireAuth} authType={route.authType} streamResponse={route.streamResponse} targetType={route.targetType} />
             </CardContent>
           </Card>
         </TabsContent>

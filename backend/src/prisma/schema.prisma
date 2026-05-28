@@ -34,6 +34,11 @@ enum AuthType {
   BEARER
 }
 
+enum TargetType {
+  GENERIC
+  N8N
+}
+
 enum HealthStatus {
   HEALTHY
   UNHEALTHY
@@ -275,6 +280,7 @@ model Route {
   upstreamAuthType   AuthType @default(NONE)
   upstreamAuthValue  String?
   upstreamAuthHeader String?  @default("X-API-Key")
+  targetType   TargetType  @default(GENERIC)
   webhookSecret String?
 
   // Maintenance
@@ -423,6 +429,8 @@ model ApiKey {
   keyHash    String    @unique
   isActive   Boolean   @default(true)
   lastUsedAt DateTime?
+  lastUsedIp String?
+  usageCount Int       @default(0)
   expiresAt  DateTime?
   createdAt  DateTime  @default(now())
 

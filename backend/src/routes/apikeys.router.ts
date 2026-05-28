@@ -3,6 +3,7 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as apiKeyService from '../services/apiKeyService'
+import { createAuditLog } from '../services/auditService'
 
 const router = Router()
 
@@ -138,6 +139,15 @@ router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPER
       name,
       expiresAt ? new Date(expiresAt) : undefined
     )
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'apikey.create',
+      resource: 'route',
+      resourceId: req.params.routeId,
+      details: { keyId: key.id, name, expiresAt: expiresAt ?? null },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
     res.status(201).json({ success: true, data: key })
   } catch (err) {
     next(err)
@@ -182,6 +192,15 @@ router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPER
 router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     await apiKeyService.revokeApiKey(req.params.keyId, req.params.routeId)
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'apikey.revoke',
+      resource: 'route',
+      resourceId: req.params.routeId,
+      details: { keyId: req.params.keyId },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
     res.json({ success: true, message: 'API key revoked' })
   } catch (err) {
     next(err)
@@ -226,6 +245,15 @@ router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.AD
 router.delete('/:routeId/api-keys/:keyId', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     await apiKeyService.deleteApiKey(req.params.keyId, req.params.routeId)
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'apikey.delete',
+      resource: 'route',
+      resourceId: req.params.routeId,
+      details: { keyId: req.params.keyId },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
     res.json({ success: true, message: 'API key deleted' })
   } catch (err) {
     next(err)

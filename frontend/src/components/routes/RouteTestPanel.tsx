@@ -20,6 +20,7 @@ interface RouteTestPanelProps {
   requireAuth?: boolean
   authType?: string
   streamResponse?: boolean
+  targetType?: string
 }
 
 // Extract human-readable text from a streamed chunk. Handles n8n-style NDJSON
@@ -39,10 +40,27 @@ function extractStreamText(line: string): string {
   }
 }
 
-export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAuth, authType, streamResponse }: RouteTestPanelProps) {
+export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAuth, authType, streamResponse, targetType }: RouteTestPanelProps) {
   const [method, setMethod] = useState(methods?.[0] ?? 'GET')
   const [path, setPath] = useState(defaultPath)
   const [body, setBody] = useState('')
+  const [bodyMode, setBodyMode] = useState<'json' | 'fields'>('fields')
+  const [bodyFields, setBodyFields] = useState<{ key: string; value: string }[]>(
+    targetType === 'N8N'
+      ? [{ key: 'chatInput', value: 'Hello World!' }, { key: 'sessionId', value: 'test-session' }]
+      : [{ key: '', value: '' }]
+  )
+  const [generatingKey, setGeneratingKey] = useState(false)
+
+  // Build the request body from either the JSON textarea or the field rows
+  const buildBody = (): string | undefined => {
+    if (bodyMode === 'json') return body || undefined
+    const obj: Record<string, string> = {}
+    for (const f of bodyFields) {
+      if (f.key.trim()) obj[f.key.trim()] = f.value
+    }
+    return Object.keys(obj).length ? JSON.stringify(obj) : undefined
+  }
   const [headers, setHeaders] = useState<{ key: string; value: string }[]>([])
   const [result, setResult] = useState<TestResult | null>(null)
   const [showRequestHeaders, setShowRequestHeaders] = useState(false)
@@ -90,13 +108,26 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
     return headerMap
   }
 
+  const handleGenerateTestKey = async () => {
+    setGeneratingKey(true)
+    try {
+      const res = await api.apiKeys.create(routeId, { name: `test-${Date.now()}` })
+      setApiKeyValue(res.data.key)
+      toast.success('Test key generated and filled in')
+    } catch {
+      toast.error('Failed to generate key')
+    } finally {
+      setGeneratingKey(false)
+    }
+  }
+
   const handleTest = async () => {
     const headerMap = buildHeaderMap()
     const params = {
       method,
       path,
       headers: headerMap,
-      body: body || undefined,
+      body: ['POST', 'PUT', 'PATCH'].includes(method) ? buildBody() : undefined,
       skipAuth: hasAuth && skipAuth ? true : undefined,
     }
 
@@ -216,11 +247,21 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
               <div className="space-y-2">
                 {authType === 'API_KEY' && (
                   <div>
-                    <label className="text-xs text-muted-foreground mb-1 block">X-API-Key</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-muted-foreground block">X-API-Key</label>
+                      <button
+                        type="button"
+                        onClick={handleGenerateTestKey}
+                        disabled={generatingKey}
+                        className="text-xs text-primary hover:underline disabled:opacity-50"
+                      >
+                        {generatingKey ? 'Generating…' : 'Generate & use'}
+                      </button>
+                    </div>
                     <Input
                       value={apiKeyValue}
                       onChange={(e) => setApiKeyValue(e.target.value)}
-                      placeholder="Enter API key"
+                      placeholder="Paste a generated key or click Generate & use"
                       className="font-mono text-sm"
                       type="password"
                       autoComplete="off"
@@ -313,14 +354,59 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
         {/* Body (for POST/PUT/PATCH) */}
         {['POST', 'PUT', 'PATCH'].includes(method) && (
           <div>
-            <p className="text-xs text-muted-foreground mb-1">Request Body (JSON)</p>
-            <Textarea
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              placeholder='{"message": "Hello, World!"}'
-              rows={4}
-              className="font-mono text-sm"
-            />
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-muted-foreground">Request Body</p>
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setBodyMode('fields')}
+                  className={cn('px-2 py-0.5 rounded', bodyMode === 'fields' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground')}
+                >
+                  Fields
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setBodyMode('json')}
+                  className={cn('px-2 py-0.5 rounded', bodyMode === 'json' ? 'bg-primary/15 text-primary' : 'text-muted-foreground hover:text-foreground')}
+                >
+                  JSON
+                </button>
+              </div>
+            </div>
+            {bodyMode === 'json' ? (
+              <Textarea
+                value={body}
+                onChange={(e) => setBody(e.target.value)}
+                placeholder='{"message": "Hello, World!"}'
+                rows={4}
+                className="font-mono text-sm"
+              />
+            ) : (
+              <div className="space-y-2">
+                {bodyFields.map((f, i) => (
+                  <div key={i} className="flex gap-2">
+                    <Input
+                      value={f.key}
+                      onChange={(e) => setBodyFields((prev) => prev.map((item, idx) => idx === i ? { ...item, key: e.target.value } : item))}
+                      placeholder="field"
+                      className="flex-1 text-xs"
+                    />
+                    <Input
+                      value={f.value}
+                      onChange={(e) => setBodyFields((prev) => prev.map((item, idx) => idx === i ? { ...item, value: e.target.value } : item))}
+                      placeholder="value"
+                      className="flex-1 text-xs"
+                    />
+                    <Button variant="ghost" size="icon-sm" onClick={() => setBodyFields((prev) => prev.filter((_, idx) => idx !== i))}>
+                      <Trash2 className="w-3 h-3 text-destructive" />
+                    </Button>
+                  </div>
+                ))}
+                <Button variant="outline" size="sm" onClick={() => setBodyFields((prev) => [...prev, { key: '', value: '' }])}>
+                  <Plus className="w-3 h-3 mr-1" /> Add Field
+                </Button>
+              </div>
+            )}
           </div>
         )}
 

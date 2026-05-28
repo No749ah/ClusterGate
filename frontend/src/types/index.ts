@@ -55,6 +55,7 @@ export interface Route {
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string
   upstreamAuthHeader?: string
+  targetType?: 'GENERIC' | 'N8N'
 
   // Header rules
   addHeaders: Record<string, string>
@@ -153,6 +154,8 @@ export interface ApiKey {
   name: string
   isActive: boolean
   lastUsedAt: string | null
+  lastUsedIp?: string | null
+  usageCount?: number
   expiresAt: string | null
   createdAt: string
 }
@@ -222,6 +225,7 @@ export interface RouteFormData {
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string
   upstreamAuthHeader?: string
+  targetType?: 'GENERIC' | 'N8N'
   addHeaders: Record<string, string>
   removeHeaders: string[]
   rewriteRules: RewriteRule[]

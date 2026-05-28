@@ -99,7 +99,9 @@ export async function proxyRequest(
     if (!signature) {
       throw AppError.unauthorized('Missing webhook signature')
     }
-    const body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+    const body = Buffer.isBuffer(req.body)
+      ? req.body.toString('utf8')
+      : typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
     if (!validateWebhookSignature(body, route.webhookSecret, signature)) {
       throw AppError.unauthorized('Invalid webhook signature')
     }
@@ -196,10 +198,17 @@ export async function proxyRequest(
   forwardHeaders['X-ClusterGate-Route-ID'] = route.id
   forwardHeaders['X-Request-ID'] = requestId
 
-  // Get request body
+  // Get request body. For proxy routes req.body is the raw Buffer (any content
+  // type passes through unchanged); the management API delivers parsed objects.
   let requestBody: any = undefined
   if (req.body && ['POST', 'PUT', 'PATCH'].includes(req.method)) {
-    requestBody = typeof req.body === 'string' ? req.body : JSON.stringify(req.body)
+    if (Buffer.isBuffer(req.body)) {
+      requestBody = req.body.length > 0 ? req.body : undefined
+    } else if (typeof req.body === 'string') {
+      requestBody = req.body
+    } else {
+      requestBody = JSON.stringify(req.body)
+    }
   }
 
   // ---- Apply request transforms ----
@@ -208,7 +217,8 @@ export async function proxyRequest(
     let parsedBody: unknown = undefined
     if (requestBody) {
       try {
-        parsedBody = JSON.parse(typeof requestBody === 'string' ? requestBody : '{}')
+        const asText = Buffer.isBuffer(requestBody) ? requestBody.toString('utf8') : requestBody
+        parsedBody = JSON.parse(typeof asText === 'string' ? asText : '{}')
       } catch {
         // Non-JSON body (form-encoded, plain text, binary) — leave undefined so
         // body transforms are skipped rather than failing the whole request.
@@ -507,7 +517,7 @@ async function validateRouteAuth(route: Route, req: Request): Promise<void> {
     if (!apiKey) {
       throw AppError.unauthorized('API key required — provide it via the X-API-Key header')
     }
-    const ok = await validateApiKey(apiKey, route.id)
+    const ok = await validateApiKey(apiKey, route.id, req.ip || req.socket?.remoteAddress)
     if (!ok) {
       throw AppError.unauthorized('Invalid API key — generate one for this route and send it via the X-API-Key header')
     }
