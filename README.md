@@ -42,15 +42,20 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services under `/r/` prefix
 - **Route Management** — Create, test, publish, version, duplicate, import/export routes via UI
 - **WebSocket Proxy** — Native WebSocket upgrade support via `http-proxy` for WS/WSS routes
-- **Load Balancing** — Round-robin, weighted, and failover strategies with multiple targets per route
+- **Load Balancing** — Round-robin (shared across replicas), weighted, and failover strategies with multiple targets per route
 - **Circuit Breaker** — Automatic failure detection (CLOSED/OPEN/HALF_OPEN) with configurable thresholds
+- **Response & Request Streaming** — Per-route response streaming (SSE / chunked / n8n token streams) and optional unbuffered request streaming for large uploads; non-JSON bodies pass through unchanged
+- **Per-Route API Keys** — Generate scoped (read-only/full), expiring keys with usage + last-IP tracking; revoke/regenerate; sent via `X-API-Key`. Optional global "require API key by default" policy
+- **Upstream Authentication** — Forward a key/token the target needs (e.g. n8n) with a one-click connection test before saving; n8n targets are auto-detected (chatInput + sessionId)
 - **Route Groups** — Organize routes with shared path prefixes and inherited default settings
 - **Request/Response Transforms** — Set/remove headers, rewrite JSON bodies, map status codes, modify query params
-- **Multi-Tenant** — Organizations with teams, role-based membership (Owner/Admin/Member), route scoping
-- **Two-Factor Authentication** — TOTP-based 2FA with recovery codes for user accounts
-- **Analytics Dashboard** — Latency trends (p50/p95/p99), error rates, traffic heatmap, status distribution
-- **Security** — JWT auth (httpOnly cookies, 7-day sessions), bcrypt, CSRF protection (double-submit cookie), session revocation (tokenVersion), per-route auth (API key / Basic / Bearer), rate limiting, IP allowlists, webhook secrets, CORS, password policy enforcement
-- **Monitoring** — Paginated request logs, error tracking, Prometheus metrics, automated health checks
+- **Multi-Tenant** — Organizations with teams, role-based membership (Owner/Admin/Member), route + analytics scoping
+- **Two-Factor Authentication** — TOTP-based 2FA with recovery codes, single-use login token, and per-user brute-force lockout
+- **Analytics Dashboard** — Latency trends (p50/p95/p99), error rates, traffic heatmap, status distribution (org-scoped for non-admins)
+- **Security** — JWT auth (httpOnly cookies), bcrypt, CSRF (double-submit cookie), session revocation (tokenVersion), generated per-route API keys / Basic / Bearer, **route secrets encrypted at rest (AES-256-GCM)**, HA rate limiting, IP allowlists, webhook secrets, CORS, SSRF guard, password policy
+- **Configurable Health Checks** — Per-route method/path/body (POST + body works for n8n); auto HTTPS→HTTP fallback
+- **Automatic Migrations** — Pending DB migrations applied on startup (Helm, raw manifests, and self-update)
+- **Monitoring** — Paginated request logs (bodies redacted for VIEWER), error tracking, Prometheus metrics, automated health checks, in-app notifications (dismissible) incl. API-key expiry warnings
 - **Database Backups** — Create, download, restore, and manage backups from the UI (Prisma-based JSON export, no pg_dump needed)
 - **API Documentation** — Interactive Swagger/OpenAPI docs at `/api/docs`
 - **Incident Management** — Auto-detection from health checks and circuit breaker, timeline, severity levels, manual creation
@@ -105,10 +110,9 @@ cp .env.example .env
 
 ```bash
 docker compose up -d
-
-# Wait for postgres to be healthy, then run migrations:
-docker compose exec backend npm run db:migrate
 ```
+
+> Database migrations run **automatically** on backend startup (`AUTO_MIGRATE=true`). To apply them manually instead, set `AUTO_MIGRATE=false` and run `docker compose exec backend npm run db:migrate`.
 
 ### 3. Open the UI
 
@@ -214,13 +218,14 @@ Public Request
         +-- Check: maintenance mode
         +-- Check: IP allowlist
         +-- Check: rate limit (if enabled)
-        +-- Enforce: route-level auth (API key / Basic / Bearer)
+        +-- Enforce: route-level auth (generated API key / Basic / Bearer)
         +-- Validate: webhook secret (if configured)
         +-- Apply: request transforms (headers, query params, body)
         +-- Apply: header add/remove rules
+        +-- Inject: upstream auth (decrypted at use)
         +-- Apply: path rewrite rules
         +-- Select target (load balancer: round-robin/weighted/failover)
-        +-- Forward to target URL (or WebSocket upgrade)
+        +-- Forward to target URL — buffered or streamed (or WebSocket upgrade)
               |
               v
         n8n.default.svc.cluster.local/webhook/xyz
@@ -238,19 +243,32 @@ Public Request
 
 ### Environment Variables (Backend)
 
-| Variable              | Required | Default   | Description                          |
-|-----------------------|----------|-----------|--------------------------------------|
-| `DATABASE_URL`        | Yes      | —         | PostgreSQL connection string         |
-| `JWT_SECRET`          | Yes      | —         | JWT signing secret (min 32 chars)    |
-| `JWT_EXPIRES_IN`      | No       | `7d`      | JWT token lifetime                   |
-| `PORT`                | No       | `3001`    | Backend HTTP port                    |
-| `NODE_ENV`            | No       | `development` | Environment                     |
-| `ALLOWED_ORIGINS`     | No       | `http://localhost:3000` | CORS origins (comma-sep) |
-| `PROXY_TIMEOUT`       | No       | `30000`   | Proxy timeout in ms                  |
-| `LOG_LEVEL`           | No       | `info`    | Winston log level                    |
-| `METRICS_ENABLED`     | No       | `true`    | Enable Prometheus metrics            |
-| `METRICS_SECRET`      | No       | —         | Secret for /metrics endpoint         |
-| `LOG_RETENTION_DAYS`  | No       | `90`      | Days to keep request logs            |
+| Variable                | Required | Default   | Description                          |
+|-------------------------|----------|-----------|--------------------------------------|
+| `DATABASE_URL`          | Yes      | —         | PostgreSQL connection string         |
+| `JWT_SECRET`            | Yes      | —         | JWT signing secret (min 32 chars)    |
+| `JWT_EXPIRES_IN`        | No       | `7d`      | JWT token lifetime                   |
+| `ENCRYPTION_KEY`        | No       | derived from `JWT_SECRET` | Key for encrypting route secrets at rest (AES-256-GCM). Keep stable; required to restore secret backups across instances |
+| `PORT`                  | No       | `3001`    | Backend HTTP port                    |
+| `NODE_ENV`              | No       | `development` | Environment                     |
+| `ALLOWED_ORIGINS`       | No       | `http://localhost:3000` | CORS origins (comma-sep) |
+| `TRUST_PROXY`           | No       | `1`       | Trusted proxy hops, or `false` for direct internet exposure (prevents `X-Forwarded-For` spoofing of IP allowlists / rate limits) |
+| `AUTO_MIGRATE`          | No       | `true`    | Apply pending DB migrations on startup |
+| `PROXY_TIMEOUT`         | No       | `30000`   | Proxy timeout in ms                  |
+| `PROXY_BODY_LIMIT`      | No       | `50mb`    | Max proxied request body size (raw passthrough) |
+| `PROXY_STREAM_REQUESTS` | No       | `false`   | Stream request bodies unbuffered to the target (large uploads) |
+| `LOG_LEVEL`             | No       | `info`    | Winston log level                    |
+| `METRICS_ENABLED`       | No       | `true`    | Enable Prometheus metrics            |
+| `METRICS_SECRET`        | No       | —         | Secret for /metrics endpoint         |
+| `RATE_LIMIT_WINDOW_MS`  | No       | `60000`   | Global API rate-limit window         |
+| `RATE_LIMIT_MAX`        | No       | `100`     | Global API requests per window       |
+| `AUTH_RATE_LIMIT_MAX`   | No       | `10`      | Auth endpoint requests per window    |
+| `LOG_RETENTION_DAYS`    | No       | `90`      | Days to keep request logs            |
+| `BACKUP_CRON_ENABLED`   | No       | `false`   | Enable scheduled DB backups          |
+| `BACKUP_CRON_SCHEDULE`  | No       | `0 3 * * *` | Backup cron schedule               |
+| `BACKUP_RETENTION_COUNT`| No       | `10`      | Backups to retain                    |
+
+> Per-route rate limiting is backed by Postgres so limits are correct across replicas (HA). Route secrets (auth values, upstream credentials, webhook secrets) are encrypted at rest.
 
 ---
 
@@ -344,6 +362,9 @@ GET    /api/routes/:id/uptime      Uptime statistics
 POST   /api/routes/import          Import routes JSON
 GET    /api/routes/export          Export routes JSON
 GET    /api/routes/check-path      Check if public path is available
+POST   /api/routes/test-connection Probe a target before saving (n8n-aware)
+GET    /api/routes/api-key-policy   Get global "require API key" policy
+PUT    /api/routes/api-key-policy   Set global "require API key" policy (admin)
 ```
 
 #### Analytics
@@ -426,11 +447,12 @@ DELETE /api/organizations/:oid/teams/:tid/members/:uid  Remove team member
 
 #### API Keys
 ```
-GET    /api/routes/:id/api-keys          List API keys for route
-POST   /api/routes/:id/api-keys          Create API key
+GET    /api/routes/:id/api-keys          List API keys (with usage + scope)
+POST   /api/routes/:id/api-keys          Create API key (name, expiry, scope)
 POST   /api/routes/:id/api-keys/:kid/revoke  Revoke API key
 DELETE /api/routes/:id/api-keys/:kid     Delete API key
 ```
+Generated keys are hashed at rest, scoped (`READ`/`FULL`), optionally expiring, and authenticate inbound proxy requests via the `X-API-Key` header.
 
 #### Backups
 ```
@@ -461,6 +483,7 @@ GET    /api/change-requests/:id          Get change request details
 POST   /api/change-requests              Create change request
 POST   /api/change-requests/:id/approve  Approve and apply
 POST   /api/change-requests/:id/reject   Reject with comment
+DELETE /api/change-requests/:id          Delete a resolved change request (admin)
 ```
 
 #### Achievements
@@ -485,6 +508,8 @@ GET    /api/notifications            List notifications
 GET    /api/notifications/count      Unread notification count
 POST   /api/notifications/:id/read   Mark notification as read
 POST   /api/notifications/read-all   Mark all as read
+DELETE /api/notifications/:id        Dismiss a notification
+DELETE /api/notifications            Clear all read notifications
 ```
 
 #### System
@@ -590,11 +615,17 @@ ClusterGate supports TOTP-based two-factor authentication:
 - **Password policy** — Min 8 chars, uppercase, lowercase, number, special character (enforced on all forms)
 - **API versioning** — `X-API-Version: 1` header on all responses
 
+### Secrets at Rest
+
+Route secrets — inbound auth values, upstream credentials, and webhook secrets — are encrypted with **AES-256-GCM** before being stored, using `ENCRYPTION_KEY` (or a key derived from `JWT_SECRET` if unset) and decrypted only at point of use. Generated API keys are stored as SHA-256 hashes. Keep `ENCRYPTION_KEY` stable: changing it makes existing secrets unreadable, and the same value is required to restore a backup containing secrets onto a different instance (undecryptable secrets are cleared on restore with a warning).
+
 ### Production Checklist
 
 - [ ] Create a strong admin password via the setup wizard
 - [ ] Enable 2FA for all admin accounts
 - [ ] Set a strong `JWT_SECRET` (min 64 chars, random)
+- [ ] Set a dedicated `ENCRYPTION_KEY` (kept stable; same value needed to restore secret backups elsewhere)
+- [ ] Set `TRUST_PROXY=false` if ClusterGate is exposed directly to the internet (no ingress/LB in front)
 - [ ] Set a strong `POSTGRES_PASSWORD`
 - [ ] Enable TLS via cert-manager or bring your own certs
 - [ ] Apply NetworkPolicies (`k8s/ingress/networkpolicy.yaml`)
