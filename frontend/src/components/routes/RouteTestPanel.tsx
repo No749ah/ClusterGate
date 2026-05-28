@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Play, Loader2, Copy, Check, ChevronDown, ChevronUp, Plus, Trash2, ShieldCheck } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Play, Loader2, Copy, Check, ChevronDown, ChevronUp, Plus, Trash2, ShieldCheck, Save } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -87,6 +87,62 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
     return Object.keys(obj).length ? JSON.stringify(obj) : undefined
   }
   const [headers, setHeaders] = useState<{ key: string; value: string }[]>([])
+
+  // Saved test requests (persisted per route in localStorage)
+  type SavedRequest = {
+    name: string
+    method: string
+    path: string
+    headers: { key: string; value: string }[]
+    bodyMode: 'json' | 'fields'
+    body: string
+    bodyFields: { key: string; value: string }[]
+  }
+  const storageKey = `clustergate-test-requests-${routeId}`
+  const [savedRequests, setSavedRequests] = useState<SavedRequest[]>([])
+  const [saveName, setSaveName] = useState('')
+  const [selectedSaved, setSelectedSaved] = useState('')
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (raw) setSavedRequests(JSON.parse(raw))
+    } catch { /* ignore */ }
+  }, [storageKey])
+
+  const persistSaved = (list: SavedRequest[]) => {
+    setSavedRequests(list)
+    try { localStorage.setItem(storageKey, JSON.stringify(list)) } catch { /* ignore */ }
+  }
+
+  const saveCurrentRequest = () => {
+    const name = saveName.trim()
+    if (!name) return
+    const entry: SavedRequest = { name, method, path, headers, bodyMode, body, bodyFields }
+    const list = [...savedRequests.filter((r) => r.name !== name), entry]
+    persistSaved(list)
+    setSaveName('')
+    setSelectedSaved(name)
+  }
+
+  const loadSavedRequest = (name: string) => {
+    const r = savedRequests.find((s) => s.name === name)
+    if (!r) return
+    setSelectedSaved(name)
+    setMethod(r.method)
+    setPath(r.path)
+    setHeaders(r.headers ?? [])
+    setBodyMode(r.bodyMode ?? 'fields')
+    setBody(r.body ?? '')
+    setBodyFields(r.bodyFields ?? [{ key: '', value: '' }])
+  }
+
+  const deleteSavedRequest = () => {
+    if (!selectedSaved) return
+    persistSaved(savedRequests.filter((r) => r.name !== selectedSaved))
+    setSelectedSaved('')
+  }
+
   const [result, setResult] = useState<TestResult | null>(null)
   const [showRequestHeaders, setShowRequestHeaders] = useState(false)
   const [showResponseHeaders, setShowResponseHeaders] = useState(false)
@@ -228,6 +284,34 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
     <div className="space-y-4">
       {/* Request config */}
       <div className="space-y-3">
+        {/* Saved requests */}
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={selectedSaved} onValueChange={loadSavedRequest}>
+            <SelectTrigger className="flex-1 min-w-[160px]">
+              <SelectValue placeholder={savedRequests.length ? 'Load saved request…' : 'No saved requests'} />
+            </SelectTrigger>
+            <SelectContent>
+              {savedRequests.map((r) => (
+                <SelectItem key={r.name} value={r.name}>{r.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {selectedSaved && (
+            <Button variant="ghost" size="icon-sm" title="Delete saved request" onClick={deleteSavedRequest}>
+              <Trash2 className="w-3.5 h-3.5 text-destructive" />
+            </Button>
+          )}
+          <Input
+            value={saveName}
+            onChange={(e) => setSaveName(e.target.value)}
+            placeholder="Save current as…"
+            className="flex-1 min-w-[140px] text-sm"
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); saveCurrentRequest() } }}
+          />
+          <Button variant="outline" size="sm" onClick={saveCurrentRequest} disabled={!saveName.trim()}>
+            <Save className="w-3.5 h-3.5 mr-1" /> Save
+          </Button>
+        </div>
         <div className="flex gap-2">
           <Select value={method} onValueChange={setMethod}>
             <SelectTrigger className="w-28">

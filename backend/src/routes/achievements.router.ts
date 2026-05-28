@@ -4,6 +4,25 @@ import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
+/**
+ * @openapi
+ * /api/achievements:
+ *   get:
+ *     tags: [Achievements]
+ *     summary: List achievements with unlock status
+ *     responses: { 200: { description: List of achievements } }
+ * /api/achievements/count:
+ *   get:
+ *     tags: [Achievements]
+ *     summary: Total and unlocked achievement counts
+ *     responses: { 200: { description: Counts } }
+ * /api/achievements/party:
+ *   post:
+ *     tags: [Achievements]
+ *     summary: Trigger the party-mode achievement
+ *     responses: { 200: { description: Triggered } }
+ */
+
 // Get current user's achievements
 router.get('/', authenticate, async (req, res, next) => {
   try {

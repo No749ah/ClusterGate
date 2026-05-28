@@ -7,6 +7,106 @@ import { achievementService } from '../services/achievementService'
 
 const router = Router()
 
+/**
+ * @openapi
+ * /api/organizations:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: List organizations the caller can see
+ *     responses: { 200: { description: List of organizations } }
+ *   post:
+ *     tags: [Organizations]
+ *     summary: Create an organization (admin)
+ *     responses: { 201: { description: Created } }
+ * /api/organizations/{id}:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Get organization details
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Organization } }
+ *   put:
+ *     tags: [Organizations]
+ *     summary: Update an organization (admin)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Updated } }
+ *   delete:
+ *     tags: [Organizations]
+ *     summary: Delete an organization (admin)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Deleted } }
+ * /api/organizations/{id}/members:
+ *   post:
+ *     tags: [Organizations]
+ *     summary: Add a member (admin/operator)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 201: { description: Added } }
+ * /api/organizations/{id}/members/{userId}:
+ *   put:
+ *     tags: [Organizations]
+ *     summary: Update a member's org role (admin/operator)
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *       - { in: path, name: userId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Updated } }
+ *   delete:
+ *     tags: [Organizations]
+ *     summary: Remove a member (admin)
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *       - { in: path, name: userId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Removed } }
+ * /api/organizations/{id}/teams:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: List teams in an organization
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: List of teams } }
+ *   post:
+ *     tags: [Organizations]
+ *     summary: Create a team (admin)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 201: { description: Created } }
+ * /api/organizations/{orgId}/teams/{teamId}:
+ *   get:
+ *     tags: [Organizations]
+ *     summary: Get a team
+ *     parameters:
+ *       - { in: path, name: orgId, required: true, schema: { type: string } }
+ *       - { in: path, name: teamId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Team } }
+ *   put:
+ *     tags: [Organizations]
+ *     summary: Update a team (admin)
+ *     parameters:
+ *       - { in: path, name: orgId, required: true, schema: { type: string } }
+ *       - { in: path, name: teamId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Updated } }
+ *   delete:
+ *     tags: [Organizations]
+ *     summary: Delete a team (admin)
+ *     parameters:
+ *       - { in: path, name: orgId, required: true, schema: { type: string } }
+ *       - { in: path, name: teamId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Deleted } }
+ * /api/organizations/{orgId}/teams/{teamId}/members:
+ *   post:
+ *     tags: [Organizations]
+ *     summary: Add a team member (admin)
+ *     parameters:
+ *       - { in: path, name: orgId, required: true, schema: { type: string } }
+ *       - { in: path, name: teamId, required: true, schema: { type: string } }
+ *     responses: { 201: { description: Added } }
+ * /api/organizations/{orgId}/teams/{teamId}/members/{userId}:
+ *   delete:
+ *     tags: [Organizations]
+ *     summary: Remove a team member (admin)
+ *     parameters:
+ *       - { in: path, name: orgId, required: true, schema: { type: string } }
+ *       - { in: path, name: teamId, required: true, schema: { type: string } }
+ *       - { in: path, name: userId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Removed } }
+ */
+
 const orgSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, 'Slug must be lowercase alphanumeric with hyphens'),

@@ -298,6 +298,15 @@ router.delete('/:filename', async (req: Request, res: Response, next: NextFuncti
   }
 })
 
+/**
+ * @openapi
+ * /api/backups/{filename}:
+ *   put:
+ *     tags: [Backups]
+ *     summary: Update backup metadata (tags, note)
+ *     parameters: [{ in: path, name: filename, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Updated } }
+ */
 // Update backup metadata (tags, note)
 router.put('/:filename', async (req: Request, res: Response, next: NextFunction) => {
   try {

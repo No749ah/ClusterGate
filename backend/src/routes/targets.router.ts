@@ -3,9 +3,41 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as lbService from '../services/loadBalancerService'
-import { achievementService } from '../services/achievementService'
 
 const router = Router()
+
+/**
+ * @openapi
+ * /api/routes/{routeId}/targets:
+ *   get:
+ *     tags: [Targets]
+ *     summary: List load-balancer targets for a route
+ *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: List of targets } }
+ *   post:
+ *     tags: [Targets]
+ *     summary: Add a target (admin/operator)
+ *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
+ *     requestBody:
+ *       required: true
+ *       content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string, format: uri }, weight: { type: integer }, priority: { type: integer } } } } }
+ *     responses: { 201: { description: Created } }
+ * /api/routes/{routeId}/targets/{targetId}:
+ *   put:
+ *     tags: [Targets]
+ *     summary: Update a target (admin/operator)
+ *     parameters:
+ *       - { in: path, name: routeId, required: true, schema: { type: string } }
+ *       - { in: path, name: targetId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Updated } }
+ *   delete:
+ *     tags: [Targets]
+ *     summary: Delete a target (admin)
+ *     parameters:
+ *       - { in: path, name: routeId, required: true, schema: { type: string } }
+ *       - { in: path, name: targetId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Deleted } }
+ */
 
 const targetSchema = z.object({
   url: z.string().url(),

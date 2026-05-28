@@ -6,6 +6,39 @@ import * as transformService from '../services/transformService'
 
 const router = Router()
 
+/**
+ * @openapi
+ * /api/routes/{routeId}/transforms:
+ *   get:
+ *     tags: [Transforms]
+ *     summary: List request/response transform rules for a route
+ *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: List of transform rules } }
+ *   post:
+ *     tags: [Transforms]
+ *     summary: Create a transform rule (admin/operator)
+ *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
+ *     requestBody:
+ *       required: true
+ *       content: { application/json: { schema: { type: object, properties: { phase: { type: string, enum: [REQUEST, RESPONSE] }, type: { type: string, enum: [SET_HEADER, REMOVE_HEADER, REWRITE_BODY_JSON, SET_QUERY_PARAM, REMOVE_QUERY_PARAM, MAP_STATUS_CODE] }, name: { type: string } } } } }
+ *     responses: { 201: { description: Created } }
+ * /api/routes/{routeId}/transforms/{ruleId}:
+ *   put:
+ *     tags: [Transforms]
+ *     summary: Update a transform rule (admin/operator)
+ *     parameters:
+ *       - { in: path, name: routeId, required: true, schema: { type: string } }
+ *       - { in: path, name: ruleId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Updated } }
+ *   delete:
+ *     tags: [Transforms]
+ *     summary: Delete a transform rule (admin)
+ *     parameters:
+ *       - { in: path, name: routeId, required: true, schema: { type: string } }
+ *       - { in: path, name: ruleId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Deleted } }
+ */
+
 const transformRuleSchema = z.object({
   phase: z.enum(['REQUEST', 'RESPONSE']),
   type: z.enum(['SET_HEADER', 'REMOVE_HEADER', 'REWRITE_BODY_JSON', 'SET_QUERY_PARAM', 'REMOVE_QUERY_PARAM', 'MAP_STATUS_CODE']),

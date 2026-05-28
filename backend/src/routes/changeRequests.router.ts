@@ -8,6 +8,54 @@ import { prisma } from '../lib/prisma'
 
 const router = Router()
 
+/**
+ * @openapi
+ * /api/change-requests:
+ *   get:
+ *     tags: [Change Requests]
+ *     summary: List change requests (filter by status/route/requester)
+ *     responses: { 200: { description: Paginated change requests } }
+ *   post:
+ *     tags: [Change Requests]
+ *     summary: Create a change request (admin/operator)
+ *     responses: { 201: { description: Created } }
+ * /api/change-requests/pending-count:
+ *   get:
+ *     tags: [Change Requests]
+ *     summary: Number of pending change requests
+ *     responses: { 200: { description: Count } }
+ * /api/change-requests/check/{routeId}:
+ *   get:
+ *     tags: [Change Requests]
+ *     summary: Whether a change request is required for a route
+ *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Requirement flag } }
+ * /api/change-requests/policy/{routeId}:
+ *   get:
+ *     tags: [Change Requests]
+ *     summary: Effective CR policy for a route (+ caller permissions)
+ *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Policy } }
+ * /api/change-requests/{id}:
+ *   get:
+ *     tags: [Change Requests]
+ *     summary: Get a change request
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Change request }, 404: { description: Not found } }
+ * /api/change-requests/{id}/approve:
+ *   post:
+ *     tags: [Change Requests]
+ *     summary: Approve and apply a change request
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Applied }, 403: { description: Not permitted } }
+ * /api/change-requests/{id}/reject:
+ *   post:
+ *     tags: [Change Requests]
+ *     summary: Reject a change request
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Rejected }, 403: { description: Not permitted } }
+ */
+
 // List change requests
 router.get('/', authenticate, async (req, res, next) => {
   try {

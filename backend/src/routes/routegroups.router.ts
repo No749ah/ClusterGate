@@ -6,6 +6,50 @@ import * as routeGroupService from '../services/routeGroupService'
 
 const router = Router()
 
+/**
+ * @openapi
+ * /api/route-groups:
+ *   get:
+ *     tags: [Route Groups]
+ *     summary: List route groups
+ *     responses: { 200: { description: List of route groups } }
+ *   post:
+ *     tags: [Route Groups]
+ *     summary: Create a route group (admin/operator)
+ *     responses: { 201: { description: Created } }
+ * /api/route-groups/{id}:
+ *   get:
+ *     tags: [Route Groups]
+ *     summary: Get a route group
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Route group } }
+ *   put:
+ *     tags: [Route Groups]
+ *     summary: Update a route group (admin/operator)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Updated } }
+ *   delete:
+ *     tags: [Route Groups]
+ *     summary: Delete a route group (admin)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Deleted } }
+ * /api/route-groups/{id}/routes/{routeId}:
+ *   post:
+ *     tags: [Route Groups]
+ *     summary: Assign a route to a group (admin/operator)
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *       - { in: path, name: routeId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Assigned } }
+ *   delete:
+ *     tags: [Route Groups]
+ *     summary: Remove a route from a group (admin/operator)
+ *     parameters:
+ *       - { in: path, name: id, required: true, schema: { type: string } }
+ *       - { in: path, name: routeId, required: true, schema: { type: string } }
+ *     responses: { 200: { description: Removed } }
+ */
+
 const routeGroupSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),

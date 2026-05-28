@@ -10,6 +10,22 @@ const router = Router()
 
 /**
  * @openapi
+ * /api/users/{id}/restore:
+ *   post:
+ *     tags: [Users]
+ *     summary: Restore a soft-deleted user (admin)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Restored }, 404: { description: Not found } }
+ * /api/users/{id}/disable-2fa:
+ *   post:
+ *     tags: [Users]
+ *     summary: Disable a user's two-factor auth (admin)
+ *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
+ *     responses: { 200: { description: Disabled }, 404: { description: Not found } }
+ */
+
+/**
+ * @openapi
  * /api/users:
  *   get:
  *     tags: [Users]
