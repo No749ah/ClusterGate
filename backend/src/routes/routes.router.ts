@@ -9,7 +9,10 @@ import { proxyRequest } from '../services/proxyService'
 import { createAuditLog } from '../services/auditService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
-import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync } from '../lib/security'
+import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync, isTlsProtocolMismatch, safeLookup } from '../lib/security'
+import axios, { AxiosError } from 'axios'
+import https from 'https'
+import http from 'http'
 import { achievementService } from '../services/achievementService'
 import { changeRequestService } from '../services/changeRequestService'
 import { getUserOrgIds, canManageRoute, canManageOrgRoutes, canDeleteRoute } from '../services/orgAccessService'
@@ -42,6 +45,9 @@ const routeBodySchema = z.object({
   requireAuth: z.boolean().default(false),
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   authValue: z.string().optional(),
+  upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
+  upstreamAuthValue: z.string().optional(),
+  upstreamAuthHeader: z.string().default('X-API-Key'),
   webhookSecret: z.string().optional(),
   rateLimitEnabled: z.boolean().default(false),
   rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
@@ -232,6 +238,118 @@ router.get('/check-path', authenticate, async (req, res, next) => {
         existingRoute: existing ? { id: existing.id, name: existing.name } : null,
       },
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Detect n8n targets — their chat/webhook endpoints require chatInput + sessionId
+function looksLikeN8n(targetUrl: string): boolean {
+  try {
+    const u = new URL(targetUrl)
+    return /(^|\.)n8n\./i.test(u.hostname) || /n8n/i.test(u.hostname) || u.pathname.includes('/webhook/')
+  } catch {
+    return false
+  }
+}
+
+// Test connectivity to an (unsaved) target with optional upstream auth. Used by
+// the route form's "Test connection" button before saving.
+router.post('/test-connection', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+  try {
+    const schema = z.object({
+      targetUrl: z.string().url(),
+      method: z.string().default('POST'),
+      sslVerify: z.boolean().default(true),
+      upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
+      upstreamAuthValue: z.string().optional(),
+      upstreamAuthHeader: z.string().default('X-API-Key'),
+      body: z.any().optional(),
+    })
+    const cfg = schema.parse(req.body)
+
+    try {
+      validateTargetUrlSync(cfg.targetUrl)
+    } catch (err) {
+      return res.json({ success: true, data: { ok: false, status: 403, error: `SSRF blocked: ${(err as Error).message}` } })
+    }
+
+    const headers: Record<string, string> = { 'content-type': 'application/json' }
+    if (cfg.upstreamAuthType !== 'NONE' && cfg.upstreamAuthValue) {
+      if (cfg.upstreamAuthType === 'BEARER') headers['Authorization'] = `Bearer ${cfg.upstreamAuthValue}`
+      else if (cfg.upstreamAuthType === 'BASIC') headers['Authorization'] = `Basic ${cfg.upstreamAuthValue}`
+      else if (cfg.upstreamAuthType === 'API_KEY') headers[cfg.upstreamAuthHeader || 'X-API-Key'] = cfg.upstreamAuthValue
+    }
+
+    const isN8n = looksLikeN8n(cfg.targetUrl)
+    // n8n chat endpoints reject requests without chatInput + sessionId
+    let data = cfg.body
+    if (isN8n) {
+      data = { chatInput: 'ClusterGate connection test', sessionId: `clustergate-test-${Date.now()}`, ...(data || {}) }
+    }
+
+    const makeReq = (url: string) => axios({
+      method: cfg.method as any,
+      url,
+      headers,
+      data: data !== undefined ? data : undefined,
+      timeout: 15000,
+      maxRedirects: 0,
+      validateStatus: () => true,
+      httpsAgent: new https.Agent({ rejectUnauthorized: cfg.sslVerify !== false, lookup: safeLookup }),
+      httpAgent: new http.Agent({ lookup: safeLookup }),
+    })
+
+    const start = Date.now()
+    let response: any
+    try {
+      response = await makeReq(cfg.targetUrl)
+    } catch (err) {
+      if (isTlsProtocolMismatch(err) && cfg.targetUrl.startsWith('https://')) {
+        response = await makeReq('http://' + cfg.targetUrl.slice('https://'.length))
+      } else if ((err as AxiosError).response) {
+        response = (err as AxiosError).response
+      } else {
+        return res.json({ success: true, data: { ok: false, error: (err as Error).message, detectedTool: isN8n ? 'n8n' : 'generic' } })
+      }
+    }
+
+    const duration = Date.now() - start
+    res.json({
+      success: true,
+      data: {
+        ok: response.status < 500,
+        status: response.status,
+        duration,
+        detectedTool: isN8n ? 'n8n' : 'generic',
+        hint: isN8n ? 'n8n detected — chatInput and sessionId are sent automatically' : undefined,
+      },
+    })
+  } catch (err) {
+    next(err)
+  }
+})
+
+// Global API-key policy — whether new routes require an API key by default.
+router.get('/api-key-policy', authenticate, async (_req, res, next) => {
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'apiKeyPolicy' } })
+    const forceApiKeys = row?.value ? (row.value as any).forceApiKeys !== false : true
+    res.json({ success: true, data: { forceApiKeys } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.put('/api-key-policy', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    const { forceApiKeys } = z.object({ forceApiKeys: z.boolean() }).parse(req.body)
+    await prisma.systemSetting.upsert({
+      where: { key: 'apiKeyPolicy' },
+      create: { key: 'apiKeyPolicy', value: { forceApiKeys } },
+      update: { value: { forceApiKeys } },
+    })
+    res.json({ success: true, data: { forceApiKeys } })
   } catch (err) {
     next(err)
   }

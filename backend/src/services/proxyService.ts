@@ -4,6 +4,7 @@ import http from 'http'
 import { Request, Response } from 'express'
 import { createHmac, timingSafeEqual } from 'crypto'
 import { validateWebhookSignature, isSafeRegex, safeLookup, isTlsProtocolMismatch } from '../lib/security'
+import { validateApiKey } from './apiKeyService'
 import { Route, RouteTarget, TransformRule } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
@@ -89,7 +90,7 @@ export async function proxyRequest(
 
   // Enforce ClusterGate-level authentication
   if ((route as any).requireAuth && (route as any).authType !== 'NONE') {
-    validateRouteAuth(route, req)
+    await validateRouteAuth(route, req)
   }
 
   // Validate webhook secret (timing-safe comparison)
@@ -177,6 +178,15 @@ export async function proxyRequest(
   for (const header of route.removeHeaders) {
     delete forwardHeaders[header.toLowerCase()]
     delete forwardHeaders[header]
+  }
+
+  // Upstream auth — inject the credential the target (e.g. n8n) requires
+  const uType = (route as any).upstreamAuthType as string | undefined
+  const uVal = (route as any).upstreamAuthValue as string | null
+  if (uType && uType !== 'NONE' && uVal) {
+    if (uType === 'BEARER') forwardHeaders['Authorization'] = `Bearer ${uVal}`
+    else if (uType === 'BASIC') forwardHeaders['Authorization'] = `Basic ${uVal}`
+    else if (uType === 'API_KEY') forwardHeaders[(route as any).upstreamAuthHeader || 'X-API-Key'] = uVal
   }
 
   // Set proxy identification headers
@@ -486,25 +496,29 @@ function safeEqual(a: string, b: string): boolean {
   return timingSafeEqual(bufA, bufB)
 }
 
-function validateRouteAuth(route: Route, req: Request): void {
+async function validateRouteAuth(route: Route, req: Request): Promise<void> {
   const authType = (route as any).authType as string
   const authValue = (route as any).authValue as string | null
+
+  // API key auth is satisfied by route-scoped generated keys (hashed, with
+  // expiry + usage tracking) — not the legacy static value.
+  if (authType === 'API_KEY') {
+    const apiKey = req.get('X-API-Key')
+    if (!apiKey) {
+      throw AppError.unauthorized('API key required — provide it via the X-API-Key header')
+    }
+    const ok = await validateApiKey(apiKey, route.id)
+    if (!ok) {
+      throw AppError.unauthorized('Invalid API key — generate one for this route and send it via the X-API-Key header')
+    }
+    return
+  }
 
   if (!authValue) {
     throw AppError.internal('Route requires authentication but no auth value is configured')
   }
 
   switch (authType) {
-    case 'API_KEY': {
-      const apiKey = req.get('X-API-Key')
-      if (!apiKey) {
-        throw AppError.unauthorized('API key required — provide it via the X-API-Key header')
-      }
-      if (!safeEqual(apiKey, authValue)) {
-        throw AppError.unauthorized('Invalid API key — provide a valid key via the X-API-Key header')
-      }
-      break
-    }
     case 'BASIC': {
       const authHeader = req.get('Authorization')
       if (!authHeader || !authHeader.startsWith('Basic ')) {

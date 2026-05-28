@@ -271,6 +271,10 @@ model Route {
   requireAuth  Boolean      @default(false)
   authType     AuthType     @default(NONE)
   authValue    String?
+  // Upstream (ClusterGate -> target) auth, e.g. a key the target like n8n needs
+  upstreamAuthType   AuthType @default(NONE)
+  upstreamAuthValue  String?
+  upstreamAuthHeader String?  @default("X-API-Key")
   webhookSecret String?
 
   // Maintenance

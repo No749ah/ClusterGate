@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Switch } from '@/components/ui/switch'
 import { Separator } from '@/components/ui/separator'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import {
@@ -94,6 +95,7 @@ export default function SettingsPage() {
   const [cleaningAuditLogs, setCleaningAuditLogs] = useState(false)
   const [exportingAuditLogs, setExportingAuditLogs] = useState(false)
   const [forcingLogout, setForcingLogout] = useState(false)
+  const [forceApiKeys, setForceApiKeys] = useState<boolean | null>(null)
 
   // Redirect non-admins to account page
   useEffect(() => {
@@ -117,7 +119,21 @@ export default function SettingsPage() {
     api.system.updateStatus().then((res) => {
       if (res.data) setUpdateInfo(res.data)
     }).catch(() => {})
+    api.routes.getApiKeyPolicy().then((res) => {
+      if (res.data) setForceApiKeys(res.data.forceApiKeys)
+    }).catch(() => {})
   }, [user?.role])
+
+  const handleToggleForceApiKeys = async (value: boolean) => {
+    setForceApiKeys(value)
+    try {
+      await api.routes.setApiKeyPolicy(value)
+      toast.success(value ? 'New routes will require an API key by default' : 'API key default disabled')
+    } catch {
+      setForceApiKeys(!value)
+      toast.error('Failed to update API key policy')
+    }
+  }
 
   const fetchStats = async () => {
     setLoadingStats(true)
@@ -500,6 +516,27 @@ export default function SettingsPage() {
       </Card>
 
       {/* Maintenance Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Shield className="w-4 h-4" /> Security
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
+            <div>
+              <p className="text-sm font-medium">Require API key by default</p>
+              <p className="text-xs text-muted-foreground">New routes default to requiring an API key (can be disabled per route)</p>
+            </div>
+            <Switch
+              checked={forceApiKeys ?? true}
+              disabled={forceApiKeys === null}
+              onCheckedChange={handleToggleForceApiKeys}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">

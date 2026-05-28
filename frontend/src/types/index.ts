@@ -52,6 +52,9 @@ export interface Route {
   sslVerify: boolean
   streamResponse: boolean
   requestBodyLimit: string
+  upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
+  upstreamAuthValue?: string
+  upstreamAuthHeader?: string
 
   // Header rules
   addHeaders: Record<string, string>
@@ -216,6 +219,9 @@ export interface RouteFormData {
   sslVerify: boolean
   streamResponse?: boolean
   requestBodyLimit: string
+  upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
+  upstreamAuthValue?: string
+  upstreamAuthHeader?: string
   addHeaders: Record<string, string>
   removeHeaders: string[]
   rewriteRules: RewriteRule[]

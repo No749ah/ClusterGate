@@ -233,7 +233,7 @@ export function validateWebhookSignature(
 // Sensitive Field Stripping
 // =============================================================================
 
-const SENSITIVE_ROUTE_FIELDS = ['authValue', 'webhookSecret'] as const
+const SENSITIVE_ROUTE_FIELDS = ['authValue', 'webhookSecret', 'upstreamAuthValue'] as const
 
 /**
  * Strip sensitive fields from a route object for non-admin responses.

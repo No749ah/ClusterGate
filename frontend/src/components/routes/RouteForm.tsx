@@ -39,6 +39,9 @@ const routeSchema = z.object({
   requireAuth: z.boolean().default(false),
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   authValue: z.string().optional(),
+  upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
+  upstreamAuthValue: z.string().optional(),
+  upstreamAuthHeader: z.string().default('X-API-Key'),
   webhookSecret: z.string().optional(),
   rateLimitEnabled: z.boolean().default(false),
   rateLimitMax: z.coerce.number().int().min(1).max(100000).default(100),
@@ -122,6 +125,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       requireAuth: defaultValues?.requireAuth ?? false,
       authType: defaultValues?.authType ?? 'NONE',
       authValue: defaultValues?.authValue ?? '',
+      upstreamAuthType: defaultValues?.upstreamAuthType ?? 'NONE',
+      upstreamAuthValue: defaultValues?.upstreamAuthValue ?? '',
+      upstreamAuthHeader: defaultValues?.upstreamAuthHeader ?? 'X-API-Key',
       webhookSecret: defaultValues?.webhookSecret ?? '',
       rateLimitEnabled: defaultValues?.rateLimitEnabled ?? false,
       rateLimitMax: defaultValues?.rateLimitMax ?? 100,
@@ -165,10 +171,47 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const maintenanceMode = watch('maintenanceMode')
   const circuitBreakerEnabled = watch('circuitBreakerEnabled')
   const authType = watch('authType')
+  const upstreamAuthType = watch('upstreamAuthType')
   const publicPath = watch('publicPath')
   const [wildcardEnabled, setWildcardEnabled] = useState(
     defaultValues?.publicPath?.endsWith('/*') ?? false
   )
+
+  // Test connection state
+  const [testingConn, setTestingConn] = useState(false)
+  const [connResult, setConnResult] = useState<{ ok: boolean; status?: number; error?: string; detectedTool?: string; hint?: string } | null>(null)
+
+  const handleTestConnection = async () => {
+    setTestingConn(true)
+    setConnResult(null)
+    try {
+      const res = await api.routes.testConnection({
+        targetUrl: form.getValues('targetUrl'),
+        method: 'POST',
+        sslVerify: form.getValues('sslVerify'),
+        upstreamAuthType: form.getValues('upstreamAuthType'),
+        upstreamAuthValue: form.getValues('upstreamAuthValue') || undefined,
+        upstreamAuthHeader: form.getValues('upstreamAuthHeader'),
+      })
+      setConnResult(res.data)
+    } catch (err) {
+      setConnResult({ ok: false, error: (err as Error).message })
+    } finally {
+      setTestingConn(false)
+    }
+  }
+
+  // Default new routes to requiring an API key when the global policy forces it
+  useEffect(() => {
+    if (!isNew) return
+    api.routes.getApiKeyPolicy().then((res) => {
+      if (res.data?.forceApiKeys && !form.getValues('requireAuth')) {
+        setValue('requireAuth', true)
+        setValue('authType', 'API_KEY')
+      }
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isNew])
 
   // Debounced path availability check
   const checkPath = useCallback(async (path: string) => {
@@ -700,11 +743,59 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                       </SelectContent>
                     </Select>
                   </Field>
-                  <Field label="Auth Value" hint="API key, Base64 credentials, or bearer token that callers must provide">
-                    <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
-                  </Field>
+                  {authType === 'API_KEY' ? (
+                    <p className="text-xs text-muted-foreground">
+                      Keys are generated and managed in the <span className="font-medium text-foreground">API Keys</span> section after saving (revoke, regenerate, expiry, usage tracking). Clients authenticate with the <code className="text-foreground">X-API-Key</code> header.
+                    </p>
+                  ) : (
+                    <Field label="Auth Value" hint="Base64 credentials (Basic) or bearer token that callers must provide">
+                      <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
+                    </Field>
+                  )}
                 </div>
               )}
+
+              {/* Upstream Authentication */}
+              <div className="space-y-3 rounded-lg border border-border/50 p-3">
+                <div>
+                  <p className="text-sm font-medium">Upstream Authentication</p>
+                  <p className="text-xs text-muted-foreground">Credentials ClusterGate sends to the target (e.g. an API key n8n requires)</p>
+                </div>
+                <Field label="Type">
+                  <Select value={upstreamAuthType} onValueChange={(v) => setValue('upstreamAuthType', v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">None</SelectItem>
+                      <SelectItem value="API_KEY">API Key (header)</SelectItem>
+                      <SelectItem value="BEARER">Bearer Token</SelectItem>
+                      <SelectItem value="BASIC">Basic (Base64)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                {upstreamAuthType !== 'NONE' && (
+                  <>
+                    {upstreamAuthType === 'API_KEY' && (
+                      <Field label="Header Name">
+                        <input {...register('upstreamAuthHeader')} placeholder="X-API-Key" className={fieldClass()} />
+                      </Field>
+                    )}
+                    <Field label="Value">
+                      <input type="password" {...register('upstreamAuthValue')} placeholder="••••••••" className={fieldClass()} />
+                    </Field>
+                  </>
+                )}
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button type="button" variant="outline" size="sm" onClick={handleTestConnection} disabled={testingConn || !watch('targetUrl')}>
+                    {testingConn ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Testing...</> : 'Test Connection'}
+                  </Button>
+                  {connResult && (
+                    <span className={cn('text-xs', connResult.ok ? 'text-emerald-500' : 'text-red-500')}>
+                      {connResult.ok ? `Reachable (HTTP ${connResult.status})` : `Failed: ${connResult.error ?? connResult.status}`}
+                      {connResult.detectedTool === 'n8n' ? ' · n8n detected (chatInput + sessionId sent automatically)' : ''}
+                    </span>
+                  )}
+                </div>
+              </div>
 
               <Field label="Webhook Secret" hint="Validate X-Hub-Signature-256 for webhook requests">
                 <input type="password" {...register('webhookSecret')} placeholder="Enter webhook secret" className={fieldClass()} />

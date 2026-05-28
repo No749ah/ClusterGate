@@ -213,6 +213,15 @@ class ApiClient {
       })
     },
 
+    testConnection: (data: { targetUrl: string; method?: string; sslVerify?: boolean; upstreamAuthType?: string; upstreamAuthValue?: string; upstreamAuthHeader?: string; body?: unknown }) =>
+      this.post<ApiResponse<{ ok: boolean; status?: number; duration?: number; error?: string; detectedTool?: string; hint?: string }>>('/api/routes/test-connection', data),
+
+    getApiKeyPolicy: () =>
+      this.get<ApiResponse<{ forceApiKeys: boolean }>>('/api/routes/api-key-policy'),
+
+    setApiKeyPolicy: (forceApiKeys: boolean) =>
+      this.put<ApiResponse<{ forceApiKeys: boolean }>>('/api/routes/api-key-policy', { forceApiKeys }),
+
     health: (id: string) =>
       this.get<ApiResponse<HealthCheck>>(`/api/routes/${id}/health`),
 

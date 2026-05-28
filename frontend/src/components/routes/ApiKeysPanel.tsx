@@ -1,12 +1,13 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, Copy, Check, Key, Ban, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Copy, Check, Key, Ban, Loader2, RefreshCw } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from '@/hooks/useApiKeys'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription
 } from '@/components/ui/dialog'
@@ -26,16 +27,34 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
   const confirm = useConfirm()
   const [createOpen, setCreateOpen] = useState(false)
   const [keyName, setKeyName] = useState('')
+  const [expiresInDays, setExpiresInDays] = useState('0')
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
   const keys = keysData?.data ?? []
 
+  const computeExpiry = (days: string) =>
+    days !== '0' ? new Date(Date.now() + parseInt(days) * 86400000).toISOString() : undefined
+
   const handleCreate = async () => {
-    const result = await createKey.mutateAsync({ name: keyName })
+    const result = await createKey.mutateAsync({ name: keyName, expiresAt: computeExpiry(expiresInDays) })
     setNewKeyValue(result.data.key)
     setKeyName('')
+    setExpiresInDays('0')
     setCreateOpen(false)
+  }
+
+  const handleRegenerate = async (key: { id: string; name: string }) => {
+    const ok = await confirm({
+      title: 'Regenerate API Key',
+      description: `Generate a new key for "${key.name}" and revoke the old one? The old key stops working immediately.`,
+      confirmLabel: 'Regenerate',
+      variant: 'destructive',
+    })
+    if (!ok) return
+    const result = await createKey.mutateAsync({ name: key.name })
+    setNewKeyValue(result.data.key)
+    revokeKey.mutate(key.id)
   }
 
   const handleCopy = async () => {
@@ -120,6 +139,16 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    title="Regenerate key"
+                    onClick={() => handleRegenerate(key)}
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-blue-500" />
+                  </Button>
+                )}
+                {key.isActive && (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     title="Revoke key"
                     onClick={async () => {
                       const ok = await confirm({
@@ -174,6 +203,19 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                 onChange={(e) => setKeyName(e.target.value)}
                 placeholder="My API Key"
               />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Expires</label>
+              <Select value={expiresInDays} onValueChange={setExpiresInDays}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">Never</SelectItem>
+                  <SelectItem value="7">7 days</SelectItem>
+                  <SelectItem value="30">30 days</SelectItem>
+                  <SelectItem value="90">90 days</SelectItem>
+                  <SelectItem value="365">1 year</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <DialogFooter>

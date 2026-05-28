@@ -185,6 +185,11 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     }
   }
 
+  // Don't overwrite secrets with the masked placeholder returned by GET
+  for (const field of ['authValue', 'webhookSecret', 'upstreamAuthValue'] as const) {
+    if ((data as any)[field] === '••••••••') delete (data as any)[field]
+  }
+
   // If the publicPath is changing to one held by a soft-deleted route, free it
   if (typeof data.publicPath === 'string' && data.publicPath !== existing.publicPath) {
     await freeSoftDeletedPublicPath(data.publicPath)
@@ -207,6 +212,7 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     'maintenanceMode', 'maintenanceMessage', 'webhookSecret',
     'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
     'lbStrategy', 'requireAuth', 'authType', 'authValue',
+    'upstreamAuthType', 'upstreamAuthValue', 'upstreamAuthHeader',
     'corsEnabled', 'corsOrigins', 'ipAllowlist',
     'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
     'organizationId', 'routeGroupId'] as const
