@@ -391,7 +391,7 @@ export default function DashboardPage() {
             <Settings2 className="w-4 h-4 mr-2" />
             {editing ? 'Done' : 'Customize'}
           </Button>
-          <Button asChild>
+          <Button size="sm" asChild>
             <Link href="/routes/new">
               <Plus className="w-4 h-4 mr-2" />
               <span className="hidden sm:inline">New Route</span>
