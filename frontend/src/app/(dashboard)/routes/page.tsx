@@ -516,17 +516,21 @@ function RouteRow({
             <CopyUrlButton path={route.publicPath} />
           </p>
           {(route.tags.length > 0 || (route as any).organization) && (
-            <div className="flex items-center gap-1 mt-1 flex-wrap">
+            <div className="flex items-center gap-1 mt-1 min-w-0">
               {(route as any).organization && (
-                <Badge variant="outline" className="text-[10px] py-0 px-1.5">{(route as any).organization.name}</Badge>
+                <Badge variant="outline" className="text-[10px] py-0 px-1.5 max-w-[150px] truncate" title={(route as any).organization.name}>
+                  {(route as any).organization.name}
+                </Badge>
               )}
-              {route.tags.slice(0, 3).map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-[10px] py-0 px-1">
+              {route.tags.slice(0, 2).map((tag) => (
+                <Badge key={tag} variant="secondary" className="text-[10px] py-0 px-1 shrink-0">
                   {tag}
                 </Badge>
               ))}
-              {route.tags.length > 3 && (
-                <span className="text-[10px] text-muted-foreground">+{route.tags.length - 3}</span>
+              {route.tags.length > 2 && (
+                <span className="text-[10px] text-muted-foreground shrink-0" title={route.tags.slice(2).join(', ')}>
+                  +{route.tags.length - 2}
+                </span>
               )}
             </div>
           )}
