@@ -147,10 +147,12 @@ jobs:
       - name: Generate changelog from commits
         id: changelog
         run: |
-          # Previous release tag (before this build) — newest existing v* tag
-          PREV=$(git tag --list 'v*' --sort=-version:refname | head -n 1 || true)
-          if [ -n "$PREV" ] && git rev-parse "$PREV" >/dev/null 2>&1; then
-            RANGE="$PREV..HEAD"
+          # Range = commits since the previous version bump (the prior commit
+          # that changed backend/package.json). Tag-independent, so it stays
+          # correct even if tags are missing or history was rewritten.
+          PREV_BUMP=$(git log --format='%H' --skip=1 -n 1 -- backend/package.json || true)
+          if [ -n "$PREV_BUMP" ]; then
+            RANGE="$PREV_BUMP..HEAD"
           else
             RANGE=""
           fi
