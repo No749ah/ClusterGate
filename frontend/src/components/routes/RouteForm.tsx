@@ -918,12 +918,12 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
 
         <div className="flex gap-3">
           {step < STEPS.length - 1 ? (
-            <Button type="button" onClick={handleNext} disabled={isSubmitting}>
+            <Button key="wizard-next" type="button" onClick={handleNext} disabled={isSubmitting}>
               Next
               <ArrowRight className="w-4 h-4 ml-2" />
             </Button>
           ) : (
-            <Button type="submit" disabled={isSubmitting}>
+            <Button key="wizard-submit" type="submit" disabled={isSubmitting}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
