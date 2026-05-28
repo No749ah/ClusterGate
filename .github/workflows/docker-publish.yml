@@ -156,7 +156,7 @@ jobs:
           fi
           {
             echo "CHANGELOG<<__CHANGELOG_EOF__"
-            git log $RANGE --no-merges --pretty=format:'%s%x09%an%x09%ae' | while IFS=$'\t' read -r subj name email; do
+            git log $RANGE --no-merges --pretty=tformat:'%s%x09%an%x09%ae' | while IFS=$'\t' read -r subj name email; do
               handle="$name"
               case "$email" in
                 *@users.noreply.github.com)
