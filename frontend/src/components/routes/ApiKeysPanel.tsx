@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Trash2, Copy, Check, Key, Ban, Loader2, RefreshCw, X } from 'lucide-react'
+import { Plus, Trash2, Copy, Check, Key, Ban, Loader2, RefreshCw, X, ChevronRight } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from '@/hooks/useApiKeys'
 import { Button } from '@/components/ui/button'
@@ -29,6 +30,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
   const [keyName, setKeyName] = useState('')
   const [expiresInDays, setExpiresInDays] = useState('0')
   const [scope, setScope] = useState<'READ' | 'FULL'>('FULL')
+  const [expandedId, setExpandedId] = useState<string | null>(null)
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
 
@@ -118,32 +120,35 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
       ) : (
         <div className="space-y-2">
           {keys.map((key) => (
-            <div
-              key={key.id}
-              className="flex items-center justify-between p-3 rounded-lg border border-border/50 hover:bg-muted/20"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <Key className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate" title={key.name}>{key.name}</p>
-                    {(() => {
-                      const expired = !!key.expiresAt && new Date(key.expiresAt) < new Date()
-                      if (!key.isActive) return <Badge variant="secondary">Revoked</Badge>
-                      if (expired) return <Badge variant="outline" className="text-amber-500 border-amber-500/30">Expired</Badge>
-                      return <Badge variant="success">Active</Badge>
-                    })()}
-                    {key.scope === 'READ' && <Badge variant="outline" className="text-xs">Read-only</Badge>}
+            <div key={key.id} className="rounded-lg border border-border/50 hover:bg-muted/20">
+              <div className="flex items-center justify-between p-3 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setExpandedId(expandedId === key.id ? null : key.id)}
+                  className="flex items-center gap-2 min-w-0 flex-1 text-left"
+                >
+                  <ChevronRight className={cn('w-4 h-4 text-muted-foreground flex-shrink-0 transition-transform', expandedId === key.id && 'rotate-90')} />
+                  <Key className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-foreground truncate" title={key.name}>{key.name}</p>
+                      {(() => {
+                        const expired = !!key.expiresAt && new Date(key.expiresAt) < new Date()
+                        if (!key.isActive) return <Badge variant="secondary">Revoked</Badge>
+                        if (expired) return <Badge variant="outline" className="text-amber-500 border-amber-500/30">Expired</Badge>
+                        return <Badge variant="success">Active</Badge>
+                      })()}
+                      {key.scope === 'READ' && <Badge variant="outline" className="text-xs">Read-only</Badge>}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {!key.expiresAt
+                        ? 'Never expires'
+                        : new Date(key.expiresAt) < new Date()
+                          ? `Expired ${formatDate(key.expiresAt)}`
+                          : `Expires ${formatDate(key.expiresAt)}`}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground mt-0.5 flex-wrap">
-                    <span>Created {formatRelativeTime(key.createdAt)}</span>
-                    {key.lastUsedAt && <span>Last used {formatRelativeTime(key.lastUsedAt)}</span>}
-                    {typeof key.usageCount === 'number' && <span>{key.usageCount} use{key.usageCount === 1 ? '' : 's'}</span>}
-                    {key.lastUsedIp && <span>from {key.lastUsedIp}</span>}
-                    {key.expiresAt && <span>Expires {formatDate(key.expiresAt)}</span>}
-                  </div>
-                </div>
-              </div>
+                </button>
               <div className="flex items-center gap-1 flex-shrink-0">
                 {key.isActive && (
                   <Button
@@ -191,6 +196,34 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
+              </div>
+
+              {expandedId === key.id && (
+                <div className="border-t border-border/50 px-3 py-2.5 space-y-1.5 text-xs">
+                  {key.keyHint && (
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-muted-foreground">Key</span>
+                      <code className="font-mono text-foreground">{key.keyHint}</code>
+                    </div>
+                  )}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Uses</span>
+                    <span className="text-foreground">{key.usageCount ?? 0}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Created</span>
+                    <span className="text-foreground">{formatDate(key.createdAt)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-muted-foreground">Last used</span>
+                    <span className="text-foreground">
+                      {key.lastUsedAt
+                        ? `${formatRelativeTime(key.lastUsedAt)}${key.lastUsedIp ? ` · ${key.lastUsedIp}` : ''}`
+                        : 'Never'}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
           ))}
         </div>

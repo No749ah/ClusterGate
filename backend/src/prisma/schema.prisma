@@ -438,6 +438,7 @@ model ApiKey {
   route      Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
   name       String
   keyHash    String    @unique
+  keyHint    String?
   isActive   Boolean   @default(true)
   scope      KeyScope  @default(FULL)
   lastUsedAt DateTime?

@@ -159,6 +159,7 @@ export interface ApiKey {
   name: string
   isActive: boolean
   scope?: 'READ' | 'FULL'
+  keyHint?: string | null
   lastUsedAt: string | null
   lastUsedIp?: string | null
   usageCount?: number

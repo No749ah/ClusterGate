@@ -75,6 +75,7 @@ export async function getApiKeys(routeId: string) {
     select: {
       id: true,
       name: true,
+      keyHint: true,
       isActive: true,
       scope: true,
       lastUsedAt: true,
@@ -92,9 +93,10 @@ export async function createApiKey(routeId: string, name: string, expiresAt?: Da
 
   const rawKey = `cgk_${randomBytes(32).toString('hex')}`
   const keyHash = hashKey(rawKey)
+  const keyHint = `${rawKey.slice(0, 3)}…${rawKey.slice(-2)}`
 
   const apiKey = await prisma.apiKey.create({
-    data: { routeId, name, keyHash, expiresAt, scope },
+    data: { routeId, name, keyHash, keyHint, expiresAt, scope },
     select: { id: true, name: true, isActive: true, scope: true, expiresAt: true, createdAt: true },
   })
 
