@@ -59,20 +59,6 @@ jobs:
           sarif_file: trivy-results.sarif
           category: trivy
 
-  codeql:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
-        with:
-          languages: javascript-typescript
-          queries: security-and-quality
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
-        with:
-          category: '/language:javascript-typescript'
+  # CodeQL is configured via GitHub's "Default setup" (Settings → Code security
+  # → Code scanning), so it is intentionally not defined as a job here — an
+  # advanced-config CodeQL job would conflict with the default setup and fail.
