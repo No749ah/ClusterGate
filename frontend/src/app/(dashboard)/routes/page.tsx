@@ -24,7 +24,7 @@ import {
   FileDown,
   Tag as TagIcon,
   Layers,
-  Keyboard,
+  Upload,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkUpdate, useBulkDelete } from '@/hooks/useRoutes'
@@ -54,6 +54,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm-dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { formatRelativeTime, copyToClipboard } from '@/lib/utils'
 import { toExportConfig, prepareForPaste, parseConfigs, buildCurl, downloadJson } from '@/lib/routeExport'
 import { Route, RouteStatus, Environment } from '@/types'
@@ -115,7 +116,9 @@ export default function RoutesPage() {
   const [envFilter, setEnvFilter] = useState<Environment | 'ALL'>('ALL')
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { data: orgsData } = useQuery({
     queryKey: ['organizations'],
@@ -232,6 +235,10 @@ export default function RoutesPage() {
     }
     function onKey(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey
+      // Ctrl/Cmd+K opens the shortcuts cheat-sheet (works from anywhere)
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); setShortcutsOpen((v) => !v); return
+      }
       // Ctrl/Cmd combos work even from inputs (except they're native there)
       if (mod && e.key.toLowerCase() === 'c' && someSelected && !isTyping(e.target)) {
         e.preventDefault(); copySelectedConfigs(); return
@@ -252,6 +259,33 @@ export default function RoutesPage() {
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [routes, someSelected, canEdit])
+
+  async function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-selecting the same file later
+    if (!file) return
+    try {
+      const text = await file.text()
+      const configs = parseConfigs(text)
+      if (!configs) {
+        toast.error('File does not contain valid route configurations')
+        return
+      }
+      const ok = await confirm({
+        title: 'Import routes',
+        description: `Import ${configs.length} route(s) from "${file.name}" as new drafts? Each gets a unique path and "(copy)" name.`,
+        confirmLabel: 'Import',
+      })
+      if (!ok) return
+      const res = await api.routes.import(prepareForPaste(configs))
+      const { created, errors } = res.data
+      if (created > 0) toast.success(`Imported ${created} route(s)`)
+      if (errors?.length) toast.error(`${errors.length} failed: ${errors[0]}`)
+      queryClient.invalidateQueries({ queryKey: ['routes'] })
+    } catch (err: any) {
+      toast.error(err.message || 'Import failed')
+    }
+  }
 
   function applyBulk(patch: { environment?: string; routeGroupId?: string | null; addTags?: string[] }) {
     bulkUpdate.mutate({ ids: Array.from(selectedIds), patch }, { onSuccess: () => setSelectedIds(new Set()) })
@@ -275,14 +309,19 @@ export default function RoutesPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="icon"
-            title={'Keyboard shortcuts:\n/  focus search\nn  new route\nCtrl/Cmd+A  select all\nCtrl/Cmd+C  copy selected configs\nCtrl/Cmd+V  paste configs as new routes\nDelete  delete selected\nEsc  clear selection'}
-            aria-label="Keyboard shortcuts"
-          >
-            <Keyboard className="w-4 h-4" />
-          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={handleImportFile}
+          />
+          {canEdit && (
+            <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-2" />
+              Import
+            </Button>
+          )}
           <Button asChild>
             <Link href="/routes/new">
               <Plus className="w-4 h-4 mr-2" />
@@ -382,11 +421,19 @@ export default function RoutesPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             ref={searchRef}
-            placeholder="Search routes...  ( / )"
+            placeholder="Search routes..."
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
-            className="pl-9"
+            className="pl-9 pr-16"
           />
+          <button
+            type="button"
+            onClick={() => setShortcutsOpen(true)}
+            title="Keyboard shortcuts"
+            className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          >
+            <kbd>⌘</kbd><kbd>K</kbd>
+          </button>
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as any); setPage(1) }}>
           <SelectTrigger className="w-36">
@@ -590,6 +637,35 @@ export default function RoutesPage() {
           </div>
         )}
       </div>
+
+      {/* Keyboard shortcuts cheat-sheet — opened by Ctrl/Cmd+K or the badge in the search field */}
+      <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Keyboard shortcuts</DialogTitle>
+            <DialogDescription>Available on the routes list.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5 text-sm">
+            {[
+              ['/', 'Focus search'],
+              ['n', 'New route'],
+              ['Ctrl/⌘ A', 'Select all'],
+              ['Ctrl/⌘ C', 'Copy selected configs'],
+              ['Ctrl/⌘ V', 'Paste configs as new routes'],
+              ['Ctrl/⌘ K', 'Show this dialog'],
+              ['Delete', 'Delete selected'],
+              ['Esc', 'Clear selection / close dialog'],
+            ].map(([key, label]) => (
+              <div key={key} className="flex items-center justify-between gap-3 py-1">
+                <span className="text-muted-foreground">{label}</span>
+                <kbd className="inline-flex items-center rounded border border-border/50 bg-muted/50 px-2 py-0.5 text-[11px] font-mono text-foreground">
+                  {key}
+                </kbd>
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
