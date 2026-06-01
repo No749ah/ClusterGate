@@ -1,10 +1,23 @@
 import winston from 'winston'
 import DailyRotateFile from 'winston-daily-rotate-file'
 import { config } from '../config'
+import { getTraceContext } from './tracing'
 
 const { combine, timestamp, printf, colorize, errors, json } = winston.format
 
+// Attach the active OpenTelemetry trace/span IDs to every log line so logs can
+// be correlated with traces. No-op when tracing is disabled.
+const traceContext = winston.format((info) => {
+  const ctx = getTraceContext()
+  if (ctx) {
+    info.trace_id = ctx.trace_id
+    info.span_id = ctx.span_id
+  }
+  return info
+})
+
 const devFormat = combine(
+  traceContext(),
   colorize(),
   timestamp({ format: 'HH:mm:ss' }),
   errors({ stack: true }),
@@ -15,6 +28,7 @@ const devFormat = combine(
 )
 
 const prodFormat = combine(
+  traceContext(),
   timestamp(),
   errors({ stack: true }),
   json()

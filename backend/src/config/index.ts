@@ -33,6 +33,12 @@ const envSchema = z.object({
   BACKUP_CRON_ENABLED: z.coerce.boolean().default(false),
   BACKUP_CRON_SCHEDULE: z.string().default('0 3 * * *'),
   BACKUP_RETENTION_COUNT: z.coerce.number().default(10),
+  // OpenTelemetry distributed tracing. Off by default; when enabled, spans are
+  // exported over OTLP/HTTP to OTEL_EXPORTER_OTLP_ENDPOINT (e.g. a collector,
+  // Tempo, Jaeger, Honeycomb). Trace/span IDs are also attached to logs.
+  OTEL_ENABLED: z.coerce.boolean().default(false),
+  OTEL_SERVICE_NAME: z.string().default('clustergate-backend'),
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)

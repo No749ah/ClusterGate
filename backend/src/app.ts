@@ -1,3 +1,8 @@
+// Tracing must initialise before Express/http are required so auto
+// instrumentation can patch them. No-op unless OTEL_ENABLED is set.
+import { initTracing } from './lib/tracing'
+initTracing()
+
 import express from 'express'
 import helmet from 'helmet'
 import cors from 'cors'
