@@ -111,18 +111,23 @@ const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
 
 function setNestedValue(obj: any, path: string, value: any): void {
   const parts = path.split('.')
+  // Prevent prototype pollution via crafted transform paths. Guard every key
+  // (not just up-front) so the barrier is explicit at each property write.
   if (parts.some((p) => FORBIDDEN_KEYS.has(p))) {
-    // Prevent prototype pollution via crafted transform paths
     return
   }
   let current = obj
   for (let i = 0; i < parts.length - 1; i++) {
-    if (!current[parts[i]] || typeof current[parts[i]] !== 'object') {
-      current[parts[i]] = {}
+    const key = parts[i]
+    if (FORBIDDEN_KEYS.has(key)) return
+    if (!current[key] || typeof current[key] !== 'object') {
+      current[key] = {}
     }
-    current = current[parts[i]]
+    current = current[key]
   }
-  current[parts[parts.length - 1]] = value
+  const lastKey = parts[parts.length - 1]
+  if (FORBIDDEN_KEYS.has(lastKey)) return
+  current[lastKey] = value
 }
 
 function evaluateCondition(

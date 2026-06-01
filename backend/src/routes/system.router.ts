@@ -7,6 +7,7 @@ import { getVersion } from '../lib/version'
 import { runAllHealthChecks } from '../services/healthService'
 import { cleanOldLogs } from '../services/logService'
 import { config } from '../config'
+import { AppError } from '../lib/errors'
 import axios from 'axios'
 
 const router = Router()
@@ -245,9 +246,14 @@ router.get('/release-notes', async (req, res, next) => {
 
     let url: string
     if (tag) {
-      // Fetch specific release by tag
+      // Restrict to a safe version-tag charset before interpolating into the
+      // request URL — prevents path traversal / SSRF via crafted tag values.
       const cleanTag = tag.replace(/^v/, '')
-      url = `https://api.github.com/repos/No749ah/ClusterGate/releases/tags/v${cleanTag}`
+      if (!/^[A-Za-z0-9._-]{1,64}$/.test(cleanTag)) {
+        throw AppError.badRequest('Invalid release tag')
+      }
+      // Fetch specific release by tag
+      url = `https://api.github.com/repos/No749ah/ClusterGate/releases/tags/v${encodeURIComponent(cleanTag)}`
     } else {
       // Fetch latest release
       url = `https://api.github.com/repos/No749ah/ClusterGate/releases/latest`
