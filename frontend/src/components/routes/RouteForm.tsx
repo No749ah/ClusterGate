@@ -872,8 +872,23 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 </div>
               </div>
 
-              <Field label="Webhook Secret" hint="Validate X-Hub-Signature-256 for webhook requests">
-                <input type="password" {...register('webhookSecret')} placeholder="Enter webhook secret" className={fieldClass()} />
+              <Field label="Webhook Secret" hint="Validate X-Hub-Signature-256 / X-Webhook-Signature (HMAC-SHA256) on incoming requests">
+                <div className="flex items-center gap-2">
+                  <input type="text" {...register('webhookSecret')} placeholder="Enter or generate a webhook secret" className={fieldClass()} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const bytes = new Uint8Array(32)
+                      crypto.getRandomValues(bytes)
+                      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+                      setValue('webhookSecret', `whsec_${hex}`, { shouldDirty: true })
+                    }}
+                  >
+                    Generate
+                  </Button>
+                </div>
               </Field>
 
               <Field label="IP Allowlist" hint="One IP or CIDR per line. Leave empty to allow all.">

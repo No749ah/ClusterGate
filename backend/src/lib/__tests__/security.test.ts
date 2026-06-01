@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest'
-import { isMetadataIp, isSafeRegex } from '../security'
+import { createHmac } from 'crypto'
+import { isMetadataIp, isSafeRegex, validateWebhookSignature, timingSafeCompare } from '../security'
+
+const sign = (body: string, secret: string) =>
+  `sha256=${createHmac('sha256', secret).update(body).digest('hex')}`
 
 describe('isMetadataIp', () => {
   it('blocks the whole 169.254.0.0/16 link-local range', () => {
@@ -37,5 +41,41 @@ describe('isSafeRegex', () => {
   it('accepts simple safe patterns', () => {
     expect(isSafeRegex('^/api/v1/')).toBe(true)
     expect(isSafeRegex('foo-[0-9]+')).toBe(true)
+  })
+})
+
+describe('validateWebhookSignature', () => {
+  const secret = 'whsec_test_secret'
+  const body = '{"event":"push","id":42}'
+
+  it('accepts a correct sha256 HMAC signature', () => {
+    expect(validateWebhookSignature(body, secret, sign(body, secret))).toBe(true)
+  })
+
+  it('rejects a signature produced with the wrong secret', () => {
+    expect(validateWebhookSignature(body, secret, sign(body, 'wrong-secret'))).toBe(false)
+  })
+
+  it('rejects a signature when the body has been tampered with', () => {
+    const good = sign(body, secret)
+    expect(validateWebhookSignature('{"event":"push","id":43}', secret, good)).toBe(false)
+  })
+
+  it('rejects a missing or malformed signature', () => {
+    expect(validateWebhookSignature(body, secret, '')).toBe(false)
+    expect(validateWebhookSignature(body, secret, 'not-a-signature')).toBe(false)
+    // bare hex without the sha256= prefix must not validate
+    expect(validateWebhookSignature(body, secret, createHmac('sha256', secret).update(body).digest('hex'))).toBe(false)
+  })
+})
+
+describe('timingSafeCompare', () => {
+  it('returns true for identical strings', () => {
+    expect(timingSafeCompare('abc123', 'abc123')).toBe(true)
+  })
+
+  it('returns false for different strings, including length mismatches', () => {
+    expect(timingSafeCompare('abc123', 'abc124')).toBe(false)
+    expect(timingSafeCompare('short', 'a-much-longer-value')).toBe(false)
   })
 })
