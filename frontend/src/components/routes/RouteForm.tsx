@@ -43,6 +43,7 @@ const routeSchema = z.object({
   upstreamAuthValue: z.string().optional(),
   upstreamAuthHeader: z.string().default('X-API-Key'),
   targetType: z.enum(['GENERIC', 'N8N']).default('GENERIC'),
+  environment: z.enum(['NONE', 'PRODUCTION', 'STAGING', 'DEVELOPMENT']).default('NONE'),
   healthCheckMethod: z.enum(['HEAD', 'GET', 'POST']).default('HEAD'),
   healthCheckPath: z.string().optional(),
   healthCheckBody: z.string().optional(),
@@ -135,6 +136,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       upstreamAuthValue: defaultValues?.upstreamAuthValue ?? '',
       upstreamAuthHeader: defaultValues?.upstreamAuthHeader ?? 'X-API-Key',
       targetType: defaultValues?.targetType ?? 'GENERIC',
+      environment: (defaultValues as any)?.environment ?? 'NONE',
       healthCheckMethod: (defaultValues as any)?.healthCheckMethod ?? 'HEAD',
       healthCheckPath: (defaultValues as any)?.healthCheckPath ?? '',
       healthCheckBody: (defaultValues as any)?.healthCheckBody ?? '',
@@ -523,6 +525,18 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               </div>
               {errors.methods && <p className="text-xs text-destructive mt-1">{errors.methods.message}</p>}
             </Field>
+            <Field label="Environment" hint="Label this route's deployment stage">
+              <Select value={watch('environment')} onValueChange={(v) => setValue('environment', v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">None</SelectItem>
+                  <SelectItem value="PRODUCTION">Production</SelectItem>
+                  <SelectItem value="STAGING">Staging</SelectItem>
+                  <SelectItem value="DEVELOPMENT">Development</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
+
             <Field label="Tags">
               <div className="space-y-2">
                 <div className="flex gap-2">

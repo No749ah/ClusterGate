@@ -173,6 +173,7 @@ class ApiClient {
       const params = new URLSearchParams()
       if (filters.search) params.set('search', filters.search)
       if (filters.status) params.set('status', filters.status)
+      if (filters.environment) params.set('environment', filters.environment)
       if (filters.isActive !== undefined) params.set('isActive', String(filters.isActive))
       if (filters.tags?.length) params.set('tags', filters.tags.join(','))
       if (filters.organizationId) params.set('organizationId', filters.organizationId)
@@ -264,6 +265,9 @@ class ApiClient {
 
     import: (routes: unknown[]) =>
       this.post<ApiResponse<{ created: number; errors: string[] }>>('/api/routes/import', { routes }),
+
+    bulkUpdate: (ids: string[], patch: { environment?: string; routeGroupId?: string | null; addTags?: string[] }) =>
+      this.post<ApiResponse<{ count: number }>>('/api/routes/bulk/update', { ids, ...patch }),
 
     checkPath: (path: string, excludeId?: string) => {
       const params = new URLSearchParams({ path })

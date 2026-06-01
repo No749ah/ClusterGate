@@ -2,7 +2,9 @@
 
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi } from 'lucide-react'
+import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi, Terminal, FileDown } from 'lucide-react'
+import { EnvironmentBadge } from '@/components/routes/EnvironmentBadge'
+import { buildCurl, toExportConfig, downloadJson } from '@/lib/routeExport'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth, useDeleteRoute } from '@/hooks/useRoutes'
 import { useRouter } from 'next/navigation'
@@ -114,6 +116,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
             <div className="flex items-center gap-3 min-w-0">
               <h1 className="text-2xl font-bold text-foreground truncate">{route.name}</h1>
               <RouteStatusBadge status={route.status} isActive={route.isActive} />
+              <EnvironmentBadge environment={route.environment} />
               <HealthIndicator status={health?.status} responseTime={health?.responseTime} error={health?.error} showLabel />
             </div>
             {route.description && (
@@ -151,6 +154,29 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           <Button variant="outline" size="sm" onClick={() => duplicate.mutate(id)} disabled={duplicate.isPending}>
             <Copy className="w-3.5 h-3.5 mr-2" />
             {duplicate.isPending ? 'Duplicating...' : 'Duplicate'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={async () => {
+              const origin = typeof window !== 'undefined' ? window.location.origin : ''
+              await copyToClipboard(buildCurl(route, origin))
+              toast.success('cURL command copied')
+            }}
+          >
+            <Terminal className="w-3.5 h-3.5 mr-2" />
+            cURL
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const slug = route.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'route'
+              downloadJson(`route-${slug}.json`, toExportConfig(route))
+            }}
+          >
+            <FileDown className="w-3.5 h-3.5 mr-2" />
+            Export
           </Button>
           <Button size="sm" asChild>
             <Link href={`/routes/${id}/edit`}>
@@ -253,6 +279,11 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
             <Card>
               <CardHeader><CardTitle className="text-sm">Meta</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
+                <InfoRow label="Environment" value={
+                  route.environment && route.environment !== 'NONE'
+                    ? <EnvironmentBadge environment={route.environment} />
+                    : 'None'
+                } />
                 <InfoRow label="Tags" value={
                   route.tags.length > 0
                     ? <div className="flex gap-1 flex-wrap">
@@ -651,7 +682,7 @@ function formatJsonSafe(str: string): string {
 }
 
 const DIFF_FIELDS = [
-  'name', 'description', 'publicPath', 'targetUrl', 'methods', 'tags',
+  'name', 'description', 'publicPath', 'targetUrl', 'methods', 'tags', 'environment',
   'timeout', 'retryCount', 'retryDelay', 'stripPrefix', 'sslVerify',
   'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules',
   'corsEnabled', 'corsOrigins', 'ipAllowlist', 'requireAuth', 'authType',

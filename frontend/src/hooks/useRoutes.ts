@@ -215,6 +215,21 @@ export function useBulkDeactivate() {
   })
 }
 
+export function useBulkUpdate() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ ids, patch }: { ids: string[]; patch: { environment?: string; routeGroupId?: string | null; addTags?: string[] } }) =>
+      api.routes.bulkUpdate(ids, patch),
+    onSuccess: (res) => {
+      queryClient.invalidateQueries({ queryKey: ['routes'] })
+      toast.success(`${res.data.count} route(s) updated`)
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Bulk update failed')
+    },
+  })
+}
+
 export function useBulkDelete() {
   const queryClient = useQueryClient()
   return useMutation({

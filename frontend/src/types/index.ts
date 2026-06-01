@@ -4,6 +4,7 @@
 
 export type Role = 'ADMIN' | 'OPERATOR' | 'VIEWER'
 export type RouteStatus = 'DRAFT' | 'PUBLISHED'
+export type Environment = 'NONE' | 'PRODUCTION' | 'STAGING' | 'DEVELOPMENT'
 export type AuthType = 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
 export type HealthStatus = 'HEALTHY' | 'UNHEALTHY' | 'UNKNOWN'
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE' | 'HEAD' | 'OPTIONS'
@@ -42,6 +43,7 @@ export interface Route {
   isActive: boolean
   status: RouteStatus
   tags: string[]
+  environment: Environment
   version: number
 
   // Proxy settings
@@ -222,6 +224,7 @@ export interface RouteFormData {
   targetUrl: string
   methods: HttpMethod[]
   tags: string[]
+  environment?: Environment
   timeout: number
   retryCount: number
   retryDelay: number
@@ -272,6 +275,7 @@ export interface RouteFilters {
   status?: RouteStatus
   isActive?: boolean
   tags?: string[]
+  environment?: Environment
   organizationId?: string
   page?: number
   pageSize?: number

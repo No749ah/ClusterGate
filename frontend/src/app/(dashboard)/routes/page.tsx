@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Plus,
   Search,
@@ -19,12 +20,18 @@ import {
   Power,
   PowerOff,
   Building2,
+  Terminal,
+  FileDown,
+  Tag as TagIcon,
+  Layers,
+  Keyboard,
 } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
-import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkDelete } from '@/hooks/useRoutes'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkUpdate, useBulkDelete } from '@/hooks/useRoutes'
 import { useAuth } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
+import { EnvironmentBadge } from '@/components/routes/EnvironmentBadge'
 import { HealthIndicator } from '@/components/routes/HealthIndicator'
 import { CircuitBreakerBadge } from '@/components/routes/CircuitBreakerBadge'
 import { Button } from '@/components/ui/button'
@@ -48,7 +55,8 @@ import {
 } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { formatRelativeTime, copyToClipboard } from '@/lib/utils'
-import { Route, RouteStatus } from '@/types'
+import { toExportConfig, prepareForPaste, parseConfigs, buildCurl, downloadJson } from '@/lib/routeExport'
+import { Route, RouteStatus, Environment } from '@/types'
 
 const HTTP_METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-500 bg-green-500/10 border-green-500/20',
@@ -98,18 +106,28 @@ function MethodBadges({ methods }: { methods: string[] }) {
 
 export default function RoutesPage() {
   const { user } = useAuth()
+  const router = useRouter()
+  const queryClient = useQueryClient()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState<RouteStatus | 'ALL'>('ALL')
   const [orgFilter, setOrgFilter] = useState<string>('ALL')
   const [tagFilter, setTagFilter] = useState<string>('ALL')
+  const [envFilter, setEnvFilter] = useState<Environment | 'ALL'>('ALL')
   const [page, setPage] = useState(1)
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  const searchRef = useRef<HTMLInputElement>(null)
 
   const { data: orgsData } = useQuery({
     queryKey: ['organizations'],
     queryFn: () => api.organizations.list(),
   })
   const userOrgs = orgsData?.data ?? []
+
+  const { data: groupsData } = useQuery({
+    queryKey: ['route-groups'],
+    queryFn: () => api.routeGroups.list(),
+  })
+  const groups = groupsData?.data ?? []
 
   // Fetch all routes (no tag filter) to extract unique tags for the filter dropdown
   const { data: allRoutesData } = useRoutes({ pageSize: 200 })
@@ -121,6 +139,7 @@ export default function RoutesPage() {
     search: search || undefined,
     status: statusFilter === 'ALL' ? undefined : statusFilter,
     tags: tagFilter !== 'ALL' ? [tagFilter] : undefined,
+    environment: envFilter !== 'ALL' ? envFilter : undefined,
     organizationId: orgFilter !== 'ALL' ? orgFilter : undefined,
     page,
     pageSize: 20,
@@ -133,11 +152,14 @@ export default function RoutesPage() {
   const deleteRoute = useDeleteRoute()
   const bulkPublish = useBulkPublish()
   const bulkDeactivate = useBulkDeactivate()
+  const bulkUpdate = useBulkUpdate()
   const bulkDelete = useBulkDelete()
 
   const routes = data?.data ?? []
   const total = data?.total ?? 0
   const totalPages = data?.totalPages ?? 1
+
+  const canEdit = user?.role === 'ADMIN' || user?.role === 'OPERATOR'
 
   const allSelected = routes.length > 0 && routes.every(r => selectedIds.has(r.id))
   const someSelected = selectedIds.size > 0
@@ -172,7 +194,75 @@ export default function RoutesPage() {
     }
   }
 
-  const bulkPending = bulkPublish.isPending || bulkDeactivate.isPending || bulkDelete.isPending
+  // Copy the selected routes' configs to the clipboard as JSON (Ctrl/Cmd+C).
+  async function copySelectedConfigs() {
+    const chosen = routes.filter((r) => selectedIds.has(r.id))
+    if (chosen.length === 0) return
+    await copyToClipboard(JSON.stringify(chosen.map(toExportConfig), null, 2))
+    toast.success(`Copied ${chosen.length} route config${chosen.length === 1 ? '' : 's'} to clipboard`)
+  }
+
+  // Create routes from JSON route configs on the clipboard (Ctrl/Cmd+V).
+  async function pasteConfigs() {
+    if (!canEdit) return
+    let text = ''
+    try { text = await navigator.clipboard.readText() } catch { return }
+    const configs = parseConfigs(text)
+    if (!configs) return
+    const ok = await confirm({
+      title: 'Paste routes',
+      description: `Create ${configs.length} new draft route(s) from the clipboard? Each gets a unique path and "(copy)" name.`,
+      confirmLabel: 'Create',
+    })
+    if (!ok) return
+    const res = await api.routes.import(prepareForPaste(configs))
+    const { created, errors } = res.data
+    if (created > 0) toast.success(`Created ${created} route(s)`)
+    if (errors?.length) toast.error(`${errors.length} failed: ${errors[0]}`)
+    queryClient.invalidateQueries({ queryKey: ['routes'] })
+  }
+
+  // Global keyboard shortcuts for the routes list. Ignored while typing.
+  useEffect(() => {
+    function isTyping(el: EventTarget | null): boolean {
+      const node = el as HTMLElement | null
+      if (!node) return false
+      const tag = node.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || node.isContentEditable
+    }
+    function onKey(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey
+      // Ctrl/Cmd combos work even from inputs (except they're native there)
+      if (mod && e.key.toLowerCase() === 'c' && someSelected && !isTyping(e.target)) {
+        e.preventDefault(); copySelectedConfigs(); return
+      }
+      if (mod && e.key.toLowerCase() === 'v' && !isTyping(e.target)) {
+        e.preventDefault(); pasteConfigs(); return
+      }
+      if (mod && e.key.toLowerCase() === 'a' && !isTyping(e.target) && routes.length > 0) {
+        e.preventDefault(); setSelectedIds(new Set(routes.map((r) => r.id))); return
+      }
+      if (isTyping(e.target)) return
+      if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); return }
+      if (e.key === 'n') { e.preventDefault(); router.push('/routes/new'); return }
+      if (e.key === 'Escape' && someSelected) { e.preventDefault(); setSelectedIds(new Set()); return }
+      if ((e.key === 'Delete' || e.key === 'Backspace') && someSelected && canEdit) { e.preventDefault(); handleBulkDelete(); return }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routes, someSelected, canEdit])
+
+  function applyBulk(patch: { environment?: string; routeGroupId?: string | null; addTags?: string[] }) {
+    bulkUpdate.mutate({ ids: Array.from(selectedIds), patch }, { onSuccess: () => setSelectedIds(new Set()) })
+  }
+
+  async function bulkAddTag() {
+    const tag = window.prompt('Add a tag to the selected routes:')?.trim()
+    if (tag) applyBulk({ addTags: [tag] })
+  }
+
+  const bulkPending = bulkPublish.isPending || bulkDeactivate.isPending || bulkUpdate.isPending || bulkDelete.isPending
 
   return (
     <div className="space-y-6">
@@ -184,12 +274,22 @@ export default function RoutesPage() {
             {total} route{total !== 1 ? 's' : ''} configured
           </p>
         </div>
-        <Button asChild>
-          <Link href="/routes/new">
-            <Plus className="w-4 h-4 mr-2" />
-            New Route
-          </Link>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="icon"
+            title={'Keyboard shortcuts:\n/  focus search\nn  new route\nCtrl/Cmd+A  select all\nCtrl/Cmd+C  copy selected configs\nCtrl/Cmd+V  paste configs as new routes\nDelete  delete selected\nEsc  clear selection'}
+            aria-label="Keyboard shortcuts"
+          >
+            <Keyboard className="w-4 h-4" />
+          </Button>
+          <Button asChild>
+            <Link href="/routes/new">
+              <Plus className="w-4 h-4 mr-2" />
+              New Route
+            </Link>
+          </Button>
+        </div>
       </div>
 
       {/* Bulk Toolbar */}
@@ -221,6 +321,41 @@ export default function RoutesPage() {
               <PowerOff className="w-3.5 h-3.5 mr-1.5" />
               Deactivate
             </Button>
+            {/* Set environment for all selected */}
+            <Select value="" onValueChange={(v) => applyBulk({ environment: v })}>
+              <SelectTrigger className="h-8 w-[130px]" disabled={bulkPending}>
+                <Layers className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                <SelectValue placeholder="Set env" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="NONE">None</SelectItem>
+                <SelectItem value="PRODUCTION">Production</SelectItem>
+                <SelectItem value="STAGING">Staging</SelectItem>
+                <SelectItem value="DEVELOPMENT">Development</SelectItem>
+              </SelectContent>
+            </Select>
+            {groups.length > 0 && (
+              <Select value="" onValueChange={(v) => applyBulk({ routeGroupId: v === '__none__' ? null : v })}>
+                <SelectTrigger className="h-8 w-[140px]" disabled={bulkPending}>
+                  <Building2 className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder="Move to group" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No group</SelectItem>
+                  {groups.map((g: any) => (
+                    <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <Button size="sm" variant="outline" onClick={bulkAddTag} disabled={bulkPending}>
+              <TagIcon className="w-3.5 h-3.5 mr-1.5" />
+              Add tag
+            </Button>
+            <Button size="sm" variant="outline" onClick={copySelectedConfigs} disabled={bulkPending} title="Copy configs (Ctrl/Cmd+C)">
+              <Copy className="w-3.5 h-3.5 mr-1.5" />
+              Copy
+            </Button>
             <Button
               size="sm"
               variant="destructive"
@@ -246,7 +381,8 @@ export default function RoutesPage() {
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="Search routes..."
+            ref={searchRef}
+            placeholder="Search routes...  ( / )"
             value={search}
             onChange={(e) => { setSearch(e.target.value); setPage(1) }}
             className="pl-9"
@@ -261,6 +397,19 @@ export default function RoutesPage() {
             <SelectItem value="ALL">All Status</SelectItem>
             <SelectItem value="PUBLISHED">Published</SelectItem>
             <SelectItem value="DRAFT">Draft</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={envFilter} onValueChange={(v) => { setEnvFilter(v as any); setPage(1) }}>
+          <SelectTrigger className="w-36">
+            <Layers className="w-3 h-3 mr-2 text-muted-foreground" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">All Envs</SelectItem>
+            <SelectItem value="PRODUCTION">Production</SelectItem>
+            <SelectItem value="STAGING">Staging</SelectItem>
+            <SelectItem value="DEVELOPMENT">Development</SelectItem>
+            <SelectItem value="NONE">No environment</SelectItem>
           </SelectContent>
         </Select>
         {userOrgs.length > 1 && (
@@ -515,8 +664,9 @@ function RouteRow({
             {route.publicPath}
             <CopyUrlButton path={route.publicPath} />
           </p>
-          {(route.tags.length > 0 || (route as any).organization) && (
+          {(route.tags.length > 0 || (route as any).organization || (route.environment && route.environment !== 'NONE')) && (
             <div className="flex items-center gap-1 mt-1 min-w-0">
+              <EnvironmentBadge environment={route.environment} className="text-[10px] py-0 px-1.5" />
               {(route as any).organization && (
                 <Badge variant="outline" className="text-[10px] py-0 px-1.5 max-w-[150px] truncate" title={(route as any).organization.name}>
                   {(route as any).organization.name}
@@ -602,6 +752,25 @@ function RouteRow({
               <DropdownMenuItem onClick={onDuplicate} disabled={isLoading}>
                 <Copy className="w-4 h-4 mr-2" />
                 Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+                  await copyToClipboard(buildCurl(route, origin))
+                  toast.success('cURL command copied')
+                }}
+              >
+                <Terminal className="w-4 h-4 mr-2" />
+                Copy as cURL
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  const slug = route.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'route'
+                  downloadJson(`route-${slug}.json`, toExportConfig(route))
+                }}
+              >
+                <FileDown className="w-4 h-4 mr-2" />
+                Export config
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
