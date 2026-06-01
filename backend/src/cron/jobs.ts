@@ -8,6 +8,7 @@ import { runScheduledUpdateCheck } from '../services/updateService'
 import { getKeysExpiringSoon } from '../services/apiKeyService'
 import { notifyKeyExpiring } from '../services/notificationService'
 import { createBackup, enforceRetentionPolicy } from '../services/backupService'
+import { cleanupSessions } from '../services/sessionService'
 import { logger } from '../lib/logger'
 import { config } from '../config'
 
@@ -30,6 +31,8 @@ export function startCronJobs() {
     try {
       await cleanOldLogs(config.LOG_RETENTION_DAYS)
       await cleanupRateLimitCounters()
+      const removed = await cleanupSessions()
+      if (removed > 0) logger.info(`Cleaned up ${removed} expired/revoked sessions`)
     } catch (err) {
       logger.error('Log cleanup cron failed', { error: (err as Error).message })
     }

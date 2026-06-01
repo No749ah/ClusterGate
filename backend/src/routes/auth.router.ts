@@ -6,7 +6,8 @@ import { generateSetup, verifyAndEnable, verifyToken as verify2FAToken, disable 
 import { authenticate } from '../middleware/authenticate'
 import { authLimiter } from '../middleware/rateLimiter'
 import { config } from '../config'
-import { signToken, signShortLivedToken, verifyShortLivedToken } from '../lib/jwt'
+import { signShortLivedToken, verifyShortLivedToken } from '../lib/jwt'
+import { issueSession, listSessions, revokeSession, revokeOtherSessions } from '../services/sessionService'
 import { createAuditLog } from '../services/auditService'
 import { AppError } from '../lib/errors'
 import { prisma } from '../lib/prisma'
@@ -112,7 +113,7 @@ router.post('/setup', authLimiter, async (req: Request, res: Response, next: Nex
     })
 
     const data = schema.parse(req.body)
-    const result = await setupInitialAdmin(data)
+    const result = await setupInitialAdmin(data, { ip: req.ip, userAgent: req.get('user-agent') })
 
     res.cookie('cg_session', result.token, COOKIE_OPTIONS)
 
@@ -235,7 +236,7 @@ router.post('/accept-invite', authLimiter, async (req: Request, res: Response, n
     })
 
     const data = schema.parse(req.body)
-    const result = await acceptInvite(data.token, { name: data.name, password: data.password })
+    const result = await acceptInvite(data.token, { name: data.name, password: data.password }, { ip: req.ip, userAgent: req.get('user-agent') })
 
     res.cookie('cg_session', result.token, COOKIE_OPTIONS)
 
@@ -312,7 +313,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
     })
 
     const { email, password } = schema.parse(req.body)
-    const result = await login(email, password)
+    const result = await login(email, password, { ip: req.ip, userAgent: req.get('user-agent') })
 
     // Check if user has 2FA enabled
     if (result.user.twoFactorEnabled) {
@@ -491,7 +492,7 @@ router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next
       data: { lastLoginAt: new Date() },
     })
 
-    const token = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
+    const token = await issueSession(user, { ip: req.ip, userAgent: req.get('user-agent') })
     res.cookie('cg_session', token, COOKIE_OPTIONS)
 
     createAuditLog({
@@ -717,11 +718,16 @@ router.post('/2fa/disable', authenticate, async (req: Request, res: Response, ne
  */
 router.post('/logout', authenticate, async (req: Request, res: Response, next: NextFunction) => {
   try {
-    // Increment tokenVersion to revoke all sessions for this user
-    await prisma.user.update({
-      where: { id: req.user!.userId },
-      data: { tokenVersion: { increment: 1 } },
-    })
+    // Revoke just this session. Legacy tokens without a session id fall back to
+    // bumping tokenVersion (which revokes all of the user's sessions).
+    if (req.user!.sessionId) {
+      await revokeSession(req.user!.userId, req.user!.sessionId).catch(() => {})
+    } else {
+      await prisma.user.update({
+        where: { id: req.user!.userId },
+        data: { tokenVersion: { increment: 1 } },
+      })
+    }
 
     createAuditLog({
       userId: req.user!.userId,
@@ -833,6 +839,105 @@ router.post('/change-password', authenticate, async (req: Request, res: Response
       success: true,
       message: 'Password changed successfully. Please login again.',
     })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
+ * /api/auth/sessions:
+ *   get:
+ *     tags: [Auth]
+ *     summary: List active sessions
+ *     description: Returns the current user's active login sessions. The session matching the current request is flagged as `current`.
+ *     responses:
+ *       200:
+ *         description: List of active sessions
+ *       401:
+ *         description: Not authenticated
+ */
+router.get('/sessions', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const sessions = await listSessions(req.user!.userId)
+    const data = sessions.map((s) => ({ ...s, current: s.id === req.user!.sessionId }))
+    res.json({ success: true, data })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
+ * /api/auth/sessions/revoke-others:
+ *   post:
+ *     tags: [Auth]
+ *     summary: Revoke all other sessions
+ *     description: Revokes every active session for the current user except the one making this request.
+ *     responses:
+ *       200:
+ *         description: Number of sessions revoked
+ *       401:
+ *         description: Not authenticated
+ */
+router.post('/sessions/revoke-others', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const keep = req.user!.sessionId
+    if (!keep) {
+      // Legacy token (no session id) — fall back to a global revoke
+      await prisma.user.update({ where: { id: req.user!.userId }, data: { tokenVersion: { increment: 1 } } })
+      res.json({ success: true, data: { revoked: 'all' } })
+      return
+    }
+    const count = await revokeOtherSessions(req.user!.userId, keep)
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'auth.sessions_revoke_others',
+      resource: 'auth',
+      resourceId: req.user!.userId,
+      details: { count },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+    res.json({ success: true, data: { revoked: count } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
+ * /api/auth/sessions/{id}:
+ *   delete:
+ *     tags: [Auth]
+ *     summary: Revoke a session
+ *     description: Revokes a single session belonging to the current user.
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Session revoked
+ *       401:
+ *         description: Not authenticated
+ *       404:
+ *         description: Session not found
+ */
+router.delete('/sessions/:id', authenticate, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    await revokeSession(req.user!.userId, req.params.id)
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'auth.session_revoke',
+      resource: 'auth',
+      resourceId: req.params.id,
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+    res.json({ success: true, message: 'Session revoked' })
   } catch (err) {
     next(err)
   }

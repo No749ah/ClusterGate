@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Eye, EyeOff, Loader2, User, Lock, Info, Shield, ShieldCheck, ShieldOff, Copy, KeyRound, Trophy, AlertCircle } from 'lucide-react'
+import { Eye, EyeOff, Loader2, User, Lock, Info, Shield, ShieldCheck, ShieldOff, Copy, KeyRound, Trophy, AlertCircle, Monitor, LogOut } from 'lucide-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useAuth, useChangePassword } from '@/hooks/useAuth'
 import { api } from '@/lib/api'
 import { Achievement } from '@/types'
@@ -104,6 +104,115 @@ function AchievementsCard() {
             </div>
           ))}
         </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function describeUserAgent(ua: string | null): string {
+  if (!ua) return 'Unknown device'
+  const browser = /Edg/.test(ua) ? 'Edge'
+    : /OPR|Opera/.test(ua) ? 'Opera'
+    : /Chrome/.test(ua) ? 'Chrome'
+    : /Firefox/.test(ua) ? 'Firefox'
+    : /Safari/.test(ua) ? 'Safari'
+    : 'Browser'
+  const os = /Windows/.test(ua) ? 'Windows'
+    : /Mac OS X|Macintosh/.test(ua) ? 'macOS'
+    : /Android/.test(ua) ? 'Android'
+    : /iPhone|iPad|iOS/.test(ua) ? 'iOS'
+    : /Linux/.test(ua) ? 'Linux'
+    : 'Unknown OS'
+  return `${browser} · ${os}`
+}
+
+function SessionsCard() {
+  const queryClient = useQueryClient()
+  const [busy, setBusy] = useState<string | null>(null)
+  const { data, isLoading } = useQuery({
+    queryKey: ['sessions'],
+    queryFn: () => api.auth.listSessions(),
+  })
+  const sessions = data?.data ?? []
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ['sessions'] })
+
+  const revoke = async (id: string) => {
+    setBusy(id)
+    try {
+      await api.auth.revokeSession(id)
+      toast.success('Session signed out')
+      refresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to revoke session')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const revokeOthers = async () => {
+    setBusy('others')
+    try {
+      const res = await api.auth.revokeOtherSessions()
+      const n = res.data?.revoked
+      toast.success(typeof n === 'number' ? `Signed out ${n} other session${n === 1 ? '' : 's'}` : 'Other sessions signed out')
+      refresh()
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to revoke sessions')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const hasOthers = sessions.some((s) => !s.current)
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Monitor className="w-4 h-4" /> Active Sessions
+        </CardTitle>
+        <CardDescription>Devices currently signed in to your account. Revoke any you don&apos;t recognise.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {isLoading ? (
+          <div className="text-center py-4 text-muted-foreground text-sm">Loading...</div>
+        ) : sessions.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No active sessions.</p>
+        ) : (
+          <div className="space-y-2">
+            {sessions.map((s) => (
+              <div key={s.id} className="flex items-center justify-between gap-2 p-3 rounded-lg border border-border/50">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium truncate">{describeUserAgent(s.userAgent)}</p>
+                    {s.current && <Badge variant="success">This device</Badge>}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {s.ip || 'Unknown IP'} · last active {formatDate(s.lastSeenAt)}
+                  </p>
+                </div>
+                {!s.current && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive flex-shrink-0"
+                    disabled={busy === s.id}
+                    onClick={() => revoke(s.id)}
+                  >
+                    {busy === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Sign out'}
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+        {hasOthers && (
+          <Button variant="outline" size="sm" disabled={busy === 'others'} onClick={revokeOthers}>
+            {busy === 'others' ? <Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" /> : <LogOut className="w-3.5 h-3.5 mr-2" />}
+            Sign out all other sessions
+          </Button>
+        )}
       </CardContent>
     </Card>
   )
@@ -485,6 +594,9 @@ export default function AccountPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      {/* Active Sessions */}
+      <SessionsCard />
 
       {/* Achievements */}
       <AchievementsCard />

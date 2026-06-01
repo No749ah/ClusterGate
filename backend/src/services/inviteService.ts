@@ -3,7 +3,7 @@ import { Role } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { hashPassword, validatePassword } from './authService'
-import { signToken } from '../lib/jwt'
+import { issueSession, SessionContext } from './sessionService'
 
 const INVITE_EXPIRY_HOURS = 72
 
@@ -71,7 +71,7 @@ export async function validateInvite(token: string) {
   }
 }
 
-export async function acceptInvite(token: string, data: { name: string; password: string }) {
+export async function acceptInvite(token: string, data: { name: string; password: string }, ctx: SessionContext = {}) {
   const validation = validatePassword(data.password)
   if (!validation.valid) {
     throw AppError.badRequest('Password does not meet requirements', validation.errors)
@@ -110,7 +110,7 @@ export async function acceptInvite(token: string, data: { name: string; password
     })
   }, { isolationLevel: 'Serializable' })
 
-  const jwtToken = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
+  const jwtToken = await issueSession(user, ctx)
   const { passwordHash: _, ...safeUser } = user
 
   return { user: safeUser, token: jwtToken }

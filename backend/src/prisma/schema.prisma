@@ -131,9 +131,29 @@ model User {
   changeRequestsMade    ChangeRequest[] @relation("ChangeRequestedBy")
   changeRequestsReviewed ChangeRequest[] @relation("ChangeReviewedBy")
   achievements     Achievement[]
+  sessions         Session[]
 
   @@index([email])
   @@map("users")
+}
+
+// A single authenticated login session. The session id is embedded in the JWT
+// (sid claim) so individual sessions can be listed and revoked from the
+// account page — finer-grained than the global tokenVersion bump.
+model Session {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userAgent  String?
+  ip         String?
+  createdAt  DateTime  @default(now())
+  lastSeenAt DateTime  @default(now())
+  expiresAt  DateTime
+  revokedAt  DateTime?
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
 }
 
 model Organization {

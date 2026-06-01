@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { verifyToken, JWTPayload } from '../lib/jwt'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
+import { validateSession } from '../services/sessionService'
 import { Role } from '@prisma/client'
 
 // Extend Express Request type
@@ -12,6 +13,7 @@ declare global {
         userId: string
         email: string
         role: Role
+        sessionId?: string
       }
     }
   }
@@ -56,10 +58,21 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       throw AppError.unauthorized('Session has been revoked')
     }
 
+    // Per-session revocation: tokens minted with a session id must map to a
+    // live session. Legacy tokens without a sid still work until they expire.
+    if (payload.sid) {
+      const ok = await validateSession(payload.sid, req.ip)
+      if (!ok) {
+        res.clearCookie('cg_session', { path: '/' })
+        throw AppError.unauthorized('Session has been revoked')
+      }
+    }
+
     req.user = {
       userId: user.id,
       email: user.email,
       role: user.role,
+      sessionId: payload.sid,
     }
 
     next()

@@ -7,6 +7,7 @@ export interface JWTPayload {
   email: string
   role: Role
   tokenVersion?: number
+  sid?: string // session id — enables per-session listing/revocation
   iat?: number
   exp?: number
 }

@@ -1,6 +1,6 @@
 import bcrypt from 'bcryptjs'
 import { prisma } from '../lib/prisma'
-import { signToken } from '../lib/jwt'
+import { issueSession, SessionContext } from './sessionService'
 import { AppError } from '../lib/errors'
 import { User } from '@prisma/client'
 
@@ -11,7 +11,7 @@ export interface LoginResult {
   token: string
 }
 
-export async function login(email: string, password: string): Promise<LoginResult> {
+export async function login(email: string, password: string, ctx: SessionContext = {}): Promise<LoginResult> {
   const user = await prisma.user.findUnique({
     where: { email: email.toLowerCase().trim() },
   })
@@ -40,7 +40,7 @@ export async function login(email: string, password: string): Promise<LoginResul
     data: { lastLoginAt: new Date() },
   })
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
+  const token = await issueSession(user, ctx)
 
   const { passwordHash: _, twoFactorSecret: _s, recoveryCodes: _r, ...safeUser } = user
 
@@ -117,7 +117,7 @@ export async function setupInitialAdmin(data: {
   email: string
   password: string
   name: string
-}): Promise<LoginResult> {
+}, ctx: SessionContext = {}): Promise<LoginResult> {
   const validation = validatePassword(data.password)
   if (!validation.valid) {
     throw AppError.badRequest('Password does not meet requirements', validation.errors)
@@ -143,7 +143,7 @@ export async function setupInitialAdmin(data: {
     })
   }, { isolationLevel: 'Serializable' })
 
-  const token = signToken({ userId: user.id, email: user.email, role: user.role, tokenVersion: user.tokenVersion })
+  const token = await issueSession(user, ctx)
   const { passwordHash: _, twoFactorSecret: _s, recoveryCodes: _r, ...safeUser } = user
 
   return { user: safeUser, token }

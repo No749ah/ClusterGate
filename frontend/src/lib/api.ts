@@ -152,6 +152,16 @@ class ApiClient {
 
     twoFactorDisable: (password: string) =>
       this.post<ApiResponse<null>>('/api/auth/2fa/disable', { password }),
+
+    // Sessions
+    listSessions: () =>
+      this.get<ApiResponse<Array<{ id: string; ip: string | null; userAgent: string | null; createdAt: string; lastSeenAt: string; expiresAt: string; current: boolean }>>>('/api/auth/sessions'),
+
+    revokeSession: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/auth/sessions/${id}`),
+
+    revokeOtherSessions: () =>
+      this.post<ApiResponse<{ revoked: number | string }>>('/api/auth/sessions/revoke-others'),
   }
 
   // ============================================================================
