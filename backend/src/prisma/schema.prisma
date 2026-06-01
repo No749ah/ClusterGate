@@ -39,6 +39,13 @@ enum TargetType {
   N8N
 }
 
+enum Environment {
+  NONE
+  PRODUCTION
+  STAGING
+  DEVELOPMENT
+}
+
 enum KeyScope {
   READ
   FULL
@@ -268,6 +275,7 @@ model Route {
   isActive     Boolean     @default(false)
   status       RouteStatus @default(DRAFT)
   tags         String[]    @default([])
+  environment  Environment @default(NONE)
   version      Int         @default(1)
 
   // Proxy settings

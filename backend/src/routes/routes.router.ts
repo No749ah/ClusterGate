@@ -50,6 +50,7 @@ const routeBodySchema = z.object({
   upstreamAuthValue: z.string().optional(),
   upstreamAuthHeader: z.string().default('X-API-Key'),
   targetType: z.enum(['GENERIC', 'N8N']).default('GENERIC'),
+  environment: z.enum(['NONE', 'PRODUCTION', 'STAGING', 'DEVELOPMENT']).default('NONE'),
   healthCheckMethod: z.enum(['HEAD', 'GET', 'POST']).default('HEAD'),
   healthCheckPath: z.string().optional(),
   healthCheckBody: z.string().optional(),
@@ -143,7 +144,7 @@ const routeBodySchema = z.object({
  */
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { page = '1', pageSize = '20', search, status, isActive, tags, sortBy, sortDir, organizationId } = req.query
+    const { page = '1', pageSize = '20', search, status, isActive, tags, environment, sortBy, sortDir, organizationId } = req.query
 
     // Scope routes by user's org memberships (admins see all)
     let organizationIds: string[] | undefined
@@ -160,6 +161,7 @@ router.get('/', authenticate, async (req, res, next) => {
         status: status as any,
         isActive: isActive === 'true' ? true : isActive === 'false' ? false : undefined,
         tags: tags ? String(tags).split(',') : undefined,
+        environment: environment as any,
         organizationIds,
         organizationId: organizationId as string | undefined,
       },
@@ -493,6 +495,49 @@ router.post('/import', authenticate, authorize([Role.ADMIN]), async (req, res, n
 
 const bulkIdsSchema = z.object({
   ids: z.array(z.string()).min(1).max(100),
+})
+
+const bulkUpdateSchema = z.object({
+  ids: z.array(z.string()).min(1).max(100),
+  environment: z.enum(['NONE', 'PRODUCTION', 'STAGING', 'DEVELOPMENT']).optional(),
+  routeGroupId: z.string().nullable().optional(),
+  addTags: z.array(z.string().max(50)).max(20).optional(),
+})
+
+/**
+ * @openapi
+ * /api/routes/bulk/update:
+ *   post:
+ *     tags: [Routes]
+ *     summary: Bulk update route metadata
+ *     description: Sets environment, moves routes to a group, and/or appends tags across many routes at once. Requires ADMIN or OPERATOR role.
+ *     responses:
+ *       200:
+ *         description: Routes updated
+ *       400:
+ *         description: Validation error
+ */
+router.post('/bulk/update', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+  try {
+    const { ids, environment, routeGroupId, addTags } = bulkUpdateSchema.parse(req.body)
+    if (!environment && routeGroupId === undefined && (!addTags || addTags.length === 0)) {
+      throw AppError.badRequest('Provide at least one of: environment, routeGroupId, addTags')
+    }
+    const count = await routeService.bulkUpdate(ids, { environment, routeGroupId, addTags }, req.user!.userId)
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'route.bulk_update',
+      resource: 'route',
+      details: { ids, environment, routeGroupId, addTags, count },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+
+    res.json({ success: true, data: { count } })
+  } catch (err) {
+    next(err)
+  }
 })
 
 /**

@@ -10,6 +10,7 @@ export interface RouteFilters {
   status?: RouteStatus
   isActive?: boolean
   tags?: string[]
+  environment?: 'NONE' | 'PRODUCTION' | 'STAGING' | 'DEVELOPMENT'
   organizationIds?: string[] // scope to user's orgs
   organizationId?: string    // filter by single org
 }
@@ -51,6 +52,7 @@ export async function getRoutes(
     ...(filters.tags && filters.tags.length > 0 && {
       tags: { hasSome: filters.tags },
     }),
+    ...(filters.environment && { environment: filters.environment as any }),
     // Org scoping: non-admins see only their org's routes
     ...(filters.organizationIds && {
       organizationId: { in: filters.organizationIds },
@@ -386,6 +388,7 @@ export async function exportRoutes() {
       methods: true,
       status: true,
       tags: true,
+      environment: true,
       timeout: true,
       retryCount: true,
       retryDelay: true,
@@ -447,6 +450,46 @@ export async function bulkDeactivate(ids: string[], userId: string) {
     data: { isActive: false, updatedById: userId },
   })
   return result.count
+}
+
+/**
+ * Bulk-apply metadata changes to many routes at once: set environment, move to
+ * a group/clear it, and/or append tags (deduplicated). Tag appends need a
+ * per-row merge, so those run in a transaction; the rest is a single updateMany.
+ */
+export async function bulkUpdate(
+  ids: string[],
+  patch: { environment?: 'NONE' | 'PRODUCTION' | 'STAGING' | 'DEVELOPMENT'; routeGroupId?: string | null; addTags?: string[] },
+  userId: string
+): Promise<number> {
+  const base: Record<string, unknown> = { updatedById: userId }
+  if (patch.environment) base.environment = patch.environment
+  if (patch.routeGroupId !== undefined) base.routeGroupId = patch.routeGroupId
+
+  const cleanTags = (patch.addTags ?? []).map((t) => t.trim()).filter(Boolean)
+
+  if (cleanTags.length === 0) {
+    const result = await prisma.route.updateMany({
+      where: { id: { in: ids }, deletedAt: null },
+      data: base,
+    })
+    return result.count
+  }
+
+  // Append tags per-row so we can deduplicate against each route's existing tags
+  const routes = await prisma.route.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    select: { id: true, tags: true },
+  })
+  await prisma.$transaction(
+    routes.map((r) =>
+      prisma.route.update({
+        where: { id: r.id },
+        data: { ...base, tags: Array.from(new Set([...r.tags, ...cleanTags])) },
+      })
+    )
+  )
+  return routes.length
 }
 
 export async function bulkDelete(ids: string[]) {
