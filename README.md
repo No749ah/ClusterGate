@@ -40,7 +40,8 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 ## Features
 
 - **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services under `/r/` prefix
-- **Route Management** — Create, test, publish, version, duplicate, import/export routes via UI
+- **Route Management** — Create, test, publish, version, duplicate, import/export routes via UI; **bulk actions** (publish/deactivate/delete, set environment, move to group, add tags); **Copy-as-cURL** and per-route config export; keyboard shortcuts on the route list (`/` search, `n` new, Ctrl/Cmd+A/C/V, Del)
+- **Environment Labels** — Tag routes as Production / Staging / Development with colored badges and a list filter
 - **WebSocket Proxy** — Native WebSocket upgrade support via `http-proxy` for WS/WSS routes
 - **Load Balancing** — Round-robin (shared across replicas), weighted, and failover strategies with multiple targets per route
 - **Circuit Breaker** — Automatic failure detection (CLOSED/OPEN/HALF_OPEN) with configurable thresholds
@@ -52,11 +53,11 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Multi-Tenant** — Organizations with teams, role-based membership (Owner/Admin/Member), route + analytics scoping
 - **Two-Factor Authentication** — TOTP-based 2FA with recovery codes, single-use login token, and per-user brute-force lockout
 - **Analytics Dashboard** — Latency trends (p50/p95/p99), error rates, traffic heatmap, status distribution (org-scoped for non-admins)
-- **Security** — JWT auth (httpOnly cookies), bcrypt, CSRF (double-submit cookie), session revocation (tokenVersion), generated per-route API keys / Basic / Bearer, **route secrets encrypted at rest (AES-256-GCM)**, HA rate limiting, IP allowlists, webhook secrets, CORS, SSRF guard, password policy
+- **Security** — JWT auth (httpOnly cookies), bcrypt, CSRF (double-submit cookie), **per-session management** (list active sessions with device/IP/last-seen, revoke individually or "sign out all others") plus global tokenVersion revocation, generated per-route API keys / Basic / Bearer, **route secrets encrypted at rest (AES-256-GCM)**, HA rate limiting, IP allowlists, **HMAC webhook signature verification** (`X-Hub-Signature-256` / `X-Webhook-Signature`), CORS, SSRF guard, password policy
 - **Configurable Health Checks** — Per-route method/path/body and interval (5 min / 15 min / 1 h / 12 h / 24 h); POST + body and n8n auto-`chatInput`/`sessionId`; auto HTTPS→HTTP fallback
 - **Deletion Safety** — Published routes can't be deleted (deactivate first); routes can be marked **Protected (production)** to require typing the exact name before deletion
 - **Automatic Migrations** — Pending DB migrations applied on startup (Helm, raw manifests, and self-update)
-- **Monitoring** — Paginated request logs (bodies redacted for VIEWER), error tracking, Prometheus metrics, automated health checks, in-app notifications (dismissible) incl. API-key expiry warnings
+- **Monitoring** — Paginated request logs (bodies redacted for VIEWER), error tracking, Prometheus metrics, **opt-in OpenTelemetry distributed tracing** (OTLP export, `traceparent` propagated to upstreams, trace IDs in logs), automated health checks, in-app notifications (dismissible) incl. API-key expiry warnings
 - **Database Backups** — Create, download, restore, and manage backups from the UI (Prisma-based JSON export, no pg_dump needed)
 - **API Documentation** — Interactive Swagger/OpenAPI docs at `/api/docs`
 - **Incident Management** — Auto-detection from health checks and circuit breaker, timeline, severity levels, manual creation
@@ -67,7 +68,7 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 - **Route Version Diff** — Side-by-side comparison of route configuration changes
 - **Org-Scoped Routes** — Routes belong to organizations; non-admin users only see their org's routes
 - **Dark Mode UI** — Modern, responsive Next.js frontend with shadcn/ui, PWA installable
-- **CI/CD** — GitHub Actions pipeline with type-check, Vitest tests (90+), and Docker build validation
+- **CI/CD** — GitHub Actions pipeline with type-check, Vitest tests (140+), Docker build validation, and a **security workflow** (npm audit, Trivy filesystem/secret scan, CodeQL)
 - **Kubernetes-native** — Kubernetes manifests + Helm chart + HPE PCAI support
 
 ---
@@ -268,6 +269,9 @@ Public Request
 | `BACKUP_CRON_ENABLED`   | No       | `false`   | Enable scheduled DB backups          |
 | `BACKUP_CRON_SCHEDULE`  | No       | `0 3 * * *` | Backup cron schedule               |
 | `BACKUP_RETENTION_COUNT`| No       | `10`      | Backups to retain                    |
+| `OTEL_ENABLED`          | No       | `false`   | Enable OpenTelemetry distributed tracing |
+| `OTEL_SERVICE_NAME`     | No       | `clustergate-backend` | Service name reported in traces |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | No | `http://localhost:4318` | OTLP/HTTP collector base URL (SDK appends `/v1/traces`) |
 
 > Per-route rate limiting is backed by Postgres so limits are correct across replicas (HA). Route secrets (auth values, upstream credentials, webhook secrets) are encrypted at rest.
 
@@ -338,9 +342,12 @@ POST /api/auth/2fa/verify         Verify 2FA code during login
 POST /api/auth/2fa/setup          Initiate 2FA setup (authenticated)
 POST /api/auth/2fa/enable         Verify and enable 2FA (authenticated)
 POST /api/auth/2fa/disable        Disable 2FA (requires password)
-POST /api/auth/logout             Logout (clears session)
+POST /api/auth/logout             Logout (revokes the current session)
 GET  /api/auth/me                 Get current user
 POST /api/auth/change-password    Change password
+GET  /api/auth/sessions           List active sessions (device/IP/last-seen)
+DELETE /api/auth/sessions/:id     Revoke a specific session
+POST /api/auth/sessions/revoke-others  Sign out all other sessions
 ```
 
 #### Routes
@@ -360,6 +367,10 @@ POST   /api/routes/:id/versions/:vId/restore  Restore version
 GET    /api/routes/:id/logs        Request logs for route
 GET    /api/routes/:id/stats       Stats for route
 GET    /api/routes/:id/uptime      Uptime statistics
+POST   /api/routes/bulk/publish    Bulk publish routes
+POST   /api/routes/bulk/deactivate Bulk deactivate routes
+POST   /api/routes/bulk/update     Bulk set environment / move to group / add tags
+POST   /api/routes/bulk/delete     Bulk delete routes
 POST   /api/routes/import          Import routes JSON
 GET    /api/routes/export          Export routes JSON
 GET    /api/routes/check-path      Check if public path is available
@@ -611,10 +622,15 @@ ClusterGate supports TOTP-based two-factor authentication:
 
 ### Session Security
 
-- **Session revocation** — Logout, password change, admin reset, and force-logout-all invalidate existing sessions via `tokenVersion`
+- **Per-session management** — Each login is tracked as a session (device/user-agent, IP, created + last-seen). From **Account → Active Sessions** you can see every signed-in device and revoke one individually or "sign out all other sessions". The session id is carried in the JWT (`sid` claim) and validated on every request; expired/revoked sessions are pruned by a daily cron.
+- **Global revocation** — Password change, admin reset, and force-logout-all still invalidate *all* of a user's sessions via `tokenVersion`
 - **CSRF protection** — Double-submit cookie pattern (`cg_csrf` cookie + `X-CSRF-Token` header) on all state-changing requests
 - **Password policy** — Min 8 chars, uppercase, lowercase, number, special character (enforced on all forms)
 - **API versioning** — `X-API-Version: 1` header on all responses
+
+### Webhook Signature Verification
+
+Routes can require an HMAC-SHA256 signature on incoming requests. Set a **Webhook Secret** on the route (a "Generate" button creates a strong one), and ClusterGate validates the `X-Hub-Signature-256` (GitHub-style `sha256=<hmac>`) or `X-Webhook-Signature` header against the raw request body using a timing-safe comparison before proxying. Requests with a missing or invalid signature are rejected with `401`.
 
 ### Secrets at Rest
 
@@ -663,6 +679,18 @@ Available at `/metrics` (protect with `METRICS_SECRET` header or IP allowlist):
 | `proxy_requests_total`            | Counter   | Proxy requests by route/status |
 | `proxy_request_duration_seconds`  | Histogram | Proxy request duration         |
 | `active_routes_total`             | Gauge     | Active published routes        |
+
+### Distributed Tracing (OpenTelemetry)
+
+Tracing is **opt-in** and a complete no-op unless enabled. Set `OTEL_ENABLED=true` and point `OTEL_EXPORTER_OTLP_ENDPOINT` at an OTLP/HTTP collector (e.g. an OpenTelemetry Collector, Grafana Tempo, Jaeger, or Honeycomb):
+
+```bash
+OTEL_ENABLED=true
+OTEL_SERVICE_NAME=clustergate-backend
+OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
+```
+
+When enabled, ClusterGate auto-instruments HTTP/Express, exports spans over OTLP, propagates the W3C `traceparent` header to proxied upstreams (so a request can be followed end-to-end across ClusterGate and the services it fronts), and attaches `trace_id` / `span_id` to every structured log line for log↔trace correlation.
 
 ### Analytics Dashboard
 
