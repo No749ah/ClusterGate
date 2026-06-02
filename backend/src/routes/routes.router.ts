@@ -1594,7 +1594,7 @@ router.get('/:id/logs', authenticate, async (req, res, next) => {
       {
         routeId: req.params.id,
         method: method as string,
-        statusType: statusType as 'success' | 'error',
+        statusType: statusType as 'success' | 'error' | 'client',
         dateFrom: dateFrom ? new Date(String(dateFrom)) : undefined,
         dateTo: dateTo ? new Date(String(dateTo)) : undefined,
       },

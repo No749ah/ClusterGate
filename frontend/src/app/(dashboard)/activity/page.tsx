@@ -45,7 +45,7 @@ export default function LogsPage() {
   const { data: logsData, isLoading, isFetching } = useLogs({
     routeId: routeId || undefined,
     method: method || undefined,
-    statusType: (statusType as 'success' | 'error') || undefined,
+    statusType: (statusType as 'success' | 'error' | 'client') || undefined,
     page,
     pageSize,
   })
@@ -89,17 +89,33 @@ export default function LogsPage() {
           </SelectContent>
         </Select>
 
-        <Select value={method || 'ALL'} onValueChange={(v) => { setMethod(v === 'ALL' ? '' : v); setPage(1) }}>
-          <SelectTrigger className="w-28">
-            <SelectValue placeholder="Method" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Methods</SelectItem>
-            {['GET', 'POST', 'PUT', 'PATCH', 'DELETE'].map((m) => (
-              <SelectItem key={m} value={m}>{m}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {/* Multi-select method chips: click toggles, no selection = all */}
+        <div className="flex items-center gap-1 rounded-md border border-input bg-transparent px-1 h-9">
+          {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const).map((m) => {
+            const selected = method.split(',').map(s => s.trim()).filter(Boolean)
+            const on = selected.includes(m)
+            return (
+              <button
+                key={m}
+                type="button"
+                onClick={() => {
+                  const next = on ? selected.filter((x) => x !== m) : [...selected, m]
+                  setMethod(next.join(','))
+                  setPage(1)
+                }}
+                className={cn(
+                  'px-1.5 py-0.5 rounded text-[10px] font-mono font-medium border transition-colors',
+                  on
+                    ? 'bg-primary/20 border-primary/40 text-primary'
+                    : 'bg-transparent border-transparent text-muted-foreground hover:bg-muted/50'
+                )}
+                title={`${on ? 'Hide' : 'Show only'} ${m}`}
+              >
+                {m}
+              </button>
+            )
+          })}
+        </div>
 
         <Select value={statusType || 'ALL'} onValueChange={(v) => { setStatusType(v === 'ALL' ? '' : v); setPage(1) }}>
           <SelectTrigger className="w-32">
@@ -107,8 +123,9 @@ export default function LogsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">All Status</SelectItem>
-            <SelectItem value="success">Success (2xx)</SelectItem>
-            <SelectItem value="error">Error (4xx/5xx)</SelectItem>
+            <SelectItem value="success">Success (2xx/3xx)</SelectItem>
+            <SelectItem value="client">Client (4xx)</SelectItem>
+            <SelectItem value="error">Server error (5xx)</SelectItem>
           </SelectContent>
         </Select>
       </div>

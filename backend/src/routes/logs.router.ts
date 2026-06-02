@@ -120,7 +120,7 @@ router.get('/', authenticate, async (req, res, next) => {
       {
         routeId: routeId as string,
         method: method as string,
-        statusType: statusType as 'success' | 'error',
+        statusType: statusType as 'success' | 'error' | 'client',
         dateFrom: parsedDateFrom,
         dateTo: parsedDateTo,
       },

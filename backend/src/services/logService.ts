@@ -4,8 +4,14 @@ import { logger } from '../lib/logger'
 
 export interface LogFilters {
   routeId?: string
+  /** Single method ("POST") or multiple ("POST,PUT") to filter by. */
   method?: string
-  statusType?: 'success' | 'error'
+  // "error"  = upstream server errors (5xx) or proxy-level failures only.
+  //            4xx (e.g. 404 Not Found, 401 Unauthorized) are NOT errors —
+  //            they're well-formed client responses and live in "client".
+  // "client" = 4xx responses.
+  // "success" = 2xx/3xx responses.
+  statusType?: 'success' | 'error' | 'client'
   dateFrom?: Date
   dateTo?: Date
   search?: string
@@ -17,13 +23,19 @@ export async function getRouteLogs(filters: LogFilters, pagination = { page: 1, 
 
   const where: Prisma.RequestLogWhereInput = {
     ...(filters.routeId && { routeId: filters.routeId }),
-    ...(filters.method && { method: filters.method.toUpperCase() }),
+    ...(filters.method && (() => {
+      const methods = filters.method.split(',').map((m) => m.trim().toUpperCase()).filter(Boolean)
+      return methods.length > 1 ? { method: { in: methods } } : { method: methods[0] }
+    })()),
     ...(filters.statusType === 'success' && {
       responseStatus: { gte: 200, lt: 400 },
     }),
+    ...(filters.statusType === 'client' && {
+      responseStatus: { gte: 400, lt: 500 },
+    }),
     ...(filters.statusType === 'error' && {
       OR: [
-        { responseStatus: { gte: 400 } },
+        { responseStatus: { gte: 500 } },
         { error: { not: null } },
       ],
     }),
@@ -63,7 +75,9 @@ export async function getRouteStats(routeId: string) {
   const [total, errors, avgDuration] = await prisma.$transaction([
     prisma.requestLog.count({ where: { routeId } }),
     prisma.requestLog.count({
-      where: { routeId, OR: [{ responseStatus: { gte: 400 } }, { error: { not: null } }] },
+      // Errors = upstream 5xx or proxy failure. 4xx client responses are
+      // intentional and don't count toward the route's success rate.
+      where: { routeId, OR: [{ responseStatus: { gte: 500 } }, { error: { not: null } }] },
     }),
     prisma.requestLog.aggregate({
       where: { routeId },
@@ -96,7 +110,7 @@ export async function getRecentErrors(routeId?: string, limit = 10) {
   return prisma.requestLog.findMany({
     where: {
       ...(routeId && { routeId }),
-      OR: [{ responseStatus: { gte: 400 } }, { error: { not: null } }],
+      OR: [{ responseStatus: { gte: 500 } }, { error: { not: null } }],
     },
     orderBy: { createdAt: 'desc' },
     take: limit,
@@ -145,7 +159,7 @@ export async function getDailyRequestCounts(routeId?: string, days = 7) {
     const key = log.createdAt.toISOString().slice(0, 10)
     if (grouped[key]) {
       grouped[key].total++
-      if (log.responseStatus && log.responseStatus >= 400) {
+      if (log.responseStatus && log.responseStatus >= 500) {
         grouped[key].errors++
       }
     }
