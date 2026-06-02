@@ -112,7 +112,7 @@ export default function OrganizationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Organizations</h1>
           <p className="text-muted-foreground mt-1">Manage multi-tenant organizations and teams</p>

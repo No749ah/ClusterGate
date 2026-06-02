@@ -1,8 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import Link from 'next/link'
-import { Archive, ArrowLeft, RotateCcw, Trash2, AlertCircle, Building2 } from 'lucide-react'
+import { Archive, RotateCcw, Trash2, AlertCircle, Building2 } from 'lucide-react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { api } from '@/lib/api'
@@ -43,21 +42,14 @@ export default function ArchivedRoutesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" asChild>
-            <Link href="/routes" aria-label="Back to routes"><ArrowLeft className="w-4 h-4" /></Link>
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
-              <Archive className="w-5 h-5 text-muted-foreground" />
-              Archived Routes
-            </h1>
-            <p className="text-sm text-muted-foreground mt-1">
-              Restore or permanently delete soft-deleted routes. Visible to organization admins (and ADMINs for unscoped routes).
-            </p>
-          </div>
-        </div>
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40">
+        <h1 className="text-2xl font-bold text-foreground flex items-center gap-2">
+          <Archive className="w-5 h-5 text-muted-foreground shrink-0" />
+          Archived Routes
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          Restore or permanently delete soft-deleted routes. Visible to organization admins (and ADMINs for unscoped routes).
+        </p>
       </div>
 
       {isLoading ? (
