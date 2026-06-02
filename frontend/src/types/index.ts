@@ -327,6 +327,7 @@ export interface AuditLogFilters {
   resourceId?: string
   dateFrom?: string
   dateTo?: string
+  search?: string
   page?: number
   pageSize?: number
 }

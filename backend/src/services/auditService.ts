@@ -35,6 +35,8 @@ export interface AuditLogFilters {
   resourceId?: string
   dateFrom?: Date
   dateTo?: Date
+  /** Free-text search across action and resource columns. */
+  search?: string
 }
 
 export async function getAuditLogs(
@@ -49,6 +51,16 @@ export async function getAuditLogs(
     ...(filters.action && { action: { contains: filters.action, mode: 'insensitive' } }),
     ...(filters.resource && { resource: filters.resource }),
     ...(filters.resourceId && { resourceId: filters.resourceId }),
+    ...(filters.search && {
+      OR: [
+        { action:   { contains: filters.search, mode: 'insensitive' as const } },
+        { resource: { contains: filters.search, mode: 'insensitive' as const } },
+        { user: { OR: [
+          { name:  { contains: filters.search, mode: 'insensitive' as const } },
+          { email: { contains: filters.search, mode: 'insensitive' as const } },
+        ] } },
+      ],
+    }),
     ...(filters.dateFrom || filters.dateTo
       ? {
           createdAt: {

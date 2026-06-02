@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus, Edit, Trash2, KeyRound, Link2, Copy, Check, X, Mail, Clock, RotateCcw, ShieldOff } from 'lucide-react'
+import { Plus, Edit, Trash2, KeyRound, Link2, Copy, Check, X, Mail, Clock, RotateCcw, ShieldOff, Search } from 'lucide-react'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useForm } from 'react-hook-form'
@@ -43,10 +43,13 @@ export default function UsersPage() {
   const [copiedLink, setCopiedLink] = useState(false)
 
   const confirm = useConfirm()
+  // Free-text search across email + name. Client-side currently fetches up
+  // to 100 users; once accounts go beyond that the search hits the server.
+  const [search, setSearch] = useState('')
 
   const { data, isLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: () => api.users.list(1, 100, true),
+    queryKey: ['users', search],
+    queryFn: () => api.users.list(1, 100, true, search || undefined),
     staleTime: 30 * 1000,
   })
 
@@ -140,14 +143,25 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Users</h1>
           <p className="text-sm text-muted-foreground mt-1">{users.length} users</p>
         </div>
-        <Button onClick={() => { setInviteDialogOpen(true); setInviteLink(null); setCopiedLink(false) }}>
-          <Mail className="w-4 h-4 mr-2" /> Invite User
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+            <Input
+              placeholder="Search name / email"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-8 h-9 w-56"
+            />
+          </div>
+          <Button onClick={() => { setInviteDialogOpen(true); setInviteLink(null); setCopiedLink(false) }}>
+            <Mail className="w-4 h-4 mr-2" /> Invite User
+          </Button>
+        </div>
       </div>
 
       {/* Pending Invites */}

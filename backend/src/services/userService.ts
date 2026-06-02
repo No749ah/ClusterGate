@@ -10,10 +10,23 @@ export interface CreateUserData {
   role?: Role
 }
 
-export async function getUsers(pagination = { page: 1, pageSize: 20 }, includeInactive = false) {
+export async function getUsers(
+  pagination = { page: 1, pageSize: 20 },
+  includeInactive = false,
+  search?: string,
+) {
   const { page, pageSize } = pagination
   const skip = (page - 1) * pageSize
-  const where = includeInactive ? {} : { isActive: true }
+  const baseWhere = includeInactive ? {} : { isActive: true }
+  const where = search
+    ? {
+        ...baseWhere,
+        OR: [
+          { email: { contains: search, mode: 'insensitive' as const } },
+          { name:  { contains: search, mode: 'insensitive' as const } },
+        ],
+      }
+    : baseWhere
 
   const [data, total] = await prisma.$transaction([
     prisma.user.findMany({

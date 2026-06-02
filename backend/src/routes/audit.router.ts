@@ -107,6 +107,7 @@ router.get('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =>
       resourceId,
       dateFrom,
       dateTo,
+      search,
     } = req.query
 
     // Validate date params
@@ -127,6 +128,7 @@ router.get('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =>
         resourceId: resourceId as string,
         dateFrom: parsedDateFrom,
         dateTo: parsedDateTo,
+        search: search ? String(search) : undefined,
       },
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )

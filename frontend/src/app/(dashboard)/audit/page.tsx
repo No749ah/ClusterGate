@@ -1,9 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { Filter, RefreshCw, Shield, User, FileText } from 'lucide-react'
+import { useState, useEffect } from 'react'
+import { Filter, RefreshCw, Shield, User, FileText, Search } from 'lucide-react'
 import { useAuditLogs } from '@/hooks/useAuditLogs'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -36,12 +37,20 @@ function getActionColor(action: string): string {
 export default function AuditPage() {
   const queryClient = useQueryClient()
   const [resource, setResource] = useState<string>('')
+  // Free-text search across action, resource, and the actor's name/email
+  const [search, setSearch] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize('audit', 50)
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
 
   const { data: logsData, isLoading, isFetching } = useAuditLogs({
     resource: resource || undefined,
+    search: debouncedSearch || undefined,
     page,
     pageSize,
   })
@@ -72,6 +81,15 @@ export default function AuditPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search action / resource / actor"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+            className="pl-8 h-9 w-72"
+          />
+        </div>
         <Select value={resource || 'ALL'} onValueChange={(v) => { setResource(v === 'ALL' ? '' : v); setPage(1) }}>
           <SelectTrigger className="w-40">
             <Filter className="w-3 h-3 mr-2 text-muted-foreground" />

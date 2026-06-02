@@ -341,8 +341,12 @@ class ApiClient {
   // ============================================================================
 
   users = {
-    list: (page = 1, pageSize = 20, includeInactive = false) =>
-      this.get<PaginatedResponse<User>>(`/api/users?page=${page}&pageSize=${pageSize}${includeInactive ? '&includeInactive=true' : ''}`),
+    list: (page = 1, pageSize = 20, includeInactive = false, search?: string) => {
+      const params = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+      if (includeInactive) params.set('includeInactive', 'true')
+      if (search) params.set('search', search)
+      return this.get<PaginatedResponse<User>>(`/api/users?${params.toString()}`)
+    },
 
     create: (data: { email: string; password: string; name: string; role: string }) =>
       this.post<ApiResponse<User>>('/api/users', data),
@@ -399,6 +403,7 @@ class ApiClient {
       if (filters.resourceId) params.set('resourceId', filters.resourceId)
       if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
       if (filters.dateTo) params.set('dateTo', filters.dateTo)
+      if (filters.search) params.set('search', filters.search)
       if (filters.page) params.set('page', String(filters.page))
       if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
       const qs = params.toString()

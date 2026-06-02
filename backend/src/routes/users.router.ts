@@ -65,11 +65,12 @@ const router = Router()
  */
 router.get('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
-    const { page = '1', pageSize = '20', includeInactive } = req.query
-    const result = await userService.getUsers({
-      page: parseInt(String(page)) || 1,
-      pageSize: safePageSize(pageSize as string),
-    }, includeInactive === 'true')
+    const { page = '1', pageSize = '20', includeInactive, search } = req.query
+    const result = await userService.getUsers(
+      { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) },
+      includeInactive === 'true',
+      search ? String(search) : undefined,
+    )
     res.json({ success: true, ...result })
   } catch (err) {
     next(err)
