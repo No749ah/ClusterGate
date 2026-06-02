@@ -66,7 +66,7 @@ const routeSchema = z.object({
 
 type RouteFormValues = z.infer<typeof routeSchema>
 
-const STEPS = ['Where?', 'What?', 'Endpoint', 'Scope', 'Advanced']
+const STEPS = ['Target', 'Identity', 'Endpoint', 'Scope', 'Behavior', 'Security', 'Transforms & Maintenance']
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
 function generateRandomPath(): string {
@@ -280,17 +280,18 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   }
 
   const handleNext = async () => {
-    // 5-step guided layout: Where → What → Endpoint → Scope → Advanced
+    // 7-step guided layout
     const stepFields: (keyof RouteFormValues)[][] = [
-      ['targetUrl'],            // Where
-      ['name'],                 // What
+      ['targetUrl'],             // Target
+      ['name'],                  // Identity
       ['publicPath', 'methods'], // Endpoint
-      [],                       // Scope (Org checked manually for non-admins)
-      [],                       // Advanced (all optional)
+      [],                        // Scope (Org checked manually for non-admins)
+      ['timeout', 'retryCount', 'retryDelay'], // Behavior
+      [],                        // Security
+      [],                        // Transforms & Maintenance
     ]
     const fields = stepFields[step] ?? []
     const valid = fields.length === 0 ? true : await trigger(fields)
-    // Non-admins need an org — checked on the Scope step
     if (step === 3 && !isAdmin && orgs.length > 0 && !form.getValues('organizationId')) {
       return
     }
@@ -401,8 +402,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         {step === 0 && (
           <div className="space-y-4">
             <Section
-              title="Where does this route forward to?"
-              description="Paste the upstream URL. You can test reachability right here before configuring anything else."
+              title="Target"
+              description="The upstream URL this route forwards to. You can verify it's reachable right here."
             >
               <Field label="Target URL" error={errors.targetUrl?.message} required>
                 <input
@@ -486,8 +487,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         {step === 1 && (
           <div className="space-y-4">
             <Section
-              title="What is this route called?"
-              description="A name that helps you and your team recognise it in the list."
+              title="Identity"
+              description="Give this route a name and (optionally) tag it so you can find it again."
             >
               <Field label="Route Name" error={errors.name?.message} required>
                 <input {...register('name')} placeholder="My API Service" className={fieldClass(errors.name)} autoFocus />
@@ -538,8 +539,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         {step === 2 && (
           <div className="space-y-4">
             <Section
-              title="How will callers reach it?"
-              description="The public path is what clients call. ClusterGate forwards matching requests to the Target URL you set."
+              title="Endpoint"
+              description="The public path clients call and which HTTP methods are accepted."
             >
               <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'Wildcard is on — all sub-paths are proxied.' : 'A short, URL-safe identifier.'}>
                 <div className="flex gap-2">
@@ -650,7 +651,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         {step === 3 && (
           <div className="space-y-4">
             <Section
-              title="Where does it live?"
+              title="Scope"
               description="Owning organization (for access scoping) and which environment this is."
             >
               {orgs.length > 0 && (
@@ -696,341 +697,337 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
               </Field>
             </Section>
 
-            <div className="rounded-md border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground">
-              <p>You can save now — everything else is optional. Continue to <span className="text-foreground font-medium">Advanced</span> only if you need to tune timeouts, auth, transforms or other proxy behaviour.</p>
-            </div>
           </div>
         )}
 
         {/* ============================================================== */}
-        {/* Step 4: Advanced — collapsible accordion                        */}
+        {/* Step 4: Behavior                                                */}
         {/* ============================================================== */}
         {step === 4 && (
-          <div className="space-y-3">
-            <p className="text-xs text-muted-foreground">All advanced settings are optional. Click a section to expand it.</p>
+          <div className="space-y-4">
+            <Section title="Timing & retries" description="How long to wait for the upstream and how often to retry transient failures.">
+              <div className="grid grid-cols-3 gap-4">
+                <Field label="Timeout (ms)" error={errors.timeout?.message} hint="1000–120000">
+                  <input type="number" {...register('timeout')} className={fieldClass(errors.timeout)} />
+                </Field>
+                <Field label="Retry Count" hint="0–5">
+                  <input type="number" {...register('retryCount')} className={fieldClass()} />
+                </Field>
+                <Field label="Retry Delay (ms)" hint="100–10000">
+                  <input type="number" {...register('retryDelay')} className={fieldClass()} />
+                </Field>
+              </div>
+            </Section>
 
-            <details className="rounded-lg border border-border/50 bg-card/40 group">
-              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
-                Behavior <span className="text-xs font-normal text-muted-foreground">Timeouts · retries · SSL · streaming · health check · rate limit · circuit breaker · load balancing</span>
-              </summary>
-              <div className="px-4 pb-4 space-y-4 pt-2">
-                <div className="grid grid-cols-3 gap-4">
-                  <Field label="Timeout (ms)" error={errors.timeout?.message} hint="1000–120000">
-                    <input type="number" {...register('timeout')} className={fieldClass(errors.timeout)} />
+            <Section title="Request handling" description="What the proxy does with the request body and the response stream.">
+              <Field label="Request Body Limit">
+                <Select value={watch('requestBodyLimit')} onValueChange={(v) => setValue('requestBodyLimit', v)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {['1mb', '5mb', '10mb', '25mb', '50mb', '100mb'].map((v) => (
+                      <SelectItem key={v} value={v}>{v}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+              <SwitchRow
+                label="Strip Prefix"
+                description="Forward to the Target URL root only — no path appended. Disabled while wildcard routing is on."
+                checked={watch('stripPrefix') && !wildcardEnabled}
+                onCheckedChange={(v) => !wildcardEnabled && setValue('stripPrefix', v)}
+              />
+              <SwitchRow
+                label="Verify SSL Certificate"
+                description="Disable for self-signed or internal certificates."
+                checked={watch('sslVerify')}
+                onCheckedChange={(v) => setValue('sslVerify', v)}
+              />
+              <SwitchRow
+                label="Stream Response"
+                description="Pipe the response unbuffered for SSE / token streaming."
+                checked={watch('streamResponse') ?? false}
+                onCheckedChange={(v) => setValue('streamResponse', v)}
+              />
+              <SwitchRow
+                label="WebSocket Support"
+                description="Enable WebSocket upgrade handling for this route."
+                checked={watch('wsEnabled') ?? false}
+                onCheckedChange={(v) => setValue('wsEnabled', v)}
+              />
+            </Section>
+
+            <Section title="Reliability" description="Circuit breaker and how multiple targets are balanced.">
+              <SwitchRow
+                label="Circuit Breaker"
+                description="Stop forwarding after consecutive failures."
+                checked={circuitBreakerEnabled}
+                onCheckedChange={(v) => setValue('circuitBreakerEnabled', v)}
+              />
+              {circuitBreakerEnabled && (
+                <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
+                  <Field label="Failure Threshold">
+                    <input type="number" {...register('cbFailureThreshold')} className={fieldClass()} />
                   </Field>
-                  <Field label="Retry Count" hint="0–5">
-                    <input type="number" {...register('retryCount')} className={fieldClass()} />
-                  </Field>
-                  <Field label="Retry Delay (ms)" hint="100–10000">
-                    <input type="number" {...register('retryDelay')} className={fieldClass()} />
+                  <Field label="Recovery Timeout (ms)">
+                    <input type="number" {...register('cbRecoveryTimeout')} className={fieldClass()} />
                   </Field>
                 </div>
-                <Field label="Request Body Limit">
-                  <Select value={watch('requestBodyLimit')} onValueChange={(v) => setValue('requestBodyLimit', v)}>
+              )}
+              <Field label="Load Balancing Strategy" hint="How to distribute traffic across multiple targets (configured separately)">
+                <Select value={watch('lbStrategy')} onValueChange={(v) => setValue('lbStrategy', v as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ROUND_ROBIN">Round Robin</SelectItem>
+                    <SelectItem value="WEIGHTED">Weighted</SelectItem>
+                    <SelectItem value="FAILOVER">Failover</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </Section>
+
+            <Section title="Health check" description="How ClusterGate probes the upstream. POST + body works for n8n.">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <Field label="Interval">
+                  <Select value={String(watch('healthCheckInterval'))} onValueChange={(v) => setValue('healthCheckInterval', Number(v))}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {['1mb', '5mb', '10mb', '25mb', '50mb', '100mb'].map((v) => (
-                        <SelectItem key={v} value={v}>{v}</SelectItem>
-                      ))}
+                      <SelectItem value="5">Every 5 minutes</SelectItem>
+                      <SelectItem value="15">Every 15 minutes</SelectItem>
+                      <SelectItem value="60">Every hour</SelectItem>
+                      <SelectItem value="720">Every 12 hours</SelectItem>
+                      <SelectItem value="1440">Every 24 hours</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
-                <SwitchRow
-                  label="Strip Prefix"
-                  description="Forward to the Target URL root only — no path appended. Disabled while wildcard routing is on."
-                  checked={watch('stripPrefix') && !wildcardEnabled}
-                  onCheckedChange={(v) => !wildcardEnabled && setValue('stripPrefix', v)}
-                />
-                <SwitchRow
-                  label="Verify SSL Certificate"
-                  description="Disable for self-signed or internal certificates."
-                  checked={watch('sslVerify')}
-                  onCheckedChange={(v) => setValue('sslVerify', v)}
-                />
-                <SwitchRow
-                  label="Stream Response"
-                  description="Pipe the response through unbuffered for SSE / token streaming."
-                  checked={watch('streamResponse') ?? false}
-                  onCheckedChange={(v) => setValue('streamResponse', v)}
-                />
-                <SwitchRow
-                  label="WebSocket Support"
-                  description="Enable WebSocket upgrade handling for this route."
-                  checked={watch('wsEnabled') ?? false}
-                  onCheckedChange={(v) => setValue('wsEnabled', v)}
-                />
-                <SwitchRow
-                  label="Circuit Breaker"
-                  description="Stop forwarding after consecutive failures."
-                  checked={circuitBreakerEnabled}
-                  onCheckedChange={(v) => setValue('circuitBreakerEnabled', v)}
-                />
-                {circuitBreakerEnabled && (
-                  <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
-                    <Field label="Failure Threshold">
-                      <input type="number" {...register('cbFailureThreshold')} className={fieldClass()} />
-                    </Field>
-                    <Field label="Recovery Timeout (ms)">
-                      <input type="number" {...register('cbRecoveryTimeout')} className={fieldClass()} />
-                    </Field>
-                  </div>
-                )}
-                <Field label="Load Balancing Strategy" hint="How to distribute traffic across multiple targets (configured separately)">
-                  <Select value={watch('lbStrategy')} onValueChange={(v) => setValue('lbStrategy', v as any)}>
+                <Field label="Method">
+                  <Select value={watch('healthCheckMethod')} onValueChange={(v) => setValue('healthCheckMethod', v as any)}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="ROUND_ROBIN">Round Robin</SelectItem>
-                      <SelectItem value="WEIGHTED">Weighted</SelectItem>
-                      <SelectItem value="FAILOVER">Failover</SelectItem>
+                      <SelectItem value="HEAD">HEAD</SelectItem>
+                      <SelectItem value="GET">GET</SelectItem>
+                      <SelectItem value="POST">POST</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
-                <div className="rounded-md border border-border/50 p-3 space-y-3">
-                  <p className="text-sm font-medium">Health check</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <Field label="Interval">
-                      <Select value={String(watch('healthCheckInterval'))} onValueChange={(v) => setValue('healthCheckInterval', Number(v))}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="5">Every 5 minutes</SelectItem>
-                          <SelectItem value="15">Every 15 minutes</SelectItem>
-                          <SelectItem value="60">Every hour</SelectItem>
-                          <SelectItem value="720">Every 12 hours</SelectItem>
-                          <SelectItem value="1440">Every 24 hours</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label="Method">
-                      <Select value={watch('healthCheckMethod')} onValueChange={(v) => setValue('healthCheckMethod', v as any)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="HEAD">HEAD</SelectItem>
-                          <SelectItem value="GET">GET</SelectItem>
-                          <SelectItem value="POST">POST</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label="Path">
-                      <input {...register('healthCheckPath')} placeholder="/health" className={fieldClass()} />
-                    </Field>
-                  </div>
-                  {watch('healthCheckMethod') === 'POST' && (
-                    <Field label="Body (JSON)">
-                      <Textarea {...register('healthCheckBody')} placeholder='{"chatInput":"ping","sessionId":"healthcheck"}' rows={2} className="font-mono text-sm" />
+                <Field label="Path">
+                  <input {...register('healthCheckPath')} placeholder="/health" className={fieldClass()} />
+                </Field>
+              </div>
+              {watch('healthCheckMethod') === 'POST' && (
+                <Field label="Body (JSON)">
+                  <Textarea {...register('healthCheckBody')} placeholder='{"chatInput":"ping","sessionId":"healthcheck"}' rows={2} className="font-mono text-sm" />
+                </Field>
+              )}
+            </Section>
+
+            <Section title="Rate limiting" description="Limit requests per client IP. Backed by Postgres so limits stay correct across replicas.">
+              <SwitchRow
+                label="Enable rate limiting"
+                checked={rateLimitEnabled}
+                onCheckedChange={(v) => setValue('rateLimitEnabled', v)}
+              />
+              {rateLimitEnabled && (
+                <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
+                  <Field label="Max Requests" hint="Per window per IP">
+                    <input type="number" {...register('rateLimitMax')} className={fieldClass()} />
+                  </Field>
+                  <Field label="Window (seconds)" hint="1–3600">
+                    <input type="number" {...register('rateLimitWindowSeconds')} className={fieldClass()} />
+                  </Field>
+                </div>
+              )}
+            </Section>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* Step 5: Security                                                */}
+        {/* ============================================================== */}
+        {step === 5 && (
+          <div className="space-y-4">
+            <Section title="Gateway authentication" description="Require callers to authenticate at ClusterGate before requests are proxied.">
+              <SwitchRow
+                label="Require auth"
+                description="Reject unauthenticated requests with 401."
+                checked={requireAuth}
+                onCheckedChange={(v) => setValue('requireAuth', v)}
+              />
+              {requireAuth && (
+                <div className="space-y-3 pl-3 border-l-2 border-primary/30">
+                  <Field label="Auth Type">
+                    <Select value={authType} onValueChange={(v) => setValue('authType', v as any)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="API_KEY">API Key</SelectItem>
+                        <SelectItem value="BASIC">Basic Auth</SelectItem>
+                        <SelectItem value="BEARER">Bearer Token</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </Field>
+                  {authType === 'API_KEY' ? (
+                    <p className="text-xs text-muted-foreground">
+                      Keys are managed in the <span className="font-medium text-foreground">API Keys</span> tab after saving. Clients send the <code className="text-foreground">X-API-Key</code> header.
+                    </p>
+                  ) : (
+                    <Field label="Auth Value">
+                      <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
                     </Field>
                   )}
                 </div>
-                <SwitchRow
-                  label="Rate limiting"
-                  description="Limit requests per client IP."
-                  checked={rateLimitEnabled}
-                  onCheckedChange={(v) => setValue('rateLimitEnabled', v)}
-                />
-                {rateLimitEnabled && (
-                  <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
-                    <Field label="Max Requests">
-                      <input type="number" {...register('rateLimitMax')} className={fieldClass()} />
-                    </Field>
-                    <Field label="Window (seconds)">
-                      <input type="number" {...register('rateLimitWindowSeconds')} className={fieldClass()} />
-                    </Field>
-                  </div>
-                )}
+              )}
+            </Section>
+
+            <Section title="Upstream authentication" description="Credentials ClusterGate sends to the target service (e.g. a key n8n requires).">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <Field label="Target Type">
+                  <Select value={watch('targetType')} onValueChange={(v) => setValue('targetType', v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="GENERIC">Generic</SelectItem>
+                      <SelectItem value="N8N">n8n</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <Field label="Auth Type">
+                  <Select value={upstreamAuthType} onValueChange={(v) => setValue('upstreamAuthType', v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NONE">None</SelectItem>
+                      <SelectItem value="API_KEY">API Key (header)</SelectItem>
+                      <SelectItem value="BEARER">Bearer Token</SelectItem>
+                      <SelectItem value="BASIC">Basic (Base64)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
               </div>
-            </details>
+              {upstreamAuthType !== 'NONE' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-3 border-l-2 border-primary/30">
+                  {upstreamAuthType === 'API_KEY' && (
+                    <Field label="Header Name">
+                      <input {...register('upstreamAuthHeader')} placeholder="X-API-Key" className={fieldClass()} />
+                    </Field>
+                  )}
+                  <Field label="Value">
+                    <input type="password" {...register('upstreamAuthValue')} placeholder="••••••••" className={fieldClass()} />
+                  </Field>
+                </div>
+              )}
+            </Section>
 
-            <details className="rounded-lg border border-border/50 bg-card/40 group">
-              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
-                Security <span className="text-xs font-normal text-muted-foreground">Gateway auth · upstream auth · webhook signature · IP allowlist · CORS</span>
-              </summary>
-              <div className="px-4 pb-4 space-y-4 pt-2">
-                <SwitchRow
-                  label="Require gateway authentication"
-                  description="Reject unauthenticated requests with 401."
-                  checked={requireAuth}
-                  onCheckedChange={(v) => setValue('requireAuth', v)}
-                />
-                {requireAuth && (
-                  <div className="space-y-3 pl-3 border-l-2 border-primary/30">
-                    <Field label="Auth Type">
-                      <Select value={authType} onValueChange={(v) => setValue('authType', v as any)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="API_KEY">API Key</SelectItem>
-                          <SelectItem value="BASIC">Basic Auth</SelectItem>
-                          <SelectItem value="BEARER">Bearer Token</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    {authType === 'API_KEY' ? (
-                      <p className="text-xs text-muted-foreground">
-                        Keys are managed in the <span className="font-medium text-foreground">API Keys</span> tab after saving. Clients send the <code className="text-foreground">X-API-Key</code> header.
-                      </p>
-                    ) : (
-                      <Field label="Auth Value">
-                        <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
-                      </Field>
-                    )}
-                  </div>
-                )}
+            <Section title="Webhook signature" description="HMAC-SHA256 verification of X-Hub-Signature-256 / X-Webhook-Signature on incoming requests.">
+              <Field label="Secret">
+                <div className="flex items-center gap-2">
+                  <input type="text" {...register('webhookSecret')} placeholder="Enter or generate" className={fieldClass()} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const bytes = new Uint8Array(32)
+                      crypto.getRandomValues(bytes)
+                      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+                      setValue('webhookSecret', `whsec_${hex}`, { shouldDirty: true })
+                    }}
+                  >
+                    Generate
+                  </Button>
+                </div>
+              </Field>
+            </Section>
 
-                <div className="rounded-md border border-border/50 p-3 space-y-3">
-                  <p className="text-sm font-medium">Upstream authentication</p>
-                  <p className="text-xs text-muted-foreground">Credentials ClusterGate sends to the target (e.g. a key n8n requires).</p>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <Field label="Target Type">
-                      <Select value={watch('targetType')} onValueChange={(v) => setValue('targetType', v as any)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="GENERIC">Generic</SelectItem>
-                          <SelectItem value="N8N">n8n</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                    <Field label="Auth Type">
-                      <Select value={upstreamAuthType} onValueChange={(v) => setValue('upstreamAuthType', v as any)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="NONE">None</SelectItem>
-                          <SelectItem value="API_KEY">API Key (header)</SelectItem>
-                          <SelectItem value="BEARER">Bearer Token</SelectItem>
-                          <SelectItem value="BASIC">Basic (Base64)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </Field>
-                  </div>
-                  {upstreamAuthType !== 'NONE' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-3 border-l-2 border-primary/30">
-                      {upstreamAuthType === 'API_KEY' && (
-                        <Field label="Header Name">
-                          <input {...register('upstreamAuthHeader')} placeholder="X-API-Key" className={fieldClass()} />
-                        </Field>
-                      )}
-                      <Field label="Value">
-                        <input type="password" {...register('upstreamAuthValue')} placeholder="••••••••" className={fieldClass()} />
-                      </Field>
+            <Section title="Network access" description="Restrict where requests can come from and which origins can call this route.">
+              <Field label="IP Allowlist" hint="One IP or CIDR per line. Leave empty to allow all.">
+                <Textarea {...register('ipAllowlist')} placeholder={"203.0.113.0/24\n198.51.100.42"} rows={3} />
+              </Field>
+              <SwitchRow
+                label="CORS Enabled"
+                description="Allow cross-origin requests from the listed origins."
+                checked={corsEnabled}
+                onCheckedChange={(v) => setValue('corsEnabled', v)}
+              />
+              {corsEnabled && (
+                <Field label="CORS Origins" hint="One origin per line">
+                  <Textarea {...register('corsOrigins')} placeholder={"https://app.yourdomain.com\nhttps://admin.yourdomain.com"} rows={3} />
+                </Field>
+              )}
+            </Section>
+          </div>
+        )}
+
+        {/* ============================================================== */}
+        {/* Step 6: Transforms & Maintenance                                */}
+        {/* ============================================================== */}
+        {step === 6 && (
+          <div className="space-y-4">
+            <Section title="Request headers" description="Inject or strip headers on every proxied request.">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-sm font-medium">Add headers</p>
+                  <Button type="button" variant="outline" size="sm" onClick={() => appendHeader({ key: '', value: '' })}>
+                    <Plus className="w-3 h-3 mr-1" /> Add
+                  </Button>
+                </div>
+                <div className="space-y-2">
+                  {headerFields.map((field, i) => (
+                    <div key={field.id} className="flex gap-2">
+                      <input {...register(`addHeaders.${i}.key`)} placeholder="X-Custom-Header" className={cn(fieldClass(), 'flex-1')} />
+                      <input {...register(`addHeaders.${i}.value`)} placeholder="header-value" className={cn(fieldClass(), 'flex-1')} />
+                      <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeHeader(i)}>
+                        <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                      </Button>
                     </div>
+                  ))}
+                  {headerFields.length === 0 && (
+                    <p className="text-xs text-muted-foreground py-2">No headers added</p>
                   )}
                 </div>
+              </div>
+              <Field label="Remove Headers" hint="Comma-separated header names to strip from requests">
+                <input {...register('removeHeaders')} placeholder="X-Forwarded-For, X-Real-IP" className={fieldClass()} />
+              </Field>
+            </Section>
 
-                <Field label="Webhook Secret" hint="HMAC-SHA256 — validate X-Hub-Signature-256 / X-Webhook-Signature on incoming requests.">
-                  <div className="flex items-center gap-2">
-                    <input type="text" {...register('webhookSecret')} placeholder="Enter or generate" className={fieldClass()} />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const bytes = new Uint8Array(32)
-                        crypto.getRandomValues(bytes)
-                        const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-                        setValue('webhookSecret', `whsec_${hex}`, { shouldDirty: true })
-                      }}
-                    >
-                      Generate
+            <Section title="Path rewrites" description="Regex rewrites applied to the suffix after the public path. Patterns are rejected if they look catastrophic (ReDoS).">
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">{rewriteFields.length === 0 ? 'No rewrite rules yet.' : `${rewriteFields.length} rule${rewriteFields.length === 1 ? '' : 's'}`}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => appendRewrite({ from: '', to: '' })}>
+                  <Plus className="w-3 h-3 mr-1" /> Add Rule
+                </Button>
+              </div>
+              <div className="space-y-2">
+                {rewriteFields.map((field, i) => (
+                  <div key={field.id} className="flex gap-2 items-center">
+                    <input {...register(`rewriteRules.${i}.from`)} placeholder="^/v1/(.*)" className={cn(fieldClass(), 'flex-1 font-mono')} />
+                    <span className="text-muted-foreground text-sm">→</span>
+                    <input {...register(`rewriteRules.${i}.to`)} placeholder="/api/$1" className={cn(fieldClass(), 'flex-1 font-mono')} />
+                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeRewrite(i)}>
+                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
                     </Button>
                   </div>
-                </Field>
-
-                <Field label="IP Allowlist" hint="One IP or CIDR per line. Leave empty to allow all.">
-                  <Textarea {...register('ipAllowlist')} placeholder={"203.0.113.0/24\n198.51.100.42"} rows={3} />
-                </Field>
-
-                <SwitchRow
-                  label="CORS Enabled"
-                  description="Allow cross-origin requests from the listed origins."
-                  checked={corsEnabled}
-                  onCheckedChange={(v) => setValue('corsEnabled', v)}
-                />
-                {corsEnabled && (
-                  <Field label="CORS Origins" hint="One origin per line">
-                    <Textarea {...register('corsOrigins')} placeholder={"https://app.yourdomain.com\nhttps://admin.yourdomain.com"} rows={3} />
-                  </Field>
-                )}
+                ))}
               </div>
-            </details>
+            </Section>
 
-            <details className="rounded-lg border border-border/50 bg-card/40 group">
-              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
-                Headers &amp; rewrites <span className="text-xs font-normal text-muted-foreground">Add / remove headers · regex path rewrites</span>
-              </summary>
-              <div className="px-4 pb-4 space-y-4 pt-2">
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-sm font-medium">Add headers</p>
-                    <Button type="button" variant="outline" size="sm" onClick={() => appendHeader({ key: '', value: '' })}>
-                      <Plus className="w-3 h-3 mr-1" /> Add
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    {headerFields.map((field, i) => (
-                      <div key={field.id} className="flex gap-2">
-                        <input {...register(`addHeaders.${i}.key`)} placeholder="X-Custom-Header" className={cn(fieldClass(), 'flex-1')} />
-                        <input {...register(`addHeaders.${i}.value`)} placeholder="header-value" className={cn(fieldClass(), 'flex-1')} />
-                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeHeader(i)}>
-                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
-                    {headerFields.length === 0 && (
-                      <p className="text-xs text-muted-foreground py-2">No headers added</p>
-                    )}
-                  </div>
-                </div>
-                <Field label="Remove Headers" hint="Comma-separated header names to strip from requests">
-                  <input {...register('removeHeaders')} placeholder="X-Forwarded-For, X-Real-IP" className={fieldClass()} />
+            <Section title="Maintenance" description="Take the route offline temporarily without deleting it.">
+              <SwitchRow
+                label="Maintenance Mode"
+                description="Return 503 to all incoming requests."
+                checked={maintenanceMode}
+                onCheckedChange={(v) => setValue('maintenanceMode', v)}
+              />
+              {maintenanceMode && (
+                <Field label="Message" hint="Shown to users when maintenance mode is active">
+                  <Textarea
+                    {...register('maintenanceMessage')}
+                    placeholder="This service is temporarily unavailable. Please try again later."
+                    rows={3}
+                  />
                 </Field>
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <p className="text-sm font-medium">Path Rewrites</p>
-                      <p className="text-xs text-muted-foreground">Regex-based, applied to the suffix after the public path.</p>
-                    </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => appendRewrite({ from: '', to: '' })}>
-                      <Plus className="w-3 h-3 mr-1" /> Add Rule
-                    </Button>
-                  </div>
-                  <div className="space-y-2">
-                    {rewriteFields.map((field, i) => (
-                      <div key={field.id} className="flex gap-2 items-center">
-                        <input {...register(`rewriteRules.${i}.from`)} placeholder="^/v1/(.*)" className={cn(fieldClass(), 'flex-1 font-mono')} />
-                        <span className="text-muted-foreground text-sm">→</span>
-                        <input {...register(`rewriteRules.${i}.to`)} placeholder="/api/$1" className={cn(fieldClass(), 'flex-1 font-mono')} />
-                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeRewrite(i)}>
-                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                        </Button>
-                      </div>
-                    ))}
-                    {rewriteFields.length === 0 && (
-                      <p className="text-xs text-muted-foreground py-2">No rewrite rules</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </details>
-
-            <details className="rounded-lg border border-border/50 bg-card/40 group">
-              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
-                Maintenance <span className="text-xs font-normal text-muted-foreground">Take the route offline temporarily</span>
-              </summary>
-              <div className="px-4 pb-4 space-y-3 pt-2">
-                <SwitchRow
-                  label="Maintenance Mode"
-                  description="Return 503 to all incoming requests."
-                  checked={maintenanceMode}
-                  onCheckedChange={(v) => setValue('maintenanceMode', v)}
-                />
-                {maintenanceMode && (
-                  <Field label="Message" hint="Shown to users when maintenance mode is active">
-                    <Textarea
-                      {...register('maintenanceMessage')}
-                      placeholder="This service is temporarily unavailable. Please try again later."
-                      rows={3}
-                    />
-                  </Field>
-                )}
-              </div>
-            </details>
+              )}
+              {!maintenanceMode && (
+                <p className="text-xs text-muted-foreground italic">Service is active — toggle to take it offline.</p>
+              )}
+            </Section>
           </div>
         )}
       </div>
