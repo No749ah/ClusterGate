@@ -315,7 +315,7 @@ export default function LogsPage() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); const rid = log.routeId!; const next = new Set(routeId.split(',').map(s=>s.trim()).filter(Boolean)); next.has(rid) ? next.delete(rid) : next.add(rid); setRouteId([...next].join(',')); setPage(1) }}
-                          className="text-foreground truncate hover:text-primary block w-full text-left"
+                          className="text-foreground hover:text-primary inline-block max-w-full truncate align-middle text-left"
                           title={`Filter by ${log.route.name}`}
                         >
                           {log.route.name}
