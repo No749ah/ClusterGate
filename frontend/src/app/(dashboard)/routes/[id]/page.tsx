@@ -2,7 +2,13 @@
 
 import { useState, use } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi, Terminal, FileDown } from 'lucide-react'
+import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi, Terminal, FileDown, Share2, ChevronDown, FileJson } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { EnvironmentBadge } from '@/components/routes/EnvironmentBadge'
 import { buildCurl, toExportConfig, downloadJson } from '@/lib/routeExport'
 import { useConfirm } from '@/components/ui/confirm-dialog'
@@ -155,29 +161,55 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
             <Copy className="w-3.5 h-3.5 mr-2" />
             {duplicate.isPending ? 'Duplicating...' : 'Duplicate'}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={async () => {
-              const origin = typeof window !== 'undefined' ? window.location.origin : ''
-              await copyToClipboard(buildCurl(route, origin))
-              toast.success('cURL command copied')
-            }}
-          >
-            <Terminal className="w-3.5 h-3.5 mr-2" />
-            cURL
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              const slug = route.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'route'
-              downloadJson(`route-${slug}.json`, toExportConfig(route))
-            }}
-          >
-            <FileDown className="w-3.5 h-3.5 mr-2" />
-            Export
-          </Button>
+          {/* Share/export actions — consolidated into one menu to keep the header tidy */}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Share2 className="w-3.5 h-3.5 mr-2" />
+                Share
+                <ChevronDown className="w-3.5 h-3.5 ml-1.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-56">
+              <DropdownMenuItem
+                onClick={async () => {
+                  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+                  await copyToClipboard(buildCurl(route, origin))
+                  toast.success('cURL command copied')
+                }}
+              >
+                <Terminal className="w-4 h-4 mr-2 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm">Copy as cURL</p>
+                  <p className="text-[11px] text-muted-foreground">Runnable command for this route</p>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={async () => {
+                  await copyToClipboard(JSON.stringify(toExportConfig(route), null, 2))
+                  toast.success('Route config copied as JSON')
+                }}
+              >
+                <FileJson className="w-4 h-4 mr-2 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm">Copy config (JSON)</p>
+                  <p className="text-[11px] text-muted-foreground">Paste it elsewhere to clone the route</p>
+                </div>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => {
+                  const slug = route.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'route'
+                  downloadJson(`route-${slug}.json`, toExportConfig(route))
+                }}
+              >
+                <FileDown className="w-4 h-4 mr-2 text-muted-foreground" />
+                <div className="flex-1">
+                  <p className="text-sm">Download config</p>
+                  <p className="text-[11px] text-muted-foreground">Save as <span className="font-mono">route-{(route.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'') || 'route')}.json</span></p>
+                </div>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button size="sm" asChild>
             <Link href={`/routes/${id}/edit`}>
               <Edit className="w-3.5 h-3.5 mr-2" />
