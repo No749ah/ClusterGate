@@ -285,6 +285,16 @@ class ApiClient {
 
     bulkDelete: (ids: string[]) =>
       this.post<ApiResponse<{ count: number }>>('/api/routes/bulk/delete', { ids }),
+
+    // Archive management — soft-deleted routes restorable by org admins / ADMIN
+    listArchived: () =>
+      this.get<ApiResponse<Array<Route & { deletedAt: string }>>>('/api/routes/archived'),
+
+    restore: (id: string) =>
+      this.post<ApiResponse<Route>>(`/api/routes/${id}/restore`),
+
+    permanentDelete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/routes/${id}/permanent`),
   }
 
   // ============================================================================

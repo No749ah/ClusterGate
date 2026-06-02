@@ -323,6 +323,24 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
   return route
 }
 
+// Mangled tokens used to free the publicPath/slug uniqueness slots when a
+// route is archived. They embed the cuid so we can reverse the mangling on
+// restore. Exported for the restore code path.
+const ARCHIVE_TAG = '__deleted_'
+
+function mangleForArchive(value: string | null, id: string): string | null {
+  if (value === null) return null
+  if (value.includes(ARCHIVE_TAG)) return value  // already mangled — paranoid guard
+  return `${value}${ARCHIVE_TAG}${id}`
+}
+
+function unmangleArchive(value: string | null, id: string): string | null {
+  if (!value) return value
+  const idx = value.indexOf(`${ARCHIVE_TAG}${id}`)
+  if (idx < 0) return value
+  return value.slice(0, idx)
+}
+
 export async function deleteRoute(id: string, confirmName?: string) {
   const route = await prisma.route.findUnique({ where: { id, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
@@ -337,14 +355,96 @@ export async function deleteRoute(id: string, confirmName?: string) {
     throw AppError.badRequest('This route is protected — confirm the exact route name to delete it')
   }
 
-  // Free the publicPath so it can be reused — the DB unique constraint covers
-  // soft-deleted rows too, so we mangle the path on the deleted record.
+  // "Archive" rather than hard delete: keep the row but mangle the unique
+  // columns (publicPath, slug) so the human-friendly values become available
+  // for new routes immediately.
   await prisma.route.update({
     where: { id },
-    data: { deletedAt: new Date(), isActive: false, publicPath: `${route.publicPath}__deleted_${id}` },
+    data: {
+      deletedAt: new Date(),
+      isActive: false,
+      publicPath: mangleForArchive(route.publicPath, id) as string,
+      slug: mangleForArchive(route.slug, id),
+    },
   })
 
   await updateActiveRoutesMetric()
+}
+
+/**
+ * List archived (soft-deleted) routes. Non-admins see only their orgs;
+ * archived routes with no org are visible to ADMINs only.
+ */
+export async function getArchivedRoutes(opts: { organizationIds?: string[]; systemRole?: string }) {
+  const isAdmin = opts.systemRole === 'ADMIN'
+  const where: Prisma.RouteWhereInput = {
+    deletedAt: { not: null },
+    ...(isAdmin ? {} : {
+      organizationId: { in: opts.organizationIds ?? [] },
+    }),
+  }
+  const rows = await prisma.route.findMany({
+    where,
+    orderBy: { deletedAt: 'desc' },
+    include: {
+      createdBy: { select: { id: true, name: true } },
+      updatedBy: { select: { id: true, name: true } },
+      organization: { select: { id: true, name: true, slug: true } },
+    },
+    take: 200,
+  })
+  // Surface the original publicPath / slug (without the archive-tag mangling)
+  // so the UI doesn't have to unmangle.
+  return rows.map((r) => ({
+    ...r,
+    publicPath: unmangleArchive(r.publicPath, r.id) ?? r.publicPath,
+    slug: unmangleArchive(r.slug, r.id),
+  }))
+}
+
+/** Restore an archived route. Auto-suffixes the path / slug on collision. */
+export async function restoreRoute(id: string, userId: string) {
+  const route = await prisma.route.findFirst({ where: { id, deletedAt: { not: null } } })
+  if (!route) throw AppError.notFound('Archived route')
+
+  let originalPath = unmangleArchive(route.publicPath, id) ?? route.publicPath
+  let originalSlug = unmangleArchive(route.slug, id)
+
+  // If the original publicPath was claimed by another (live) route while
+  // this one was archived, restore under a "-restored" suffix instead of
+  // failing the user's intent.
+  const pathClash = await prisma.route.findFirst({ where: { publicPath: originalPath, deletedAt: null, id: { not: id } }, select: { id: true } })
+  if (pathClash) {
+    const tail = id.slice(-5)
+    originalPath = `${originalPath}-restored-${tail}`
+  }
+  if (originalSlug) {
+    const slugClash = await prisma.route.findFirst({ where: { slug: originalSlug, deletedAt: null, id: { not: id } }, select: { id: true } })
+    if (slugClash) {
+      originalSlug = `${originalSlug}-restored-${id.slice(-5)}`
+    }
+  }
+
+  const restored = await prisma.route.update({
+    where: { id },
+    data: {
+      deletedAt: null,
+      isActive: false, // come back inactive so it can't take production traffic immediately
+      status: 'DRAFT',
+      publicPath: originalPath,
+      slug: originalSlug,
+      updatedById: userId,
+    },
+  })
+  await updateActiveRoutesMetric()
+  return restored
+}
+
+/** Permanently delete an archived route. Refuses live (non-archived) rows. */
+export async function permanentlyDeleteRoute(id: string) {
+  const route = await prisma.route.findFirst({ where: { id, deletedAt: { not: null } }, select: { id: true } })
+  if (!route) throw AppError.notFound('Archived route')
+  await prisma.route.delete({ where: { id } })
 }
 
 export async function publishRoute(id: string, userId: string) {

@@ -16,7 +16,7 @@ import http from 'http'
 import { isN8nTarget } from '../lib/targetDetect'
 import { achievementService } from '../services/achievementService'
 import { changeRequestService } from '../services/changeRequestService'
-import { getUserOrgIds, canManageRoute, canManageOrgRoutes, canDeleteRoute } from '../services/orgAccessService'
+import { getUserOrgIds, canManageRoute, canManageOrgRoutes, canDeleteRoute, canDeleteOrgRoutes } from '../services/orgAccessService'
 
 const router = Router()
 
@@ -157,6 +157,29 @@ const routeBodySchema = z.object({
  *       401:
  *         description: Not authenticated
  */
+/**
+ * @openapi
+ * /api/routes/archived:
+ *   get:
+ *     tags: [Routes]
+ *     summary: List archived routes
+ *     description: Returns soft-deleted routes the user can manage. Non-admins see only the orgs they belong to; routes without an organization are visible to ADMINs only.
+ *     responses:
+ *       200:
+ *         description: Archived routes
+ */
+router.get('/archived', authenticate, async (req, res, next) => {
+  try {
+    const isAdmin = req.user!.role === 'ADMIN'
+    const organizationIds = isAdmin ? undefined : await getUserOrgIds(req.user!.userId)
+    const rows = await routeService.getArchivedRoutes({
+      systemRole: req.user!.role,
+      organizationIds,
+    })
+    res.json({ success: true, data: rows })
+  } catch (err) { next(err) }
+})
+
 router.get('/', authenticate, async (req, res, next) => {
   try {
     const { page = '1', pageSize = '20', search, status, isActive, tags, environment, sortBy, sortDir, organizationId } = req.query
@@ -984,6 +1007,43 @@ router.put('/:id', authenticate, async (req, res, next) => {
  *       404:
  *         description: Route not found
  */
+/**
+ * Restore an archived route. Permissions: ADMIN globally, or the route's
+ * organization Owner/Admin. Routes without an organization → ADMIN only.
+ */
+router.post('/:id/restore', authenticate, async (req, res, next) => {
+  try {
+    const route = await prisma.route.findFirst({ where: { id: req.params.id, deletedAt: { not: null } }, select: { id: true, organizationId: true, name: true } })
+    if (!route) return res.status(404).json({ success: false, error: { message: 'Archived route not found' } })
+    const isAdmin = req.user!.role === 'ADMIN'
+    if (!isAdmin) {
+      if (!route.organizationId) return res.status(403).json({ success: false, error: { message: 'Only admins can manage routes without an organization' } })
+      const ok = await canDeleteOrgRoutes(req.user!.userId, req.user!.role, route.organizationId)
+      if (!ok) return res.status(403).json({ success: false, error: { message: 'You need Owner/Admin role in this route\'s organization to restore it' } })
+    }
+    const restored = await routeService.restoreRoute(req.params.id, req.user!.userId)
+    createAuditLog({ userId: req.user!.userId, action: 'route.restore', resource: 'route', resourceId: route.id, details: { name: route.name }, ip: req.ip || req.socket.remoteAddress, userAgent: req.get('user-agent') })
+    res.json({ success: true, data: restored, message: 'Route restored — review and publish when ready' })
+  } catch (err) { next(err) }
+})
+
+/** Permanently delete an archived route. Same permissions as restore. */
+router.delete('/:id/permanent', authenticate, async (req, res, next) => {
+  try {
+    const route = await prisma.route.findFirst({ where: { id: req.params.id, deletedAt: { not: null } }, select: { id: true, organizationId: true, name: true } })
+    if (!route) return res.status(404).json({ success: false, error: { message: 'Archived route not found' } })
+    const isAdmin = req.user!.role === 'ADMIN'
+    if (!isAdmin) {
+      if (!route.organizationId) return res.status(403).json({ success: false, error: { message: 'Only admins can manage routes without an organization' } })
+      const ok = await canDeleteOrgRoutes(req.user!.userId, req.user!.role, route.organizationId)
+      if (!ok) return res.status(403).json({ success: false, error: { message: 'You need Owner/Admin role in this route\'s organization to permanently delete it' } })
+    }
+    await routeService.permanentlyDeleteRoute(req.params.id)
+    createAuditLog({ userId: req.user!.userId, action: 'route.permanent_delete', resource: 'route', resourceId: route.id, details: { name: route.name }, ip: req.ip || req.socket.remoteAddress, userAgent: req.get('user-agent') })
+    res.json({ success: true, message: 'Route permanently deleted' })
+  } catch (err) { next(err) }
+})
+
 router.delete('/:id', authenticate, async (req, res, next) => {
   try {
     const allowed = await canDeleteRoute(req.user!.userId, req.user!.role, req.params.id)

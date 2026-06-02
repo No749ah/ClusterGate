@@ -27,6 +27,7 @@ import {
   Tag as TagIcon,
   Layers,
   Upload,
+  Archive,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkUpdate, useBulkDelete } from '@/hooks/useRoutes'
@@ -348,6 +349,14 @@ export default function RoutesPage() {
             <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
               <Upload className="w-4 h-4 mr-2" />
               Import
+            </Button>
+          )}
+          {canEdit && (
+            <Button variant="outline" asChild title="View archived routes">
+              <Link href="/routes/archived">
+                <Archive className="w-4 h-4 mr-2" />
+                Archived
+              </Link>
             </Button>
           )}
           <Button asChild>
