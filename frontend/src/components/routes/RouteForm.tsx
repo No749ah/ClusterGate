@@ -29,6 +29,7 @@ const routeSchema = z.object({
   stripPrefix: z.boolean().default(false),
   sslVerify: z.boolean().default(true),
   streamResponse: z.boolean().default(false),
+  rewriteRedirects: z.boolean().default(true),
   requestBodyLimit: z.string().default('10mb'),
   addHeaders: z.array(z.object({ key: z.string(), value: z.string() })).default([]),
   removeHeaders: z.string().default(''),
@@ -122,6 +123,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       stripPrefix: defaultValues?.stripPrefix ?? false,
       sslVerify: defaultValues?.sslVerify ?? true,
       streamResponse: defaultValues?.streamResponse ?? false,
+      rewriteRedirects: (defaultValues as any)?.rewriteRedirects ?? true,
       requestBodyLimit: defaultValues?.requestBodyLimit ?? '10mb',
       addHeaders: Object.entries(defaultValues?.addHeaders ?? {}).map(([key, value]) => ({ key, value })),
       removeHeaders: defaultValues?.removeHeaders?.join(', ') ?? '',
@@ -756,6 +758,12 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   description="Enable WebSocket upgrade handling for this route."
                   checked={watch('wsEnabled') ?? false}
                   onCheckedChange={(v) => setValue('wsEnabled', v)}
+                />
+                <SwitchRow
+                  label="Keep Redirects in Proxy"
+                  description="Rewrite upstream Location headers so 3xx redirects stay under /r/… instead of bouncing to the upstream host."
+                  checked={watch('rewriteRedirects') ?? true}
+                  onCheckedChange={(v) => setValue('rewriteRedirects', v)}
                 />
               </div>
             </Section>

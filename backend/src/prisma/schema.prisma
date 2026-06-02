@@ -292,6 +292,10 @@ model Route {
   sslVerify    Boolean     @default(true)
   streamResponse Boolean   @default(false)
   requestBodyLimit String  @default("10mb")
+  // When the upstream returns a 3xx with a Location, rewrite it so the
+  // browser stays under /r/<route>/... instead of escaping to the upstream's
+  // host or absolute path. Default true; set false to pass redirects through.
+  rewriteRedirects Boolean @default(true)
 
   // Header rules
   addHeaders    Json        @default("{}")

@@ -26,6 +26,47 @@ type RouteWithRelations = Route & {
   transformRules?: TransformRule[]
 }
 
+/**
+ * Rewrite a Location header on an upstream 3xx so the redirect target stays
+ * under the public /r/<route>/... path instead of escaping to the upstream
+ * host (which would break for users hitting the proxy via a different domain).
+ *
+ * - Relative paths (e.g. "/api/docs/") get prefixed with the route's basePath.
+ * - Absolute URLs whose origin matches the upstream get the origin stripped
+ *   and replaced with the basePath.
+ * - Other absolute URLs (e.g. an OAuth provider hand-off) are left alone.
+ */
+function rewriteLocationHeader(location: string, basePath: string, upstreamUrl: string): string {
+  if (!location) return location
+  // Already prefixed — leave it
+  if (location.startsWith(basePath + '/') || location === basePath) return location
+  if (location.startsWith('/')) {
+    return `${basePath}${location}`
+  }
+  try {
+    const target = new URL(upstreamUrl)
+    if (location.startsWith(target.origin)) {
+      const tail = location.slice(target.origin.length) || '/'
+      return `${basePath}${tail}`
+    }
+  } catch { /* upstreamUrl malformed — fall through */ }
+  return location
+}
+
+function maybeRewriteLocation(
+  headers: Record<string, string>,
+  status: number | undefined,
+  basePath: string,
+  upstreamUrl: string,
+  enabled: boolean,
+): void {
+  if (!enabled) return
+  if (!status || status < 300 || status >= 400) return
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === 'location')
+  if (!key) return
+  headers[key] = rewriteLocationHeader(headers[key], basePath, upstreamUrl)
+}
+
 // Headers to never forward to target — 'upgrade' removed to support WebSocket
 const HOP_BY_HOP_HEADERS = new Set([
   'connection',
@@ -308,10 +349,20 @@ export async function proxyRequest(
 
       // Forward upstream headers as-is (Content-Encoding kept since we don't
       // decompress; Content-Length dropped via HOP_BY_HOP so we can chunk).
+      // Collect into a map first so the optional Location rewrite (default-on)
+      // can replace the value before it's set on the response.
+      const streamHeaders: Record<string, string> = {}
       for (const [key, value] of Object.entries(resp.headers as Record<string, string>)) {
         if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
-          res.setHeader(key, value)
+          streamHeaders[key] = value
         }
+      }
+      {
+        const basePathForRewrite = route.publicPath.endsWith('/*') ? route.publicPath.slice(0, -2) : route.publicPath
+        maybeRewriteLocation(streamHeaders, responseStatus, basePathForRewrite, selectedTargetUrl, (route as any).rewriteRedirects !== false)
+      }
+      for (const [key, value] of Object.entries(streamHeaders)) {
+        res.setHeader(key, value)
       }
       res.setHeader('X-Request-ID', requestId)
       res.setHeader('X-ClusterGate-Duration', String(duration))
@@ -417,6 +468,13 @@ export async function proxyRequest(
       responseBuffer = transformed.body
       Object.keys(respHeaders).forEach((k) => delete respHeaders[k])
       Object.assign(respHeaders, transformed.headers)
+    }
+
+    // Keep redirects inside the proxy by default (rewrites Location); user
+    // can opt out via route.rewriteRedirects=false to pass through unchanged.
+    {
+      const basePathForRewrite = route.publicPath.endsWith('/*') ? route.publicPath.slice(0, -2) : route.publicPath
+      maybeRewriteLocation(respHeaders, responseStatus, basePathForRewrite, selectedTargetUrl, (route as any).rewriteRedirects !== false)
     }
 
     // Set response headers

@@ -53,6 +53,7 @@ export interface Route {
   stripPrefix: boolean
   sslVerify: boolean
   streamResponse: boolean
+  rewriteRedirects: boolean
   requestBodyLimit: string
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string
@@ -231,6 +232,7 @@ export interface RouteFormData {
   stripPrefix: boolean
   sslVerify: boolean
   streamResponse?: boolean
+  rewriteRedirects?: boolean
   requestBodyLimit: string
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string
