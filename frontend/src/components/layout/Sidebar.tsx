@@ -30,6 +30,8 @@ import { useKonamiCode } from '@/hooks/useKonamiCode'
 import { usePartyMode } from '@/hooks/usePartyMode'
 import { usePinnedRoutes } from '@/hooks/usePinnedRoutes'
 import { Pin } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { api } from '@/lib/api'
 
 const COLLAPSED_KEY = 'clustergate-sidebar-collapsed'
 
@@ -328,7 +330,18 @@ export function Sidebar() {
 function PinnedSection({ collapsed }: { collapsed: boolean }) {
   const pinned = usePinnedRoutes()
   const pathname = usePathname()
-  if (pinned.length === 0) return null
+  // Hide pins that point at archived/deleted routes. We reuse the same
+  // ['routes'] query the dashboard already feeds, so this is cache-warm and
+  // costs nothing extra in the common case.
+  const { data: routesData } = useQuery({
+    queryKey: ['routes', { pageSize: 500 }],
+    queryFn: () => api.routes.list({ pageSize: 500 }),
+    staleTime: 30_000,
+    enabled: pinned.length > 0,
+  })
+  const aliveIds = routesData ? new Set(routesData.data.map((r) => r.id)) : null
+  const visiblePinned = aliveIds ? pinned.filter((p) => aliveIds.has(p.id)) : pinned
+  if (visiblePinned.length === 0) return null
   return (
     <div className="mb-4">
       {!collapsed && (
@@ -338,7 +351,7 @@ function PinnedSection({ collapsed }: { collapsed: boolean }) {
       )}
       {collapsed && <div className="mx-2 my-2 border-t border-sidebar-border" />}
       <div className="space-y-1">
-        {pinned.map((r) => {
+        {visiblePinned.map((r) => {
           const href = `/routes/${r.slug || r.id}`
           const active = pathname === href
           return (
