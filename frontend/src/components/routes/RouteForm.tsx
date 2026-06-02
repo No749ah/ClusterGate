@@ -501,7 +501,14 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                     <input
                       value={tagInput}
                       onChange={(e) => setTagInput(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                      onKeyDown={(e) => {
+                        if (e.key !== 'Enter') return
+                        // Stop the form-level handler from interpreting this Enter as
+                        // "advance to next step" — Enter here only adds a tag.
+                        e.preventDefault()
+                        e.stopPropagation()
+                        addTag()
+                      }}
                       placeholder="Add tag and press Enter"
                       className={fieldClass()}
                     />
