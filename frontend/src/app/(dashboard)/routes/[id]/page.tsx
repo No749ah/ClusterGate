@@ -26,7 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RequestLog, RouteVersion, RouteTarget, TransformRule, TransformPhase, TransformType, LBStrategy } from '@/types'
-import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard } from '@/lib/utils'
+import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard, cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -267,13 +267,17 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           <TabsTrigger value="history">History</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4">
+        <TabsContent value="overview" className="mt-4 space-y-4">
+          {/* Pipeline strip — visualise the request flow at a glance */}
+          <PipelineStrip route={route} />
+
+          {/* Active features grid — only enabled middlewares show up bright */}
+          <FeaturePills route={route} />
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Card>
               <CardHeader><CardTitle className="text-sm">Routing</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <InfoRow label="Public Path" value={route.publicPath} mono />
-                <InfoRow label="Target URL" value={route.targetUrl} mono />
                 <InfoRow label="Methods" value={
                   <div className="flex gap-1 flex-wrap">
                     {route.methods.map((m) => (
@@ -283,28 +287,54 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
                 } />
                 <InfoRow label="Strip Prefix" value={route.stripPrefix ? 'Yes' : 'No'} />
                 <InfoRow label="SSL Verify" value={route.sslVerify !== false ? 'Enabled' : 'Disabled'} />
+                <InfoRow label="Keep Redirects in Proxy" value={(route as any).rewriteRedirects !== false ? 'Yes' : 'No'} />
+                <InfoRow label="LB Strategy" value={route.lbStrategy?.replace('_', ' ') || 'Round Robin'} />
+                {route.routeGroup && (
+                  <InfoRow label="Route Group" value={route.routeGroup.name} />
+                )}
               </CardContent>
             </Card>
 
             <Card>
-              <CardHeader><CardTitle className="text-sm">Configuration</CardTitle></CardHeader>
+              <CardHeader><CardTitle className="text-sm">Timing</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <InfoRow label="Timeout" value={`${route.timeout}ms`} />
                 <InfoRow label="Retry Count" value={String(route.retryCount)} />
                 <InfoRow label="Retry Delay" value={`${route.retryDelay}ms`} />
                 <InfoRow label="Body Limit" value={route.requestBodyLimit} />
-                <InfoRow label="Version" value={`v${route.version}`} />
+                {route.circuitBreakerEnabled && (
+                  <>
+                    <InfoRow label="CB State" value={
+                      <span className={cn(
+                        'px-1.5 py-0.5 rounded text-[11px] font-mono border',
+                        route.cbState === 'OPEN' ? 'text-red-500 border-red-500/40 bg-red-500/10' :
+                        route.cbState === 'HALF_OPEN' ? 'text-amber-500 border-amber-500/40 bg-amber-500/10' :
+                        'text-green-500 border-green-500/40 bg-green-500/10'
+                      )}>{route.cbState || 'CLOSED'}</span>
+                    } />
+                    <InfoRow label="CB Failures" value={`${route.cbFailureCount} / ${route.cbFailureThreshold}`} />
+                  </>
+                )}
+                {route.rateLimitEnabled && (
+                  <InfoRow label="Rate Limit" value={`${route.rateLimitMax} req / ${Math.round(route.rateLimitWindow / 1000)}s`} />
+                )}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader><CardTitle className="text-sm">Security</CardTitle></CardHeader>
               <CardContent className="space-y-3 text-sm">
-                <InfoRow label="Auth Required" value={route.requireAuth ? 'Yes' : 'No'} />
-                {route.requireAuth && <InfoRow label="Auth Type" value={route.authType} />}
-                <InfoRow label="IP Allowlist" value={route.ipAllowlist.length > 0 ? `${route.ipAllowlist.length} entries` : 'Allow all'} />
-                <InfoRow label="Webhook Secret" value={route.webhookSecret ? '••••••••' : 'None'} />
-                <InfoRow label="CORS" value={route.corsEnabled ? `Enabled (${route.corsOrigins.length} origins)` : 'Disabled'} />
+                <InfoRow label="Gateway Auth" value={route.requireAuth ? (
+                  <span className="inline-flex items-center gap-1 text-amber-500"><Shield className="w-3 h-3" />{route.authType}</span>
+                ) : <span className="text-muted-foreground">None</span>} />
+                <InfoRow label="Upstream Auth" value={
+                  route.upstreamAuthType && route.upstreamAuthType !== 'NONE'
+                    ? <span className="text-foreground">{route.upstreamAuthType}{route.upstreamAuthType === 'API_KEY' && route.upstreamAuthHeader ? ` (${route.upstreamAuthHeader})` : ''}</span>
+                    : <span className="text-muted-foreground">None</span>
+                } />
+                <InfoRow label="IP Allowlist" value={route.ipAllowlist.length > 0 ? `${route.ipAllowlist.length} ${route.ipAllowlist.length === 1 ? 'entry' : 'entries'}` : <span className="text-muted-foreground">Allow all</span>} />
+                <InfoRow label="Webhook Secret" value={route.webhookSecret ? <span className="text-green-500">Configured</span> : <span className="text-muted-foreground">None</span>} />
+                <InfoRow label="CORS" value={route.corsEnabled ? `Enabled (${route.corsOrigins.length} ${route.corsOrigins.length === 1 ? 'origin' : 'origins'})` : <span className="text-muted-foreground">Disabled</span>} />
               </CardContent>
             </Card>
 
@@ -314,40 +344,18 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
                 <InfoRow label="Environment" value={
                   route.environment && route.environment !== 'NONE'
                     ? <EnvironmentBadge environment={route.environment} />
-                    : 'None'
+                    : <span className="text-muted-foreground">None</span>
                 } />
                 <InfoRow label="Tags" value={
                   route.tags.length > 0
                     ? <div className="flex gap-1 flex-wrap">
                         {route.tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}
                       </div>
-                    : 'None'
+                    : <span className="text-muted-foreground">None</span>
                 } />
-                <InfoRow label="Created By" value={route.createdBy?.name ?? '—'} />
-                <InfoRow label="Updated By" value={route.updatedBy?.name ?? '—'} />
-                <InfoRow label="Created" value={formatDate(route.createdAt)} />
-                <InfoRow label="Updated" value={formatDate(route.updatedAt)} />
-              </CardContent>
-            </Card>
-
-            {/* WebSocket & Circuit Breaker */}
-            <Card>
-              <CardHeader><CardTitle className="text-sm">Features</CardTitle></CardHeader>
-              <CardContent className="space-y-3 text-sm">
-                <InfoRow label="WebSocket" value={route.wsEnabled ? 'Enabled' : 'Disabled'} />
-                <InfoRow label="Circuit Breaker" value={route.circuitBreakerEnabled ? 'Enabled' : 'Disabled'} />
-                {route.circuitBreakerEnabled && (
-                  <>
-                    <InfoRow label="CB State" value={route.cbState || 'CLOSED'} />
-                    <InfoRow label="Failure Threshold" value={String(route.cbFailureThreshold)} />
-                    <InfoRow label="Recovery Timeout" value={`${route.cbRecoveryTimeout}ms`} />
-                    <InfoRow label="Failure Count" value={String(route.cbFailureCount)} />
-                  </>
-                )}
-                <InfoRow label="LB Strategy" value={route.lbStrategy?.replace('_', ' ') || 'Round Robin'} />
-                {route.routeGroup && (
-                  <InfoRow label="Route Group" value={route.routeGroup.name} />
-                )}
+                <InfoRow label="Version" value={`v${route.version}`} />
+                <InfoRow label="Created" value={`${formatDate(route.createdAt)} · ${route.createdBy?.name ?? '—'}`} />
+                <InfoRow label="Updated" value={`${formatRelativeTime(route.updatedAt)} · ${route.updatedBy?.name ?? '—'}`} />
               </CardContent>
             </Card>
           </div>
@@ -800,6 +808,84 @@ function formatJsonValue(str: string): string {
   } catch {
     return str
   }
+}
+
+// Visual request-flow strip — gives an at-a-glance picture of what happens to
+// an incoming request: public path → middlewares that fire → upstream target.
+function PipelineStrip({ route }: { route: any }) {
+  const middlewares: Array<{ label: string; tone: 'green' | 'amber' | 'blue' | 'purple' }> = []
+  if (route.requireAuth) middlewares.push({ label: route.authType === 'API_KEY' ? 'API Key' : route.authType, tone: 'amber' })
+  if (route.webhookSecret) middlewares.push({ label: 'HMAC', tone: 'amber' })
+  if (route.ipAllowlist?.length > 0) middlewares.push({ label: 'IP filter', tone: 'amber' })
+  if (route.rateLimitEnabled) middlewares.push({ label: 'Rate limit', tone: 'blue' })
+  if (route.circuitBreakerEnabled) middlewares.push({ label: 'Circuit breaker', tone: 'blue' })
+  if (route.transformRules?.length > 0) middlewares.push({ label: `${route.transformRules.length} transforms`, tone: 'purple' })
+  if (route.streamResponse) middlewares.push({ label: 'Streaming', tone: 'purple' })
+  if (route.wsEnabled) middlewares.push({ label: 'WebSocket', tone: 'purple' })
+
+  const toneClass = (tone: 'green' | 'amber' | 'blue' | 'purple') => ({
+    green: 'text-green-500 border-green-500/30 bg-green-500/10',
+    amber: 'text-amber-500 border-amber-500/30 bg-amber-500/10',
+    blue: 'text-blue-500 border-blue-500/30 bg-blue-500/10',
+    purple: 'text-purple-500 border-purple-500/30 bg-purple-500/10',
+  }[tone])
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex flex-wrap items-center gap-2 text-sm font-mono">
+          <span className="px-2 py-1 rounded border border-border bg-muted/40 text-foreground">{route.publicPath}</span>
+          <span className="text-muted-foreground">→</span>
+          {middlewares.length === 0 ? (
+            <span className="text-xs text-muted-foreground italic">no middlewares</span>
+          ) : middlewares.map((m, i) => (
+            <span key={i} className="contents">
+              <span className={cn('px-1.5 py-0.5 rounded border text-xs', toneClass(m.tone))}>{m.label}</span>
+              <span className="text-muted-foreground">→</span>
+            </span>
+          ))}
+          <span className="px-2 py-1 rounded border border-primary/40 bg-primary/10 text-foreground truncate max-w-xs" title={route.targetUrl}>{route.targetUrl}</span>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// Pill grid showing every optional feature; active ones are bright, inactive
+// ones are dimmed so the route's "shape" is instantly readable.
+function FeaturePills({ route }: { route: any }) {
+  const features: Array<{ icon: any; label: string; on: boolean; help?: string }> = [
+    { icon: Shield, label: 'Auth', on: !!route.requireAuth, help: route.requireAuth ? route.authType : undefined },
+    { icon: Wifi, label: 'WebSocket', on: !!route.wsEnabled },
+    { icon: Zap, label: 'Circuit Breaker', on: !!route.circuitBreakerEnabled, help: route.cbState },
+    { icon: Activity, label: 'Rate Limit', on: !!route.rateLimitEnabled, help: route.rateLimitEnabled ? `${route.rateLimitMax}/${Math.round(route.rateLimitWindow / 1000)}s` : undefined },
+    { icon: ArrowRightLeft, label: 'Transforms', on: (route.transformRules?.length ?? 0) > 0, help: route.transformRules?.length ? `${route.transformRules.length}` : undefined },
+    { icon: Target, label: 'Wildcard', on: route.publicPath?.endsWith('/*') },
+    { icon: Play, label: 'Streaming', on: !!route.streamResponse },
+    { icon: Power, label: 'CORS', on: !!route.corsEnabled, help: route.corsEnabled ? `${route.corsOrigins.length} origins` : undefined },
+  ]
+  return (
+    <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+      {features.map(({ icon: Icon, label, on, help }) => (
+        <div
+          key={label}
+          className={cn(
+            'flex items-center gap-2 rounded-md border px-2.5 py-2 text-xs transition-colors',
+            on
+              ? 'border-primary/30 bg-primary/10 text-foreground'
+              : 'border-border/40 bg-muted/20 text-muted-foreground'
+          )}
+          title={help}
+        >
+          <Icon className={cn('w-3.5 h-3.5 shrink-0', on ? 'text-primary' : 'text-muted-foreground/60')} />
+          <div className="min-w-0">
+            <p className="font-medium leading-tight truncate">{label}</p>
+            {help && <p className="text-[10px] text-muted-foreground leading-tight truncate">{help}</p>}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function InfoRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
