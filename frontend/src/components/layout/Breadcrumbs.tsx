@@ -5,22 +5,29 @@ import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 
-// Segments that are parent resource names — the next segment is an ID to resolve
-const RESOURCE_PARENTS = new Set(['routes', 'organizations', 'groups'])
+// Parent path segments whose next segment is a resource id-or-slug to resolve
+const RESOURCE_PARENTS = new Set(['routes', 'organizations', 'groups', 'users', 'incidents', 'change-requests'])
+// Sub-route keywords — not entity ids
+const SUB_KEYWORDS = new Set(['edit', 'new'])
 
+/**
+ * Breadcrumbs are intentionally minimal:
+ * - Hidden on the dashboard and on top-level list pages (/routes, /users, …)
+ *   — the sidebar + page heading already say where you are.
+ * - On detail / sub-pages, the trail starts at the resource list (no
+ *   "Dashboard / …" noise prefix) and resolves entity ids/slugs to names.
+ */
 export function Breadcrumbs() {
   const pathname = usePathname()
-
   const segments = pathname.split('/').filter(Boolean)
 
-  // Detect if we have a resource ID segment (e.g. /routes/[id])
+  // Detect a resource id/slug segment: /routes/<entity>[/...]
   let resourceType: string | null = null
   let resourceId: string | null = null
   for (let i = 0; i < segments.length - 1; i++) {
     if (RESOURCE_PARENTS.has(segments[i])) {
       const candidate = segments[i + 1]
-      // IDs are cuid/uuid-like — not normal words like "edit"
-      if (candidate && candidate.length > 10 && !['edit', 'new'].includes(candidate)) {
+      if (candidate && !SUB_KEYWORDS.has(candidate)) {
         resourceType = segments[i]
         resourceId = candidate
         break
@@ -28,7 +35,6 @@ export function Breadcrumbs() {
     }
   }
 
-  // Fetch resource name if we have an ID in the breadcrumb
   const { data: resourceData } = useQuery({
     queryKey: ['breadcrumb', resourceType, resourceId],
     queryFn: async () => {
@@ -42,31 +48,16 @@ export function Breadcrumbs() {
   })
   const resourceName = (resourceData as any)?.data?.name
 
-  // Build breadcrumb items from path segments
-  const items = segments.map((segment, index) => {
+  const crumbs = segments.map((segment, index) => {
     const href = '/' + segments.slice(0, index + 1).join('/')
-    let label = segment.charAt(0).toUpperCase() + segment.slice(1)
-
-    // Replace ID with resolved name
-    if (segment === resourceId && resourceName) {
-      label = resourceName
-    }
-
-    const isLast = index === segments.length - 1
-    return { href, label, isLast }
+    let label = segment.charAt(0).toUpperCase() + segment.slice(1).replace(/-/g, ' ')
+    if (segment === resourceId && resourceName) label = resourceName
+    return { href, label, isLast: index === segments.length - 1 }
   })
 
-  // Always start with Dashboard
-  const crumbs = [
-    { href: '/dashboard', label: 'Dashboard', isLast: items.length === 0 || (items.length === 1 && items[0].href === '/dashboard') },
-    ...items.filter((item) => item.href !== '/dashboard'),
-  ]
-
-  // Recalculate isLast
-  crumbs.forEach((crumb, i) => {
-    crumb.isLast = i === crumbs.length - 1
-  })
-
+  // Only show breadcrumbs when there's actually a path worth showing.
+  // - Hide on the dashboard ("/" or "/dashboard")
+  // - Hide on top-level pages ("/routes", "/users", …) — they're self-evident
   if (crumbs.length <= 1) return null
 
   return (
@@ -75,12 +66,9 @@ export function Breadcrumbs() {
         <span key={crumb.href} className="flex items-center gap-1.5">
           {i > 0 && <span className="text-muted-foreground/50">/</span>}
           {crumb.isLast ? (
-            <span className="text-foreground font-medium">{crumb.label}</span>
+            <span className="text-foreground font-medium truncate max-w-[40ch]">{crumb.label}</span>
           ) : (
-            <Link
-              href={crumb.href}
-              className="hover:text-foreground transition-colors"
-            >
+            <Link href={crumb.href} className="hover:text-foreground transition-colors">
               {crumb.label}
             </Link>
           )}

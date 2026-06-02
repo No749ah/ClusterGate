@@ -148,6 +148,7 @@ export default function DashboardPage() {
           icon={Route}
           isLoading={statsLoading}
           colorClass="text-blue-500 bg-blue-500/10"
+          href="/routes"
         />
         <StatsCard
           title="Total Requests"
@@ -159,6 +160,7 @@ export default function DashboardPage() {
           sparklineColor="#8b5cf6"
           isLoading={statsLoading}
           colorClass="text-purple-500 bg-purple-500/10"
+          href="/analytics"
         />
         <StatsCard
           title="Avg Response Time"
@@ -171,6 +173,7 @@ export default function DashboardPage() {
           })() : undefined}
           isLoading={statsLoading}
           colorClass="text-amber-500 bg-amber-500/10"
+          href="/analytics"
         />
         <StatsCard
           title="Error Rate"
@@ -185,6 +188,7 @@ export default function DashboardPage() {
           sparklineColor="#ef4444"
           isLoading={statsLoading}
           colorClass="text-red-500 bg-red-500/10"
+          href="/logs"
         />
       </div>
     ),
