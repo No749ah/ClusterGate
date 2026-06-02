@@ -166,7 +166,12 @@ export function Sidebar() {
         'flex items-center border-b border-sidebar-border transition-all duration-200',
         !mobileOpen && collapsed ? 'justify-center px-2 py-5' : 'px-4 py-5'
       )}>
-        <div className={cn('flex items-center', !mobileOpen && collapsed ? '' : 'gap-3 flex-1')}>
+        <Link
+          href="/dashboard"
+          onClick={() => mobileOpen && setMobileOpen(false)}
+          aria-label="Go to dashboard"
+          className={cn('flex items-center hover:opacity-80 transition-opacity', !mobileOpen && collapsed ? '' : 'gap-3 flex-1')}
+        >
           <Logo size={36} className="party-logo" onSecretClick={partyMode.activate} />
           {(mobileOpen || !collapsed) && (
             <div className="overflow-hidden">
@@ -174,7 +179,7 @@ export function Sidebar() {
               <p className="text-xs text-muted-foreground whitespace-nowrap">Routing Gateway</p>
             </div>
           )}
-        </div>
+        </Link>
         {/* Mobile close button */}
         {mobileOpen && (
           <button
