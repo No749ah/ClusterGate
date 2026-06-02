@@ -40,7 +40,7 @@ clustergate.example.com/r/api/v1       →  http://myservice.production.svc.clus
 ## Features
 
 - **Routing Gateway** — Transparent HTTP proxy for Kubernetes internal services under `/r/` prefix
-- **Route Management** — Create, test, publish, version, duplicate, import/export routes via UI; **bulk actions** (publish/deactivate/delete, set environment, move to group, add tags); **Copy-as-cURL** and per-route config export; keyboard shortcuts on the route list (`/` search, `n` new, Ctrl/Cmd+A/C/V, Del)
+- **Route Management** — Guided 7-step create/edit wizard with a built-in target reachability check; test, publish, version, duplicate, import/export routes via UI; **bulk actions** (publish/deactivate/delete, set environment, move to group, add tags); **Copy-as-cURL** and per-route config export; keyboard shortcuts on the route list (`/` search, `n` new, Ctrl/Cmd+A/C/V, Ctrl/Cmd+K shortcuts, Del)
 - **Environment Labels** — Tag routes as Production / Staging / Development with colored badges and a list filter
 - **WebSocket Proxy** — Native WebSocket upgrade support via `http-proxy` for WS/WSS routes
 - **Load Balancing** — Round-robin (shared across replicas), weighted, and failover strategies with multiple targets per route
