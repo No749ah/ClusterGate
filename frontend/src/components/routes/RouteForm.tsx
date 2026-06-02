@@ -731,49 +731,36 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   </SelectContent>
                 </Select>
               </Field>
-              <SwitchRow
-                label="Strip Prefix"
-                description="Forward to the Target URL root only — no path appended. Disabled while wildcard routing is on."
-                checked={watch('stripPrefix') && !wildcardEnabled}
-                onCheckedChange={(v) => !wildcardEnabled && setValue('stripPrefix', v)}
-              />
-              <SwitchRow
-                label="Verify SSL Certificate"
-                description="Disable for self-signed or internal certificates."
-                checked={watch('sslVerify')}
-                onCheckedChange={(v) => setValue('sslVerify', v)}
-              />
-              <SwitchRow
-                label="Stream Response"
-                description="Pipe the response unbuffered for SSE / token streaming."
-                checked={watch('streamResponse') ?? false}
-                onCheckedChange={(v) => setValue('streamResponse', v)}
-              />
-              <SwitchRow
-                label="WebSocket Support"
-                description="Enable WebSocket upgrade handling for this route."
-                checked={watch('wsEnabled') ?? false}
-                onCheckedChange={(v) => setValue('wsEnabled', v)}
-              />
+              {/* Switches paired into 2 columns so this section stays compact */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                <SwitchRow
+                  label="Strip Prefix"
+                  description="Forward to the Target URL root only — no path appended. Disabled while wildcard routing is on."
+                  checked={watch('stripPrefix') && !wildcardEnabled}
+                  onCheckedChange={(v) => !wildcardEnabled && setValue('stripPrefix', v)}
+                />
+                <SwitchRow
+                  label="Verify SSL Certificate"
+                  description="Disable for self-signed or internal certificates."
+                  checked={watch('sslVerify')}
+                  onCheckedChange={(v) => setValue('sslVerify', v)}
+                />
+                <SwitchRow
+                  label="Stream Response"
+                  description="Pipe the response unbuffered for SSE / token streaming."
+                  checked={watch('streamResponse') ?? false}
+                  onCheckedChange={(v) => setValue('streamResponse', v)}
+                />
+                <SwitchRow
+                  label="WebSocket Support"
+                  description="Enable WebSocket upgrade handling for this route."
+                  checked={watch('wsEnabled') ?? false}
+                  onCheckedChange={(v) => setValue('wsEnabled', v)}
+                />
+              </div>
             </Section>
 
-            <Section title="Reliability" description="Circuit breaker and how multiple targets are balanced.">
-              <SwitchRow
-                label="Circuit Breaker"
-                description="Stop forwarding after consecutive failures."
-                checked={circuitBreakerEnabled}
-                onCheckedChange={(v) => setValue('circuitBreakerEnabled', v)}
-              />
-              {circuitBreakerEnabled && (
-                <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
-                  <Field label="Failure Threshold">
-                    <input type="number" {...register('cbFailureThreshold')} className={fieldClass()} />
-                  </Field>
-                  <Field label="Recovery Timeout (ms)">
-                    <input type="number" {...register('cbRecoveryTimeout')} className={fieldClass()} />
-                  </Field>
-                </div>
-              )}
+            <Section title="Reliability" description="Circuit breaker, rate limiting, and how multiple targets are balanced.">
               <Field label="Load Balancing Strategy" hint="How to distribute traffic across multiple targets (configured separately)">
                 <Select value={watch('lbStrategy')} onValueChange={(v) => setValue('lbStrategy', v as any)}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
@@ -784,6 +771,44 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   </SelectContent>
                 </Select>
               </Field>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3">
+                <SwitchRow
+                  label="Circuit Breaker"
+                  description="Stop forwarding after consecutive failures."
+                  checked={circuitBreakerEnabled}
+                  onCheckedChange={(v) => setValue('circuitBreakerEnabled', v)}
+                />
+                <SwitchRow
+                  label="Rate limiting"
+                  description="Limit requests per client IP."
+                  checked={rateLimitEnabled}
+                  onCheckedChange={(v) => setValue('rateLimitEnabled', v)}
+                />
+              </div>
+              {(circuitBreakerEnabled || rateLimitEnabled) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
+                  {circuitBreakerEnabled && (
+                    <>
+                      <Field label="Failure Threshold">
+                        <input type="number" {...register('cbFailureThreshold')} className={fieldClass()} />
+                      </Field>
+                      <Field label="Recovery Timeout (ms)">
+                        <input type="number" {...register('cbRecoveryTimeout')} className={fieldClass()} />
+                      </Field>
+                    </>
+                  )}
+                  {rateLimitEnabled && (
+                    <>
+                      <Field label="Max Requests" hint="Per window per IP">
+                        <input type="number" {...register('rateLimitMax')} className={fieldClass()} />
+                      </Field>
+                      <Field label="Window (seconds)" hint="1–3600">
+                        <input type="number" {...register('rateLimitWindowSeconds')} className={fieldClass()} />
+                      </Field>
+                    </>
+                  )}
+                </div>
+              )}
             </Section>
 
             <Section title="Health check" description="How ClusterGate probes the upstream. POST + body works for n8n.">
@@ -818,24 +843,6 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 <Field label="Body (JSON)">
                   <Textarea {...register('healthCheckBody')} placeholder='{"chatInput":"ping","sessionId":"healthcheck"}' rows={2} className="font-mono text-sm" />
                 </Field>
-              )}
-            </Section>
-
-            <Section title="Rate limiting" description="Limit requests per client IP. Backed by Postgres so limits stay correct across replicas.">
-              <SwitchRow
-                label="Enable rate limiting"
-                checked={rateLimitEnabled}
-                onCheckedChange={(v) => setValue('rateLimitEnabled', v)}
-              />
-              {rateLimitEnabled && (
-                <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
-                  <Field label="Max Requests" hint="Per window per IP">
-                    <input type="number" {...register('rateLimitMax')} className={fieldClass()} />
-                  </Field>
-                  <Field label="Window (seconds)" hint="1–3600">
-                    <input type="number" {...register('rateLimitWindowSeconds')} className={fieldClass()} />
-                  </Field>
-                </div>
               )}
             </Section>
           </div>
@@ -1081,7 +1088,7 @@ function Section({
   className?: string
 }) {
   return (
-    <section className={cn('rounded-lg border border-border/50 bg-card/40 p-4 space-y-4', className)}>
+    <section className={cn('rounded-lg border border-border/50 bg-card/40 px-4 py-3.5 space-y-3', className)}>
       <header className="space-y-0.5">
         <h3 className="text-sm font-semibold text-foreground">{title}</h3>
         {description && <p className="text-xs text-muted-foreground">{description}</p>}
