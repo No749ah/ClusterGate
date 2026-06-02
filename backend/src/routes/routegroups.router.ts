@@ -2,9 +2,11 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
+import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
 import * as routeGroupService from '../services/routeGroupService'
 
 const router = Router()
+attachRouteParamResolver(router, 'routeId')
 
 // Accept either a cuid id or a URL slug as :id on every handler below.
 import { looksLikeCuid } from '../lib/slug'

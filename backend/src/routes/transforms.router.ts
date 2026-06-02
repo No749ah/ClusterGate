@@ -2,9 +2,11 @@ import { Router } from 'express'
 import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
+import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
 import * as transformService from '../services/transformService'
 
 const router = Router()
+attachRouteParamResolver(router, 'routeId')
 
 /**
  * @openapi
