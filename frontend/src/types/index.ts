@@ -292,6 +292,7 @@ export interface LogFilters {
   statusType?: 'success' | 'error' | 'client' | 'throttled' | 'maintenance' | 'degraded'
   dateFrom?: string
   dateTo?: string
+  search?: string
   page?: number
   pageSize?: number
 }

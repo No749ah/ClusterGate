@@ -309,6 +309,7 @@ class ApiClient {
       if (filters.statusType) params.set('statusType', filters.statusType)
       if (filters.dateFrom) params.set('dateFrom', filters.dateFrom)
       if (filters.dateTo) params.set('dateTo', filters.dateTo)
+      if (filters.search) params.set('search', filters.search)
       if (filters.page) params.set('page', String(filters.page))
       if (filters.pageSize) params.set('pageSize', String(filters.pageSize))
       const qs = params.toString()

@@ -88,6 +88,13 @@ export async function getRouteLogs(filters: LogFilters, pagination = { page: 1, 
       return methods.length > 1 ? { method: { in: methods } } : { method: methods[0] }
     })()),
     ...(filters.statusType ? statusTypeWhere(filters.statusType) : {}),
+    ...(filters.search && {
+      OR: [
+        { path: { contains: filters.search, mode: 'insensitive' as const } },
+        { ip: { contains: filters.search, mode: 'insensitive' as const } },
+        { error: { contains: filters.search, mode: 'insensitive' as const } },
+      ],
+    }),
     ...(filters.dateFrom || filters.dateTo
       ? {
           createdAt: {

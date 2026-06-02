@@ -2,12 +2,12 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { LogFilters } from '@/types'
 
-export function useLogs(filters: LogFilters = {}) {
+export function useLogs(filters: LogFilters = {}, opts?: { refetchInterval?: number | false }) {
   return useQuery({
     queryKey: ['logs', filters],
     queryFn: () => api.logs.getAll(filters),
     staleTime: 15 * 1000,
-    refetchInterval: 15 * 1000,
+    refetchInterval: opts?.refetchInterval ?? 15 * 1000,
     placeholderData: keepPreviousData,
   })
 }

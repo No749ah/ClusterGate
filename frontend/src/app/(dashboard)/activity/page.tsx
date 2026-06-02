@@ -40,6 +40,16 @@ export default function LogsPage() {
     if (s) setStatusType(s)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params?.get('routeId'), params?.get('method'), params?.get('statusType')])
+  const [search, setSearch] = useState<string>(params?.get('search') ?? '')
+  // Debounce free-text search to avoid hammering the API on every keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState(search)
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300)
+    return () => clearTimeout(t)
+  }, [search])
+  const [dateFrom, setDateFrom] = useState<string>(params?.get('dateFrom') ?? '')
+  const [dateTo, setDateTo] = useState<string>(params?.get('dateTo') ?? '')
+  const [liveTail, setLiveTail] = useState<boolean>(false)
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize('activity', 25)
   const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
@@ -49,9 +59,12 @@ export default function LogsPage() {
     routeId: routeId || undefined,
     method: method || undefined,
     statusType: (statusType as 'success' | 'error' | 'client' | 'throttled' | 'maintenance' | 'degraded') || undefined,
+    search: debouncedSearch || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
     page,
     pageSize,
-  })
+  }, { refetchInterval: liveTail ? 2000 : undefined })
 
   const logs = logsData?.data ?? []
   const total = logsData?.total ?? 0
@@ -79,6 +92,45 @@ export default function LogsPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
+        {/* Free-text search across path / IP / error */}
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
+          <Input
+            placeholder="Search path / IP / error"
+            value={search}
+            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+            className="pl-8 h-9 w-56"
+          />
+        </div>
+        {/* Date range — datetime-local inputs translate to ISO strings */}
+        <Input
+          type="datetime-local"
+          value={dateFrom}
+          onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+          className="h-9 w-44"
+          title="From"
+        />
+        <Input
+          type="datetime-local"
+          value={dateTo}
+          onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+          className="h-9 w-44"
+          title="To"
+        />
+        {/* Live tail — switch refetch interval to 2s and reset to page 1 */}
+        <Button
+          variant={liveTail ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => { setLiveTail((v) => !v); if (!liveTail) setPage(1) }}
+          title={liveTail ? 'Pause live tail' : 'Auto-refresh every 2s'}
+          className="h-9"
+        >
+          {liveTail ? (
+            <><span className="relative flex w-2 h-2 mr-1.5"><span className="animate-ping absolute inline-flex w-full h-full rounded-full bg-red-500 opacity-75" /><span className="relative inline-flex w-2 h-2 rounded-full bg-red-500" /></span> Live</>
+          ) : (
+            <><span className="w-2 h-2 mr-1.5 rounded-full bg-muted-foreground/40" /> Live</>
+          )}
+        </Button>
         {(() => {
           const selected = new Set(routeId.split(',').map((s) => s.trim()).filter(Boolean))
           const label = selected.size === 0

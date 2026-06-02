@@ -104,7 +104,7 @@ function redactForViewer<T extends Record<string, any>>(role: Role, entries: T[]
  */
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { page = '1', pageSize = '50', routeId, method, statusType, dateFrom, dateTo } = req.query
+    const { page = '1', pageSize = '50', routeId, method, statusType, dateFrom, dateTo, search } = req.query
 
     // Validate date params
     const parsedDateFrom = dateFrom ? new Date(String(dateFrom)) : undefined
@@ -120,9 +120,10 @@ router.get('/', authenticate, async (req, res, next) => {
       {
         routeId: routeId as string,
         method: method as string,
-        statusType: statusType as 'success' | 'error' | 'client',
+        statusType: statusType as any,
         dateFrom: parsedDateFrom,
         dateTo: parsedDateTo,
+        search: search ? String(search) : undefined,
       },
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )
