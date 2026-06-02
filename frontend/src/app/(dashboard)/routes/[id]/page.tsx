@@ -13,7 +13,7 @@ import { EnvironmentBadge } from '@/components/routes/EnvironmentBadge'
 import { buildCurl, toExportConfig, downloadJson } from '@/lib/routeExport'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth, useDeleteRoute } from '@/hooks/useRoutes'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
 import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
@@ -53,6 +53,19 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   const duplicate = useDuplicateRoute()
   const deleteRoute = useDeleteRoute()
   const router = useRouter()
+  // Persist the active tab in the URL so refresh/share/back-button preserve it.
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const VALID_TABS = ['overview', 'test', 'logs', 'api-keys', 'targets', 'transforms', 'history']
+  const tabFromUrl = searchParams.get('tab') ?? 'overview'
+  const activeTab = VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'overview'
+  const setTab = (next: string) => {
+    const params = new URLSearchParams(searchParams.toString())
+    if (next === 'overview') params.delete('tab')
+    else params.set('tab', next)
+    const qs = params.toString()
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+  }
 
   const handleDelete = async (route: any) => {
     if (route.isActive) {
@@ -256,7 +269,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
       )}
 
       {/* Tabs */}
-      <Tabs defaultValue="overview">
+      <Tabs value={activeTab} onValueChange={setTab}>
         <TabsList className="w-full justify-start">
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="test">Test</TabsTrigger>

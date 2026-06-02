@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import {
   Plus,
   Search,
@@ -110,12 +110,36 @@ export default function RoutesPage() {
   const { user } = useAuth()
   const router = useRouter()
   const queryClient = useQueryClient()
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState<RouteStatus | 'ALL'>('ALL')
-  const [orgFilter, setOrgFilter] = useState<string>('ALL')
-  const [tagFilter, setTagFilter] = useState<string>('ALL')
-  const [envFilter, setEnvFilter] = useState<Environment | 'ALL'>('ALL')
-  const [page, setPage] = useState(1)
+  // Filter / pagination state lives in the URL so the view is bookmarkable,
+  // shareable and survives the browser back button.
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  const search = searchParams.get('q') ?? ''
+  const statusFilter = (searchParams.get('status') ?? 'ALL') as RouteStatus | 'ALL'
+  const orgFilter = searchParams.get('org') ?? 'ALL'
+  const tagFilter = searchParams.get('tag') ?? 'ALL'
+  const envFilter = (searchParams.get('env') ?? 'ALL') as Environment | 'ALL'
+  const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+
+  const updateParams = (patch: Record<string, string | null>, opts?: { resetPage?: boolean }) => {
+    const next = new URLSearchParams(searchParams.toString())
+    for (const [k, v] of Object.entries(patch)) {
+      if (!v || v === 'ALL') next.delete(k)
+      else next.set(k, v)
+    }
+    if (opts?.resetPage) next.delete('page')
+    const qs = next.toString()
+    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+  }
+  const setSearch = (v: string) => updateParams({ q: v || null }, { resetPage: true })
+  const setStatusFilter = (v: string) => updateParams({ status: v === 'ALL' ? null : v }, { resetPage: true })
+  const setOrgFilter = (v: string) => updateParams({ org: v === 'ALL' ? null : v }, { resetPage: true })
+  const setTagFilter = (v: string) => updateParams({ tag: v === 'ALL' ? null : v }, { resetPage: true })
+  const setEnvFilter = (v: string) => updateParams({ env: v === 'ALL' ? null : v }, { resetPage: true })
+  const setPage = (p: number | ((prev: number) => number)) => {
+    const value = typeof p === 'function' ? (p as (n: number) => number)(page) : p
+    updateParams({ page: value > 1 ? String(value) : null })
+  }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -424,7 +448,7 @@ export default function RoutesPage() {
             ref={searchRef}
             placeholder="Search routes..."
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPage(1) }}
+            onChange={(e) => { setSearch(e.target.value) }}
             className="pl-9 pr-16"
           />
           <button
@@ -436,7 +460,7 @@ export default function RoutesPage() {
             <kbd>⌘</kbd><kbd>K</kbd>
           </button>
         </div>
-        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v as any); setPage(1) }}>
+        <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v) }}>
           <SelectTrigger className="w-36">
             <Filter className="w-3 h-3 mr-2 text-muted-foreground" />
             <SelectValue />
@@ -447,7 +471,7 @@ export default function RoutesPage() {
             <SelectItem value="DRAFT">Draft</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={envFilter} onValueChange={(v) => { setEnvFilter(v as any); setPage(1) }}>
+        <Select value={envFilter} onValueChange={(v) => { setEnvFilter(v) }}>
           <SelectTrigger className="w-36">
             <Layers className="w-3 h-3 mr-2 text-muted-foreground" />
             <SelectValue />
@@ -461,7 +485,7 @@ export default function RoutesPage() {
           </SelectContent>
         </Select>
         {userOrgs.length > 1 && (
-          <Select value={orgFilter} onValueChange={(v) => { setOrgFilter(v); setPage(1) }}>
+          <Select value={orgFilter} onValueChange={(v) => { setOrgFilter(v) }}>
             <SelectTrigger className="w-44">
               <Building2 className="w-3 h-3 mr-2 text-muted-foreground" />
               <SelectValue />
@@ -475,7 +499,7 @@ export default function RoutesPage() {
           </Select>
         )}
         {allTags.length > 0 && (
-          <Select value={tagFilter} onValueChange={(v) => { setTagFilter(v); setPage(1) }}>
+          <Select value={tagFilter} onValueChange={(v) => { setTagFilter(v) }}>
             <SelectTrigger className="w-40">
               <SelectValue placeholder="All Tags" />
             </SelectTrigger>
@@ -743,16 +767,33 @@ function RouteRow({
           </p>
           {(route.tags.length > 0 || (route as any).organization || (route.environment && route.environment !== 'NONE')) && (
             <div className="flex items-center gap-1 mt-1 min-w-0">
-              <EnvironmentBadge environment={route.environment} className="text-[10px] py-0 px-1.5" />
+              {/* Clicking the env badge filters the list to that env; same for tags */}
+              {route.environment && route.environment !== 'NONE' && (
+                <Link
+                  href={`/routes?env=${route.environment}`}
+                  onClick={(e) => e.stopPropagation()}
+                  className="contents"
+                  title={`Filter by ${route.environment}`}
+                >
+                  <EnvironmentBadge environment={route.environment} className="text-[10px] py-0 px-1.5 cursor-pointer" />
+                </Link>
+              )}
               {(route as any).organization && (
                 <Badge variant="outline" className="text-[10px] py-0 px-1.5 max-w-[150px] truncate" title={(route as any).organization.name}>
                   {(route as any).organization.name}
                 </Badge>
               )}
               {route.tags.slice(0, 2).map((tag) => (
-                <Badge key={tag} variant="secondary" className="text-[10px] py-0 px-1 shrink-0">
-                  {tag}
-                </Badge>
+                <Link
+                  key={tag}
+                  href={`/routes?tag=${encodeURIComponent(tag)}`}
+                  onClick={(e) => e.stopPropagation()}
+                  title={`Filter by "${tag}"`}
+                >
+                  <Badge variant="secondary" className="text-[10px] py-0 px-1 shrink-0 cursor-pointer hover:bg-primary/20">
+                    {tag}
+                  </Badge>
+                </Link>
               ))}
               {route.tags.length > 2 && (
                 <span className="text-[10px] text-muted-foreground shrink-0" title={route.tags.slice(2).join(', ')}>

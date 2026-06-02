@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Header } from '@/components/layout/Header'
 import { Breadcrumbs } from '@/components/layout/Breadcrumbs'
+import { PageTitle } from '@/components/layout/PageTitle'
 import { UpdateBanner } from '@/components/layout/UpdateBanner'
 import { useAuth } from '@/hooks/useAuth'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -67,6 +68,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       >
         Skip to content
       </a>
+      <PageTitle />
       <Sidebar />
       <div className={`flex-1 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
         <UpdateBanner />
