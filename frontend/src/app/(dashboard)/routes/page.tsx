@@ -56,6 +56,7 @@ import {
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { formatRelativeTime, copyToClipboard } from '@/lib/utils'
+import { routeUrl, routeEdit } from '@/lib/urls'
 import { toExportConfig, prepareForPaste, parseConfigs, buildCurl, downloadJson } from '@/lib/routeExport'
 import { Route, RouteStatus, Environment } from '@/types'
 
@@ -731,7 +732,7 @@ function RouteRow({
       <td className="px-4 py-3">
         <div>
           <Link
-            href={`/routes/${route.id}`}
+            href={routeUrl(route)}
             className="font-medium text-foreground hover:text-primary transition-colors"
           >
             {route.name}
@@ -798,12 +799,12 @@ function RouteRow({
       <td className="px-4 py-3">
         <div className="flex items-center justify-end gap-2">
           <Button variant="ghost" size="icon-sm" asChild>
-            <Link href={`/routes/${route.id}`}>
+            <Link href={routeUrl(route)}>
               <Eye className="w-3.5 h-3.5" />
             </Link>
           </Button>
           <Button variant="ghost" size="icon-sm" asChild>
-            <Link href={`/routes/${route.id}/edit`}>
+            <Link href={routeEdit(route)}>
               <Edit className="w-3.5 h-3.5" />
             </Link>
           </Button>

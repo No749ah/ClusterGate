@@ -103,7 +103,7 @@ export function NotificationBell() {
                       </span>
                       {notif.route && (
                         <Link
-                          href={`/routes/${notif.route.id}`}
+                          href={`/routes/${(notif.route as any).slug || notif.route.id}`}
                           className="text-[10px] text-primary hover:underline"
                           onClick={(e) => {
                             e.stopPropagation()

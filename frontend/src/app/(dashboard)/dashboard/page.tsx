@@ -19,6 +19,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
 import { HealthIndicator } from '@/components/routes/HealthIndicator'
 import { formatRelativeTime, formatDuration, getStatusColor } from '@/lib/utils'
+import { routeUrl } from '@/lib/urls'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
@@ -217,7 +218,7 @@ export default function DashboardPage() {
             routes.slice(0, 5).map((route) => (
               <Link
                 key={route.id}
-                href={`/routes/${route.id}`}
+                href={routeUrl(route)}
                 className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-muted/50 transition-colors group"
               >
                 <HealthIndicator

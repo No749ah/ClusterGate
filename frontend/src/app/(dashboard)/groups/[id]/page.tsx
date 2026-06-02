@@ -381,7 +381,7 @@ export default function RouteGroupDetailPage({ params }: { params: Promise<{ id:
                     <tr key={route.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         <Link
-                          href={`/routes/${route.id}`}
+                          href={`/routes/${(route as any).slug || route.id}`}
                           className="text-sm font-medium hover:text-primary transition-colors inline-flex items-center gap-1"
                         >
                           {route.name}

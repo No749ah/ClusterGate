@@ -15,7 +15,7 @@ export default function NewRoutePage() {
 
   const handleSubmit = async (data: RouteFormData) => {
     const route = await createRoute.mutateAsync(data)
-    router.push(`/routes/${route.data.id}`)
+    router.push(`/routes/${(route.data as any).slug || route.data.id}`)
   }
 
   return (

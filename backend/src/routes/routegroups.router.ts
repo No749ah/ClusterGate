@@ -6,6 +6,18 @@ import * as routeGroupService from '../services/routeGroupService'
 
 const router = Router()
 
+// Accept either a cuid id or a URL slug as :id on every handler below.
+import { looksLikeCuid } from '../lib/slug'
+router.param('id', async (req, _res, next, value) => {
+  try {
+    if (typeof value === 'string' && value && !looksLikeCuid(value)) {
+      const real = await routeGroupService.resolveGroupId(value)
+      if (real) req.params.id = real
+    }
+  } catch { /* fall through */ }
+  next()
+})
+
 /**
  * @openapi
  * /api/route-groups:

@@ -1,5 +1,32 @@
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
+import { slugify, looksLikeCuid } from '../lib/slug'
+
+async function pickGroupSlug(name: string, excludeId?: string): Promise<string | null> {
+  const base = slugify(name)
+  if (!base) return null
+  let candidate = base
+  for (let i = 1; i < 100; i++) {
+    const clash = await prisma.routeGroup.findFirst({
+      where: { slug: candidate, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+      select: { id: true },
+    })
+    if (!clash) return candidate
+    i++
+    candidate = `${base}-${i}`
+  }
+  return null
+}
+
+/** Resolve a URL parameter (cuid id or slug) to the group's real id. */
+export async function resolveGroupId(idOrSlug: string): Promise<string | null> {
+  if (looksLikeCuid(idOrSlug)) {
+    const exists = await prisma.routeGroup.findUnique({ where: { id: idOrSlug }, select: { id: true } })
+    if (exists) return exists.id
+  }
+  const bySlug = await prisma.routeGroup.findUnique({ where: { slug: idOrSlug }, select: { id: true } })
+  return bySlug?.id ?? null
+}
 
 export async function getRouteGroups(filters?: { teamId?: string; search?: string }) {
   const where: any = {}
@@ -21,9 +48,10 @@ export async function getRouteGroups(filters?: { teamId?: string; search?: strin
   })
 }
 
-export async function getRouteGroupById(id: string) {
+export async function getRouteGroupById(idOrSlug: string) {
+  const where = looksLikeCuid(idOrSlug) ? { id: idOrSlug } : { slug: idOrSlug }
   const group = await prisma.routeGroup.findUnique({
-    where: { id },
+    where,
     include: {
       team: { select: { id: true, name: true } },
       routes: {
@@ -68,9 +96,12 @@ export async function createRouteGroup(data: {
     throw AppError.conflict(`Path prefix "${data.pathPrefix}" is already in use`)
   }
 
+  const slug = await pickGroupSlug(data.name)
+
   return prisma.routeGroup.create({
     data: {
       name: data.name,
+      slug,
       description: data.description,
       pathPrefix: data.pathPrefix,
       teamId: data.teamId,
@@ -124,9 +155,15 @@ export async function updateRouteGroup(id: string, data: Partial<{
     if (existing) throw AppError.conflict(`Path prefix "${data.pathPrefix}" is already in use`)
   }
 
+  // Refresh slug on rename
+  const dataToWrite: any = { ...data }
+  if (typeof data.name === 'string' && data.name !== group.name) {
+    dataToWrite.slug = await pickGroupSlug(data.name, id)
+  }
+
   return prisma.routeGroup.update({
     where: { id },
-    data: data as any,
+    data: dataToWrite,
     include: {
       team: { select: { id: true, name: true } },
       _count: { select: { routes: true } },

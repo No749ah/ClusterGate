@@ -20,6 +20,20 @@ import { getUserOrgIds, canManageRoute, canManageOrgRoutes, canDeleteRoute } fro
 
 const router = Router()
 
+// Accept either a cuid id or a URL slug as :id on every handler below.
+// If the URL value is a slug, look up the real id and rewrite req.params.id
+// so existing handlers (which assume cuid) keep working unchanged.
+import { looksLikeCuid } from '../lib/slug'
+router.param('id', async (req, _res, next, value) => {
+  try {
+    if (typeof value === 'string' && value && !looksLikeCuid(value)) {
+      const real = await routeService.resolveRouteId(value)
+      if (real) req.params.id = real
+    }
+  } catch { /* fall through — handler will produce its own 404 */ }
+  next()
+})
+
 // Route schema
 const routeBodySchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),

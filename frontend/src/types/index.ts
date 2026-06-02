@@ -35,6 +35,7 @@ export interface RewriteRule {
 
 export interface Route {
   id: string
+  slug: string | null
   name: string
   description: string | null
   publicPath: string
@@ -382,6 +383,7 @@ export interface TransformRule {
 
 export interface RouteGroup {
   id: string
+  slug: string | null
   name: string
   description: string | null
   pathPrefix: string

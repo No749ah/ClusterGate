@@ -4,6 +4,36 @@ import { AppError } from '../lib/errors'
 import { activeRoutesTotal } from '../lib/metrics'
 import { validateTargetUrl, isSafeRegex } from '../lib/security'
 import { encryptSecret } from '../lib/crypto'
+import { slugify, looksLikeCuid } from '../lib/slug'
+
+/**
+ * Pick a slug that doesn't collide with any existing Route. Adds -2, -3, … if
+ * needed. `excludeId` lets a Route's own row be ignored when updating.
+ */
+async function pickRouteSlug(name: string, excludeId?: string): Promise<string | null> {
+  const base = slugify(name)
+  if (!base) return null
+  let candidate = base
+  for (let i = 1; i < 100; i++) {
+    const clash = await prisma.route.findFirst({
+      where: { slug: candidate, ...(excludeId ? { NOT: { id: excludeId } } : {}) },
+      select: { id: true },
+    })
+    if (!clash) return candidate
+    i++
+    candidate = `${base}-${i}`
+  }
+  return null
+}
+
+/** Resolve a Route by either its cuid id or its slug. */
+export async function findRouteByIdOrSlug(idOrSlug: string) {
+  if (looksLikeCuid(idOrSlug)) {
+    const byId = await prisma.route.findUnique({ where: { id: idOrSlug } })
+    if (byId) return byId
+  }
+  return prisma.route.findUnique({ where: { slug: idOrSlug } })
+}
 
 export interface RouteFilters {
   search?: string
@@ -95,9 +125,12 @@ export async function getRoutes(
   }
 }
 
-export async function getRouteById(id: string) {
-  const route = await prisma.route.findUnique({
-    where: { id, deletedAt: null },
+export async function getRouteById(idOrSlug: string) {
+  const where = looksLikeCuid(idOrSlug)
+    ? { id: idOrSlug, deletedAt: null }
+    : { slug: idOrSlug, deletedAt: null }
+  const route = await prisma.route.findFirst({
+    where,
     include: {
       createdBy: { select: { id: true, name: true, email: true } },
       updatedBy: { select: { id: true, name: true, email: true } },
@@ -110,6 +143,20 @@ export async function getRouteById(id: string) {
 
   if (!route) throw AppError.notFound('Route')
   return route
+}
+
+/**
+ * Convert a URL parameter (either a cuid id or a slug) into the route's real
+ * cuid id. Returns null when nothing matches. Use this at the top of router
+ * handlers that interact with Prisma directly (rather than via getRouteById).
+ */
+export async function resolveRouteId(idOrSlug: string): Promise<string | null> {
+  if (looksLikeCuid(idOrSlug)) {
+    const exists = await prisma.route.findUnique({ where: { id: idOrSlug }, select: { id: true } })
+    if (exists) return exists.id
+  }
+  const bySlug = await prisma.route.findUnique({ where: { slug: idOrSlug }, select: { id: true } })
+  return bySlug?.id ?? null
 }
 
 // A soft-deleted route still occupies its publicPath in the unique index.
@@ -166,6 +213,13 @@ export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId
     }
   }
 
+  // Auto-derive a URL-safe slug from the name so detail pages can use it
+  // instead of the cuid id. Falls back to id-only URLs if the name has no
+  // slug-friendly characters.
+  if (typeof data.name === 'string' && !('slug' in data && data.slug)) {
+    (data as any).slug = await pickRouteSlug(data.name)
+  }
+
   const route = await prisma.route.create({
     data: {
       ...data,
@@ -190,6 +244,12 @@ export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId
 export async function updateRoute(id: string, data: Partial<Prisma.RouteUncheckedUpdateInput>, userId: string) {
   const existing = await prisma.route.findUnique({ where: { id, deletedAt: null } })
   if (!existing) throw AppError.notFound('Route')
+
+  // Refresh the URL slug when the name changes so /routes/<slug> stays
+  // meaningful. Skips re-derivation if the slug was set explicitly.
+  if (typeof data.name === 'string' && data.name !== existing.name && !('slug' in data && data.slug)) {
+    (data as any).slug = await pickRouteSlug(data.name, id)
+  }
 
   // Validate target URL if changed (SSRF protection)
   if (data.targetUrl) {

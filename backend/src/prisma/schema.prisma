@@ -229,6 +229,9 @@ model TeamMembership {
 model RouteGroup {
   id          String  @id @default(cuid())
   name        String
+  // URL-safe identifier auto-derived from name; lets links read
+  // /groups/payments instead of /groups/cm…cuid.
+  slug        String? @unique
   description String?
   pathPrefix  String  @unique // e.g. "/r/payments"
 
@@ -268,6 +271,9 @@ model RouteGroup {
 model Route {
   id           String      @id @default(cuid())
   name         String
+  // URL-safe identifier auto-derived from name on create/update; lets links
+  // read /routes/docs-proxy instead of /routes/cm…cuid.
+  slug         String?     @unique
   description  String?
   publicPath   String
   targetUrl    String
