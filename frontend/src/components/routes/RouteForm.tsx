@@ -66,7 +66,7 @@ const routeSchema = z.object({
 
 type RouteFormValues = z.infer<typeof routeSchema>
 
-const STEPS = ['Target', 'Identity', 'Endpoint', 'Scope', 'Behavior', 'Security', 'Transforms & Maintenance']
+const STEPS = ['Identity', 'Target', 'Endpoint', 'Scope', 'Behavior', 'Security', 'Transforms']
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
 function generateRandomPath(): string {
@@ -282,8 +282,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const handleNext = async () => {
     // 7-step guided layout
     const stepFields: (keyof RouteFormValues)[][] = [
-      ['targetUrl'],             // Target
       ['name'],                  // Identity
+      ['targetUrl'],             // Target
       ['publicPath', 'methods'], // Endpoint
       [],                        // Scope (Org checked manually for non-admins)
       ['timeout', 'retryCount', 'retryDelay'], // Behavior
@@ -360,16 +360,17 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
 
   return (
     <form onSubmit={handleSubmit(handleFormSubmit)} onKeyDown={handleFormKeyDown} className="space-y-6">
-      {/* Step indicator — single row, scrolls horizontally on narrow screens
-          without a visible scrollbar */}
-      <div className="flex flex-nowrap gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {/* Step indicator — distributes all 7 pills across the row, each pill
+          shrinks evenly and truncates its label if width gets too tight. */}
+      <div className="flex flex-nowrap gap-1.5 w-full">
         {STEPS.map((s, i) => (
           <button
             key={s}
             type="button"
             onClick={() => setStep(i)}
+            title={s}
             className={cn(
-              'flex items-center gap-1.5 shrink-0 rounded-full border py-1 pl-1 pr-2.5 text-xs font-medium transition-colors cursor-pointer',
+              'group flex items-center gap-1.5 flex-1 min-w-0 rounded-full border py-1 pl-1 pr-2 text-xs font-medium transition-colors cursor-pointer',
               i === step
                 ? 'border-primary bg-primary/10 text-foreground'
                 : i < step
@@ -389,7 +390,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             >
               {i < step ? <Check className="w-3 h-3" /> : i + 1}
             </span>
-            <span className="whitespace-nowrap">{s}</span>
+            <span className="truncate min-w-0">{s}</span>
           </button>
         ))}
       </div>
@@ -397,9 +398,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       {/* Step content */}
       <div className="min-h-[300px]">
         {/* ============================================================== */}
-        {/* Step 0: Where? — Target URL + test                              */}
+        {/* Step 1: Target URL + test                                       */}
         {/* ============================================================== */}
-        {step === 0 && (
+        {step === 1 && (
           <div className="space-y-4">
             <Section
               title="Target"
@@ -482,9 +483,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         )}
 
         {/* ============================================================== */}
-        {/* Step 1: What? — Name + description                              */}
+        {/* Step 0: Identity                                                */}
         {/* ============================================================== */}
-        {step === 1 && (
+        {step === 0 && (
           <div className="space-y-4">
             <Section
               title="Identity"
