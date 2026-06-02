@@ -40,9 +40,20 @@ function extractStreamText(line: string): string {
   }
 }
 
+// A literal `/*` is a route pattern, not a valid request path. Strip the
+// trailing wildcard and supply something concrete the upstream is likely to
+// respond to so the test panel is useful out of the box.
+function resolveTestPath(p: string): string {
+  if (!p) return '/'
+  if (p === '/*' || p === '*') return '/example'
+  if (p.endsWith('/*')) return p.slice(0, -2) + '/example'
+  if (p.endsWith('*')) return p.slice(0, -1) + 'example'
+  return p
+}
+
 export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAuth, authType, streamResponse, targetType }: RouteTestPanelProps) {
   const [method, setMethod] = useState(methods?.[0] ?? 'GET')
-  const [path, setPath] = useState(defaultPath)
+  const [path, setPath] = useState(resolveTestPath(defaultPath))
   const [body, setBody] = useState('')
   const [bodyMode, setBodyMode] = useState<'json' | 'fields'>('fields')
   const [bodyFields, setBodyFields] = useState<{ key: string; value: string }[]>(
@@ -97,28 +108,52 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
     bodyMode: 'json' | 'fields'
     body: string
     bodyFields: { key: string; value: string }[]
+    lastUsedAt?: number
   }
   const storageKey = `clustergate-test-requests-${routeId}`
   const [savedRequests, setSavedRequests] = useState<SavedRequest[]>([])
   const [saveName, setSaveName] = useState('')
   const [selectedSaved, setSelectedSaved] = useState('')
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(storageKey)
-      if (raw) setSavedRequests(JSON.parse(raw))
-    } catch { /* ignore */ }
-  }, [storageKey])
-
   const persistSaved = (list: SavedRequest[]) => {
     setSavedRequests(list)
     try { localStorage.setItem(storageKey, JSON.stringify(list)) } catch { /* ignore */ }
   }
 
+  const applySaved = (r: SavedRequest) => {
+    setSelectedSaved(r.name)
+    setMethod(r.method)
+    setPath(r.path)
+    setHeaders(r.headers ?? [])
+    setBodyMode(r.bodyMode ?? 'fields')
+    setBody(r.body ?? '')
+    setBodyFields(r.bodyFields ?? [{ key: '', value: '' }])
+  }
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (!raw) return
+      const list: SavedRequest[] = JSON.parse(raw)
+      setSavedRequests(list)
+      // Auto-load: single saved request always wins; otherwise pick the most
+      // recently used (falling back to the last entry for legacy data without
+      // a lastUsedAt timestamp).
+      if (list.length === 1) {
+        applySaved(list[0])
+      } else if (list.length > 1) {
+        const sorted = [...list].sort((a, b) => (b.lastUsedAt ?? 0) - (a.lastUsedAt ?? 0))
+        const pick = sorted[0].lastUsedAt ? sorted[0] : list[list.length - 1]
+        applySaved(pick)
+      }
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey])
+
   const saveCurrentRequest = () => {
     const name = saveName.trim()
     if (!name) return
-    const entry: SavedRequest = { name, method, path, headers, bodyMode, body, bodyFields }
+    const entry: SavedRequest = { name, method, path, headers, bodyMode, body, bodyFields, lastUsedAt: Date.now() }
     const list = [...savedRequests.filter((r) => r.name !== name), entry]
     persistSaved(list)
     setSaveName('')
@@ -128,13 +163,9 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
   const loadSavedRequest = (name: string) => {
     const r = savedRequests.find((s) => s.name === name)
     if (!r) return
-    setSelectedSaved(name)
-    setMethod(r.method)
-    setPath(r.path)
-    setHeaders(r.headers ?? [])
-    setBodyMode(r.bodyMode ?? 'fields')
-    setBody(r.body ?? '')
-    setBodyFields(r.bodyFields ?? [{ key: '', value: '' }])
+    applySaved(r)
+    // Bump lastUsedAt so the next mount auto-loads this one when there are many
+    persistSaved(savedRequests.map((s) => s.name === name ? { ...s, lastUsedAt: Date.now() } : s))
   }
 
   const deleteSavedRequest = () => {

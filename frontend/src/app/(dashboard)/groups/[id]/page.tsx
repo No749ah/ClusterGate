@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RouteGroup, OrgRole } from '@/types'
 import { formatRelativeTime } from '@/lib/utils'
+import { routeUrl } from '@/lib/urls'
 
 export default function RouteGroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
@@ -381,7 +382,7 @@ export default function RouteGroupDetailPage({ params }: { params: Promise<{ id:
                     <tr key={route.id} className="hover:bg-muted/30 transition-colors">
                       <td className="px-4 py-3">
                         <Link
-                          href={`/routes/${(route as any).slug || route.id}`}
+                          href={routeUrl(route)}
                           className="text-sm font-medium hover:text-primary transition-colors inline-flex items-center gap-1"
                         >
                           {route.name}

@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { formatRelativeTime } from '@/lib/utils'
 import { cn } from '@/lib/utils'
+import { routeUrl } from '@/lib/urls'
 
 const TYPE_ICONS: Record<string, typeof Bell> = {
   'route.error': AlertTriangle,
@@ -103,7 +104,7 @@ export function NotificationBell() {
                       </span>
                       {notif.route && (
                         <Link
-                          href={`/routes/${(notif.route as any).slug || notif.route.id}`}
+                          href={routeUrl(notif.route as any)}
                           className="text-[10px] text-primary hover:underline"
                           onClick={(e) => {
                             e.stopPropagation()

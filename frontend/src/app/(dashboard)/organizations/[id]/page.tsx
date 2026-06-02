@@ -576,15 +576,27 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                 const teamMemberIds = new Set(teamMembers.map((m: any) => m.userId))
                 return (
                   <div key={team.id} className="rounded-lg border border-border bg-card hover:border-primary/30 transition-colors">
-                    <div className="p-5">
+                    <div
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setExpandedTeam(isExpanded ? null : team.id)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          setExpandedTeam(isExpanded ? null : team.id)
+                        }
+                      }}
+                      className="p-5 cursor-pointer hover:bg-muted/20 focus:outline-none focus:ring-2 focus:ring-primary/40 rounded-lg"
+                      aria-expanded={isExpanded}
+                    >
                       <div className="flex items-start justify-between mb-2">
-                        <button onClick={() => setExpandedTeam(isExpanded ? null : team.id)} className="text-left flex-1">
+                        <div className="text-left flex-1">
                           <p className="text-base font-semibold">{team.name}</p>
                           {team.description && (
                             <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2" title={team.description}>{team.description}</p>
                           )}
-                        </button>
-                        <div className="flex gap-1">
+                        </div>
+                        <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" onClick={() => handleEditTeam(team)} className="h-7 w-7 p-0">
                             <Pencil className="w-3.5 h-3.5" />
                           </Button>
@@ -599,10 +611,10 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                         </div>
                       </div>
                       <div className="flex items-center gap-4 text-xs text-muted-foreground mt-3 pt-3 border-t border-border/50">
-                        <button onClick={() => setExpandedTeam(isExpanded ? null : team.id)} className="flex items-center gap-1.5 hover:text-foreground transition-colors">
+                        <div className="flex items-center gap-1.5">
                           <Users className="w-3.5 h-3.5" />
                           <span>{team._count?.members ?? teamMembers.length} members</span>
-                        </button>
+                        </div>
                         <div className="flex items-center gap-1.5">
                           <Shield className="w-3.5 h-3.5" />
                           <span>{team._count?.routeGroups ?? 0} groups</span>

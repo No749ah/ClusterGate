@@ -10,8 +10,11 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Organization } from '@/types'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { orgUrl } from '@/lib/urls'
 
 export default function OrganizationsPage() {
+  const router = useRouter()
   const confirm = useConfirm()
   const queryClient = useQueryClient()
   const [showCreate, setShowCreate] = useState(false)
@@ -112,7 +115,7 @@ export default function OrganizationsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Organizations</h1>
           <p className="text-muted-foreground mt-1">Manage multi-tenant organizations and teams</p>
@@ -183,15 +186,31 @@ export default function OrganizationsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {orgs.map((org) => (
-            <div key={org.id} className="rounded-lg border border-border bg-card p-5 hover:border-primary/30 transition-colors">
+            <div
+              key={org.id}
+              role="link"
+              tabIndex={0}
+              onClick={() => router.push(orgUrl(org))}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  router.push(orgUrl(org))
+                }
+              }}
+              className="rounded-lg border border-border bg-card p-5 hover:border-primary/30 hover:bg-muted/20 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
+            >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <Link href={`/organizations/${org.id}`} className="text-base font-semibold hover:text-primary transition-colors">
+                  <Link
+                    href={orgUrl(org)}
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-base font-semibold hover:text-primary transition-colors"
+                  >
                     {org.name}
                   </Link>
                   <p className="text-xs text-muted-foreground mt-0.5">/{org.slug}</p>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
                   <Button variant="ghost" size="sm" onClick={() => handleEdit(org)} className="h-7 w-7 p-0">
                     <Pencil className="w-3.5 h-3.5" />
                   </Button>
@@ -226,6 +245,7 @@ export default function OrganizationsPage() {
                 <button
                   onClick={(e) => {
                     e.preventDefault()
+                    e.stopPropagation()
                     updateMutation.mutate({
                       id: org.id,
                       data: { changeRequestsEnabled: !org.changeRequestsEnabled } as any,

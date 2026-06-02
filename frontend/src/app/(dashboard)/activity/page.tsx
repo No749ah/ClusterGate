@@ -121,8 +121,11 @@ export default function LogsPage() {
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 flex-wrap">
+      {/* Filters — two rows so nothing gets squeezed.
+            row 1: free-text search + date range + live tail
+            row 2: route + method + status                       */}
+      <div className="space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
         {/* Free-text search across path / IP / error */}
         <div className="relative">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -162,6 +165,8 @@ export default function LogsPage() {
             <><span className="w-2 h-2 mr-1.5 rounded-full bg-muted-foreground/40" /> Live</>
           )}
         </Button>
+      </div>
+      <div className="flex items-center gap-2 flex-wrap">
         {(() => {
           const selected = new Set(routeId.split(',').map((s) => s.trim()).filter(Boolean))
           const label = selected.size === 0
@@ -259,6 +264,7 @@ export default function LogsPage() {
           </SelectContent>
         </Select>
       </div>
+      </div>
 
       {/* Logs Table */}
       <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
@@ -309,7 +315,7 @@ export default function LogsPage() {
                         <button
                           type="button"
                           onClick={(e) => { e.stopPropagation(); const rid = log.routeId!; const next = new Set(routeId.split(',').map(s=>s.trim()).filter(Boolean)); next.has(rid) ? next.delete(rid) : next.add(rid); setRouteId([...next].join(',')); setPage(1) }}
-                          className="text-foreground truncate hover:text-primary block w-full text-left"
+                          className="text-foreground hover:text-primary inline-block max-w-full truncate align-middle text-left"
                           title={`Filter by ${log.route.name}`}
                         >
                           {log.route.name}
@@ -373,42 +379,114 @@ export default function LogsPage() {
         />
       </div>
 
-      {/* Request/Response detail — modal instead of inline below the table */}
+      {/* Request/Response detail — modal with key-value header lists + a
+          dedicated body block on each side. Much easier to scan than a
+          single JSON.stringify dump. */}
       <Dialog open={!!selectedLog} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <span className="font-mono">{selectedLog?.method}</span>
-              <span className="font-mono text-muted-foreground truncate">{selectedLog?.path}</span>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader className="space-y-1">
+            <DialogTitle className="flex items-center gap-2 text-base pr-8">
               <span className={cn(
-                'ml-auto text-sm font-mono px-1.5 py-0.5 rounded',
-                selectedLog && selectedLog.responseStatus && selectedLog.responseStatus >= 400 ? 'text-red-500 bg-red-500/10' : 'text-green-500 bg-green-500/10'
-              )}>{selectedLog?.responseStatus ?? '—'}</span>
+                'font-mono text-xs px-1.5 py-0.5 rounded border',
+                METHOD_TONE[selectedLog?.method as keyof typeof METHOD_TONE] ?? 'border-border text-muted-foreground'
+              )}>{selectedLog?.method}</span>
+              <span className="font-mono text-sm text-foreground truncate flex-1 min-w-0">{selectedLog?.path}</span>
+              <span className={cn(
+                'shrink-0 text-sm font-mono font-semibold tabular-nums px-1.5 py-0.5 rounded border',
+                statusTone(selectedLog?.responseStatus, selectedLog?.error)
+              )}>{selectedLog?.responseStatus ?? 'ERR'}</span>
             </DialogTitle>
-            <DialogDescription>
-              {selectedLog?.createdAt && `${formatDate(selectedLog.createdAt)} · ${formatDuration(selectedLog.duration)}${selectedLog.ip ? ` · ${selectedLog.ip}` : ''}`}
-            </DialogDescription>
+            {selectedLog && (
+              <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+                <span>{formatDate(selectedLog.createdAt)}</span>
+                <span>· {formatDuration(selectedLog.duration)}</span>
+                {selectedLog.ip && <span>· {selectedLog.ip}</span>}
+                {selectedLog.route?.name && <span>· {selectedLog.route.name}</span>}
+              </DialogDescription>
+            )}
           </DialogHeader>
-          {selectedLog && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-              <div>
-                <p className="font-medium text-muted-foreground mb-2">Request</p>
-                <pre className="font-mono text-foreground whitespace-pre-wrap break-all max-h-96 overflow-auto rounded border border-border/40 p-2 bg-muted/20">
-                  {JSON.stringify({ headers: selectedLog.requestHeaders, body: selectedLog.requestBody }, null, 2)}
-                </pre>
+          {selectedLog && (() => {
+            const reqHeaders = (selectedLog.requestHeaders ?? {}) as Record<string, string>
+            const resHeaders = (selectedLog.responseHeaders ?? {}) as Record<string, string>
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <RequestPanel title="Request" headers={reqHeaders} body={selectedLog.requestBody} />
+                <RequestPanel
+                  title="Response"
+                  headers={resHeaders}
+                  body={selectedLog.responseBody?.slice(0, 5000)}
+                  error={selectedLog.error}
+                />
               </div>
-              <div>
-                <p className="font-medium text-muted-foreground mb-2">Response</p>
-                <pre className="font-mono text-foreground whitespace-pre-wrap break-all max-h-96 overflow-auto rounded border border-border/40 p-2 bg-muted/20">
-                  {selectedLog.error
-                    ? `Error: ${selectedLog.error}`
-                    : JSON.stringify({ status: selectedLog.responseStatus, headers: selectedLog.responseHeaders, body: selectedLog.responseBody?.slice(0, 5000) }, null, 2)}
-                </pre>
-              </div>
-            </div>
-          )}
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+// Method-pill colours for the detail modal title — match the route detail's palette
+const METHOD_TONE: Record<string, string> = {
+  GET:    'text-green-500 border-green-500/30 bg-green-500/10',
+  POST:   'text-blue-500 border-blue-500/30 bg-blue-500/10',
+  PUT:    'text-yellow-500 border-yellow-500/30 bg-yellow-500/10',
+  PATCH:  'text-orange-500 border-orange-500/30 bg-orange-500/10',
+  DELETE: 'text-red-500 border-red-500/30 bg-red-500/10',
+  HEAD:   'text-purple-500 border-purple-500/30 bg-purple-500/10',
+  OPTIONS:'text-muted-foreground border-border bg-muted/40',
+}
+
+function statusTone(status: number | null | undefined, error: string | null | undefined): string {
+  if (status == null && error) return 'text-red-500 border-red-500/30 bg-red-500/10'
+  if (status == null) return 'text-muted-foreground border-border bg-muted/40'
+  if (status >= 500) return 'text-red-500 border-red-500/30 bg-red-500/10'
+  if (status === 429) return 'text-amber-500 border-amber-500/30 bg-amber-500/10'
+  if (status >= 400) return 'text-amber-500 border-amber-500/30 bg-amber-500/10'
+  if (status >= 300) return 'text-blue-500 border-blue-500/30 bg-blue-500/10'
+  return 'text-green-500 border-green-500/30 bg-green-500/10'
+}
+
+// Pretty pane for one side (Request or Response) of the detail modal.
+// Renders headers as a key:value list (much easier to scan than the old
+// JSON.stringify dump) plus an optional body block.
+function RequestPanel({ title, headers, body, error }: {
+  title: string
+  headers: Record<string, string>
+  body?: string | null
+  error?: string | null
+}) {
+  const headerEntries = Object.entries(headers ?? {})
+  return (
+    <section className="rounded-lg border border-border/40 bg-card/40 overflow-hidden flex flex-col min-h-0">
+      <header className="px-3 py-2 border-b border-border/40 flex items-center justify-between bg-muted/20">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">{title}</p>
+        <span className="text-[10px] text-muted-foreground">{headerEntries.length} header{headerEntries.length === 1 ? '' : 's'}</span>
+      </header>
+      {error && (
+        <div className="px-3 py-2 border-b border-border/40 bg-red-500/5 text-xs">
+          <p className="text-red-500 font-medium mb-0.5">Error</p>
+          <p className="font-mono text-red-500/90 break-all">{error}</p>
+        </div>
+      )}
+      {headerEntries.length > 0 && (
+        <dl className="px-3 py-2 text-[11px] font-mono divide-y divide-border/20 max-h-56 overflow-auto">
+          {headerEntries.map(([k, v]) => (
+            <div key={k} className="grid grid-cols-[minmax(0,140px),1fr] gap-3 py-1">
+              <dt className="text-muted-foreground truncate" title={k}>{k}</dt>
+              <dd className="text-foreground break-all whitespace-pre-wrap">{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      <div className="px-3 py-2 border-t border-border/40 flex-1 min-h-0">
+        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Body</p>
+        {body ? (
+          <pre className="font-mono text-[11px] text-foreground whitespace-pre-wrap break-all max-h-72 overflow-auto rounded border border-border/30 p-2 bg-background/40">{body}</pre>
+        ) : (
+          <p className="text-xs text-muted-foreground italic">— no body</p>
+        )}
+      </div>
+    </section>
   )
 }

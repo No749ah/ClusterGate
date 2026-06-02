@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useAuth } from '@/hooks/useAuth'
 import { RouteGroup } from '@/types'
+import { groupUrl } from '@/lib/urls'
 import Link from 'next/link'
 
 export default function RouteGroupsPage() {
@@ -108,7 +109,7 @@ export default function RouteGroupsPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Route Groups</h1>
           <p className="text-muted-foreground mt-1">Organize routes with shared prefixes and inherited defaults</p>
@@ -204,7 +205,7 @@ export default function RouteGroupsPage() {
                 {groups.map((group) => (
                   <tr key={group.id} className="hover:bg-muted/30 transition-colors">
                     <td className="px-4 py-3">
-                      <Link href={`/groups/${group.id}`} className="text-sm font-medium hover:text-primary transition-colors">
+                      <Link href={groupUrl(group)} className="text-sm font-medium hover:text-primary transition-colors">
                         {group.name}
                       </Link>
                       {group.description && (

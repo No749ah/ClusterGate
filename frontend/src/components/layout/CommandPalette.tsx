@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive, Sparkles, Cat, Binary, User, Clock } from 'lucide-react'
 import { useRecentRoutes } from '@/hooks/useRecentRoutes'
+import { routeUrl } from '@/lib/urls'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -72,6 +73,10 @@ export function CommandPalette() {
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
   const [routeResults, setRouteResults] = useState<{ id: string; slug: string | null; name: string; publicPath: string }[]>([])
+  // IDs of routes still alive on the backend (archived/deleted are excluded
+  // because api.routes.list filters by deletedAt: null). Used to scrub stale
+  // entries out of the localStorage-backed recent list.
+  const [aliveRouteIds, setAliveRouteIds] = useState<Set<string> | null>(null)
   const recentRoutes = useRecentRoutes()
   const router = useRouter()
   const { user } = useAuth()
@@ -118,6 +123,23 @@ export function CommandPalette() {
     return () => window.removeEventListener('keydown', handler)
   }, [])
 
+  // When the palette opens, fetch the set of alive route IDs once so we can
+  // hide recents that point at archived/deleted routes.
+  useEffect(() => {
+    if (!open) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await api.routes.list({ pageSize: 500 })
+        if (cancelled) return
+        setAliveRouteIds(new Set(res.data.map((r) => r.id)))
+      } catch {
+        if (!cancelled) setAliveRouteIds(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [open])
+
   // Search routes when query changes
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current)
@@ -147,17 +169,21 @@ export function CommandPalette() {
   ) : []
 
   // Recents only show when the user hasn't typed anything yet — they're a
-  // shortcut, not a search result. Filter out the route currently being
-  // viewed if anyone shows the palette mid-page.
-  const showRecents = !query && recentRoutes.length > 0
+  // shortcut, not a search result. Hide entries that point at routes the
+  // backend no longer surfaces (archived or hard-deleted) so the palette
+  // never offers a 404 destination.
+  const visibleRecents = aliveRouteIds
+    ? recentRoutes.filter((r) => aliveRouteIds.has(r.id))
+    : recentRoutes
+  const showRecents = !query && visibleRecents.length > 0
   const recentItems = showRecents
-    ? recentRoutes.map((r) => ({
+    ? visibleRecents.map((r) => ({
         type: 'recent' as const,
         id: r.id,
         label: r.name,
         description: r.publicPath,
         icon: Clock,
-        href: `/routes/${r.slug || r.id}`,
+        href: routeUrl(r),
       }))
     : []
 
@@ -171,7 +197,7 @@ export function CommandPalette() {
       label: r.name,
       description: r.publicPath,
       icon: Route,
-      href: `/routes/${r.slug || r.id}`,
+      href: routeUrl(r),
     })),
   ]
 
@@ -318,7 +344,7 @@ export function CommandPalette() {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => navigate(`/routes/${item.slug || item.id}`)}
+                        onClick={() => navigate(routeUrl(item))}
                         onMouseEnter={() => setActiveIndex(idx)}
                         className={cn(
                           'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm transition-colors',

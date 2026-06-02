@@ -1,4 +1,5 @@
 import { Router } from 'express'
+import type { Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
@@ -6,6 +7,24 @@ import * as orgService from '../services/organizationService'
 import { achievementService } from '../services/achievementService'
 
 const router = Router()
+
+// Accept either a cuid id or the URL-friendly slug. We rewrite the param so
+// downstream handlers can keep doing { id: req.params.id } lookups.
+async function resolveOrgParam(req: Request, _res: Response, next: NextFunction, value: string, name: 'id' | 'orgId') {
+  try {
+    if (typeof value === 'string' && value && !value.startsWith('c')) {
+      const real = await orgService.resolveOrganizationId(value)
+      if (real) req.params[name] = real
+    } else if (typeof value === 'string' && value) {
+      // cuid-like — only rewrite if it's actually a slug, otherwise leave it
+      const real = await orgService.resolveOrganizationId(value)
+      if (real && real !== value) req.params[name] = real
+    }
+  } catch { /* fall through */ }
+  next()
+}
+router.param('id',    (req, res, next, value) => resolveOrgParam(req, res, next, value, 'id'))
+router.param('orgId', (req, res, next, value) => resolveOrgParam(req, res, next, value, 'orgId'))
 
 /**
  * @openapi
