@@ -15,6 +15,7 @@ import { proxyRequestsTotal, proxyRequestDuration } from '../lib/metrics'
 import { notifyRouteError } from './notificationService'
 import { checkCircuitBreaker, recordSuccess, recordFailure } from './circuitBreakerService'
 import { selectTarget, markTargetUnhealthy, markTargetHealthy } from './loadBalancerService'
+import { achievementService } from './achievementService'
 import { applyRequestTransforms, applyResponseTransforms } from './transformService'
 import { lookupIp } from './geoipService'
 import { sanitizeText } from './sanitizerService'
@@ -373,6 +374,15 @@ export async function proxyRequest(
 
       if (route.circuitBreakerEnabled) recordSuccess(route.id).catch(() => {})
       if (selectedTargetId) markTargetHealthy(selectedTargetId).catch(() => {})
+      if ((route as any).createdById) {
+        const owner = (route as any).createdById
+        if (duration !== undefined && duration < 10 && responseStatus !== undefined && responseStatus < 400) {
+          achievementService.checkSpeedDemon(owner).catch(() => {})
+        }
+        // Globe Trotter is a cheap distinct-country COUNT — fire occasionally
+        // (~1 in 20 requests) so it unlocks without piling up on every hit.
+        if (Math.random() < 0.05) achievementService.checkGlobeTrotter(owner).catch(() => {})
+      }
       proxyRequestsTotal.inc({ route_id: route.id, method: req.method, status: String(responseStatus) })
       proxyRequestDuration.observe({ route_id: route.id }, duration / 1000)
       logRequest({
@@ -502,6 +512,13 @@ export async function proxyRequest(
     // Load balancer: mark target healthy on success
     if (selectedTargetId) {
       markTargetHealthy(selectedTargetId).catch(() => {})
+    }
+
+    // Eagerly check the Speed Demon achievement on fast successful responses
+    // (avg-of-5 + <10ms is checked in the service itself). This way users see
+    // it unlock immediately instead of waiting for the daily cron.
+    if (duration !== undefined && duration < 10 && responseStatus !== undefined && responseStatus < 400 && (route as any).createdById) {
+      achievementService.checkSpeedDemon((route as any).createdById).catch(() => {})
     }
 
     // Log request
