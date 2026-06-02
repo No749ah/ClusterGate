@@ -241,10 +241,14 @@ router.get('/', authenticate, async (req, res, next) => {
 router.get('/check-path', authenticate, async (req, res, next) => {
   try {
     const path = req.query.path as string
-    const excludeId = req.query.excludeId as string | undefined
+    const excludeIdRaw = req.query.excludeId as string | undefined
     if (!path) {
       return res.json({ success: true, data: { available: true } })
     }
+    // excludeIdRaw may be a slug (from a slug-based edit URL) or a cuid.
+    // Resolve to the real cuid so the row is correctly excluded — otherwise
+    // editing a route reports it as colliding with itself.
+    const excludeId = excludeIdRaw ? (await routeService.resolveRouteId(excludeIdRaw)) ?? excludeIdRaw : undefined
 
     const existing = await prisma.route.findFirst({
       where: {
