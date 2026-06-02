@@ -427,68 +427,83 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             <Field label="Description" error={errors.description?.message}>
               <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
             </Field>
-            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'All sub-paths will be routed (e.g. /r/my-service/*)' : 'e.g. my-service'}>
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <div className="relative flex-1 flex">
-                    <span
-                      className={cn(
-                        'inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-mono select-none transition-all',
-                        prefixShake && 'animate-[shake_0.4s_ease-in-out] text-destructive border-destructive/50 bg-destructive/10'
-                      )}
-                    >
-                      /r/
-                    </span>
-                    <input
-                      value={publicPath.startsWith('/r/') ? publicPath.slice(3) : publicPath}
-                      onChange={(e) => {
-                        const val = e.target.value.replace(/^\/+/, '')
-                        setValue('publicPath', `/r/${val}`, { shouldValidate: true })
-                      }}
-                      onKeyDown={(e) => {
-                        // If input is empty and user presses Backspace, shake the prefix
-                        const suffix = publicPath.startsWith('/r/') ? publicPath.slice(3) : publicPath
-                        if (e.key === 'Backspace' && suffix === '') {
-                          e.preventDefault()
-                          setPrefixShake(true)
-                          setTimeout(() => setPrefixShake(false), 400)
-                        }
-                      }}
-                      placeholder="my-service"
-                      className={cn(fieldClass(errors.publicPath), 'rounded-l-none')}
-                    />
-                    {pathStatus === 'checking' && (
-                      <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground" />
+            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'Mirrors the wildcard from the Target URL — all sub-paths are proxied.' : 'e.g. my-service'}>
+              <div className="flex gap-2">
+                <div className="relative flex-1 flex">
+                  <span
+                    className={cn(
+                      'inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-mono select-none transition-all',
+                      prefixShake && 'animate-[shake_0.4s_ease-in-out] text-destructive border-destructive/50 bg-destructive/10'
                     )}
-                    {pathStatus === 'available' && (
-                      <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-green-500" />
-                    )}
-                    {pathStatus === 'taken' && (
-                      <AlertCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-destructive" />
-                    )}
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    title="Generate random path"
-                    onClick={() => {
-                      const newPath = generateRandomPath()
-                      setValue('publicPath', wildcardEnabled ? newPath + '/*' : newPath)
-                    }}
                   >
-                    <Shuffle className="w-3.5 h-3.5" />
-                  </Button>
+                    /r/
+                  </span>
+                  <input
+                    value={publicPath.startsWith('/r/') ? publicPath.slice(3).replace(/\/\*$/, '') : publicPath.replace(/\/\*$/, '')}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/^\/+/, '').replace(/\/\*$/, '')
+                      setValue('publicPath', `/r/${val}${wildcardEnabled ? '/*' : ''}`, { shouldValidate: true })
+                    }}
+                    onKeyDown={(e) => {
+                      const suffix = publicPath.startsWith('/r/') ? publicPath.slice(3) : publicPath
+                      if (e.key === 'Backspace' && suffix === '') {
+                        e.preventDefault()
+                        setPrefixShake(true)
+                        setTimeout(() => setPrefixShake(false), 400)
+                      }
+                    }}
+                    placeholder="my-service"
+                    className={cn(fieldClass(errors.publicPath), 'rounded-l-none', wildcardEnabled && 'rounded-r-none')}
+                  />
+                  {/* /* suffix badge — visible mirror of the wildcard toggled on the Target URL */}
+                  {wildcardEnabled && (
+                    <span
+                      className="inline-flex items-center px-2.5 rounded-r-md border border-l-0 border-input bg-amber-500/10 text-amber-500 text-sm font-mono select-none"
+                      title="Wildcard suffix (managed via the Target URL field)"
+                    >
+                      /*
+                    </span>
+                  )}
+                  {pathStatus === 'checking' && (
+                    <Loader2 className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground', wildcardEnabled ? 'right-12' : 'right-3')} />
+                  )}
+                  {pathStatus === 'available' && (
+                    <CheckCircle2 className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-green-500', wildcardEnabled ? 'right-12' : 'right-3')} />
+                  )}
+                  {pathStatus === 'taken' && (
+                    <AlertCircle className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-destructive', wildcardEnabled ? 'right-12' : 'right-3')} />
+                  )}
                 </div>
-                {pathStatus === 'taken' && (
-                  <p className="text-xs text-destructive">
-                    This path is already used by &quot;{pathConflict}&quot;
-                  </p>
-                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  title="Generate random path"
+                  onClick={() => {
+                    const newPath = generateRandomPath()
+                    setValue('publicPath', wildcardEnabled ? newPath + '/*' : newPath)
+                  }}
+                >
+                  <Shuffle className="w-3.5 h-3.5" />
+                </Button>
+              </div>
+              {pathStatus === 'taken' && (
+                <p className="text-xs text-destructive mt-1">
+                  This path is already used by &quot;{pathConflict}&quot;
+                </p>
+              )}
+            </Field>
+            <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal service URL or Kubernetes service address">
+              <div className="space-y-2">
+                <input
+                  {...register('targetUrl')}
+                  placeholder="http://my-service.default.svc.cluster.local:8080"
+                  className={fieldClass(errors.targetUrl)}
+                />
                 <div className="flex items-center justify-between p-2 rounded-md border border-border/50 bg-muted/30">
                   <div>
-                    <p className="text-xs font-medium">Wildcard routing</p>
-                    <p className="text-xs text-muted-foreground">Match all sub-paths — the remaining path is appended to the Target URL</p>
+                    <p className="text-xs font-medium">Forward all sub-paths (/*)</p>
+                    <p className="text-xs text-muted-foreground">Any path after the Target URL is appended verbatim — the Public Path mirrors this as /* above.</p>
                   </div>
                   <Switch
                     checked={wildcardEnabled}
@@ -498,9 +513,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                       if (v && !current.endsWith('/*')) {
                         const base = current.replace(/\/+$/, '')
                         setValue('publicPath', base + '/*')
-                        // Wildcard + stripPrefix would forward every sub-path to
-                        // the target root — that defeats wildcard routing, so
-                        // disable stripPrefix when wildcard is turned on.
+                        // Wildcard + stripPrefix forwards every sub-path to the
+                        // target root, defeating wildcard routing — turn it off.
                         if (form.getValues('stripPrefix')) setValue('stripPrefix', false)
                       } else if (!v && current.endsWith('/*')) {
                         setValue('publicPath', current.slice(0, -2))
@@ -523,18 +537,11 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   }
                   return (
                     <p className="text-xs text-muted-foreground font-mono break-all">
-                      <span className="text-foreground">{pp}</span> → <span className="text-foreground">{stripped ? t : t}</span>
+                      <span className="text-foreground">{pp}</span> → <span className="text-foreground">{t}</span>
                     </p>
                   )
                 })()}
               </div>
-            </Field>
-            <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal service URL or Kubernetes service address">
-              <input
-                {...register('targetUrl')}
-                placeholder="http://my-service.default.svc.cluster.local:8080"
-                className={fieldClass(errors.targetUrl)}
-              />
             </Field>
             <Field label="HTTP Methods" error={errors.methods?.message} required>
               <div className="flex gap-2 flex-wrap">
