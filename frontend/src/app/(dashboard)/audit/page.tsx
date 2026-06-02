@@ -10,6 +10,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { formatRelativeTime, formatDate } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
+import { usePageSize } from '@/hooks/usePageSize'
+import { Pagination } from '@/components/ui/pagination'
 import { AuditLog } from '@/types'
 
 const ACTION_COLORS: Record<string, string> = {
@@ -35,12 +37,13 @@ export default function AuditPage() {
   const queryClient = useQueryClient()
   const [resource, setResource] = useState<string>('')
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = usePageSize('audit', 50)
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
 
   const { data: logsData, isLoading, isFetching } = useAuditLogs({
     resource: resource || undefined,
     page,
-    pageSize: 50,
+    pageSize,
   })
 
   const logs = logsData?.data ?? []
@@ -49,7 +52,7 @@ export default function AuditPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Audit Log</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -177,20 +180,14 @@ export default function AuditPage() {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
-            <p className="text-xs text-muted-foreground">Page {page} of {totalPages}</p>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
-                Next
-              </Button>
-            </div>
-          </div>
-        )}
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
       </div>
     </div>
   )

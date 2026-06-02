@@ -13,8 +13,7 @@ import { formatRelativeTime, formatDuration, getStatusColor } from '@/lib/utils'
 import { RequestLog } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
-
-const PAGE_SIZE_OPTIONS = [25, 50, 100] as const
+import { usePageSize, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSize'
 
 export default function LogsPage() {
   const queryClient = useQueryClient()
@@ -22,7 +21,7 @@ export default function LogsPage() {
   const [method, setMethod] = useState<string>('')
   const [statusType, setStatusType] = useState<string>('')
   const [page, setPage] = useState(1)
-  const [pageSize, setPageSize] = useState<number>(25)
+  const [pageSize, setPageSize] = usePageSize('activity', 25)
   const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
 
   const { data: routesData } = useRoutes({ pageSize: 100 })
@@ -45,7 +44,7 @@ export default function LogsPage() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Request Logs</h1>
           <p className="text-sm text-muted-foreground mt-1">
