@@ -94,6 +94,24 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
 
     // Check maintenance mode
     if (route.maintenanceMode) {
+      // Log the rejection so it surfaces in /activity, but mark it as a
+      // maintenance event rather than a real error.
+      prisma.requestLog.create({
+        data: {
+          routeId: route.id,
+          method: req.method,
+          path: `/r${path}`,
+          responseStatus: 503,
+          error: 'MAINTENANCE_MODE',
+          duration: 0,
+          ip: req.ip,
+          userAgent: req.get('user-agent'),
+          targetUrl: route.targetUrl,
+          queryParams: req.query as any,
+          requestHeaders: {},
+          responseHeaders: {},
+        },
+      }).catch(() => {})
       return res.status(503).json({
         success: false,
         error: {

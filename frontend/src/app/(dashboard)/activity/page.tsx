@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Search, Filter, RefreshCw, Download } from 'lucide-react'
+import { Search, Filter, RefreshCw, Download, Check, ChevronDown } from 'lucide-react'
+import Link from 'next/link'
+import { useRouter, usePathname } from 'next/navigation'
 import { useLogs } from '@/hooks/useLogs'
 import { useRoutes } from '@/hooks/useRoutes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
@@ -45,7 +48,7 @@ export default function LogsPage() {
   const { data: logsData, isLoading, isFetching } = useLogs({
     routeId: routeId || undefined,
     method: method || undefined,
-    statusType: (statusType as 'success' | 'error' | 'client') || undefined,
+    statusType: (statusType as 'success' | 'error' | 'client' | 'throttled' | 'maintenance' | 'degraded') || undefined,
     page,
     pageSize,
   })
@@ -76,18 +79,59 @@ export default function LogsPage() {
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
-        <Select value={routeId || 'ALL'} onValueChange={(v) => { setRouteId(v === 'ALL' ? '' : v); setPage(1) }}>
-          <SelectTrigger className="w-44">
-            <Filter className="w-3 h-3 mr-2 text-muted-foreground" />
-            <SelectValue placeholder="All Routes" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ALL">All Routes</SelectItem>
-            {routes.map((r) => (
-              <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        {(() => {
+          const selected = new Set(routeId.split(',').map((s) => s.trim()).filter(Boolean))
+          const label = selected.size === 0
+            ? 'All Routes'
+            : selected.size === 1
+              ? routes.find((r) => r.id === [...selected][0])?.name ?? '1 route'
+              : `${selected.size} routes`
+          const toggle = (id: string) => {
+            const next = new Set(selected)
+            if (next.has(id)) next.delete(id); else next.add(id)
+            setRouteId([...next].join(',')); setPage(1)
+          }
+          return (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="w-52 justify-between h-9 font-normal">
+                  <span className="flex items-center gap-2 min-w-0">
+                    <Filter className="w-3 h-3 text-muted-foreground" />
+                    <span className="truncate">{label}</span>
+                  </span>
+                  <ChevronDown className="w-3 h-3 opacity-60" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-64 max-h-72 overflow-y-auto p-1">
+                <div className="flex items-center justify-between px-2 pt-1 pb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
+                  <span>{selected.size === 0 ? 'All routes' : `${selected.size} selected`}</span>
+                  {selected.size > 0 && (
+                    <button type="button" onClick={() => { setRouteId(''); setPage(1) }} className="hover:text-foreground">Clear</button>
+                  )}
+                </div>
+                {routes.map((r) => {
+                  const on = selected.has(r.id)
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => toggle(r.id)}
+                      className={cn(
+                        'flex items-center gap-2 w-full px-2 py-1.5 rounded text-sm text-left hover:bg-muted/50',
+                        on ? 'text-foreground' : 'text-muted-foreground'
+                      )}
+                    >
+                      <span className={cn('inline-flex items-center justify-center w-4 h-4 rounded border', on ? 'bg-primary border-primary text-primary-foreground' : 'border-border')}>
+                        {on && <Check className="w-3 h-3" />}
+                      </span>
+                      <span className="truncate">{r.name}</span>
+                    </button>
+                  )
+                })}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )
+        })()}
 
         {/* Multi-select method chips: click toggles, no selection = all */}
         <div className="flex items-center gap-1 rounded-md border border-input bg-transparent px-1 h-9">
@@ -125,7 +169,10 @@ export default function LogsPage() {
             <SelectItem value="ALL">All Status</SelectItem>
             <SelectItem value="success">Success (2xx/3xx)</SelectItem>
             <SelectItem value="client">Client (4xx)</SelectItem>
-            <SelectItem value="error">Server error (5xx)</SelectItem>
+            <SelectItem value="throttled">Throttled (rate limit)</SelectItem>
+            <SelectItem value="maintenance">Maintenance</SelectItem>
+            <SelectItem value="degraded">Degraded (circuit breaker)</SelectItem>
+            <SelectItem value="error">Server error / gateway failure</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -174,19 +221,53 @@ export default function LogsPage() {
                     <td className="px-4 py-2.5 text-xs text-muted-foreground whitespace-nowrap">
                       {formatRelativeTime(log.createdAt)}
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-foreground max-w-[140px] truncate" title={log.route?.name ?? undefined}>
-                      {log.route?.name ?? '—'}
+                    <td className="px-4 py-2.5 text-xs max-w-[140px]" title={log.route?.name ?? undefined}>
+                      {log.route?.name && log.routeId ? (
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); const rid = log.routeId!; const next = new Set(routeId.split(',').map(s=>s.trim()).filter(Boolean)); next.has(rid) ? next.delete(rid) : next.add(rid); setRouteId([...next].join(',')); setPage(1) }}
+                          className="text-foreground truncate hover:text-primary block w-full text-left"
+                          title={`Filter by ${log.route.name}`}
+                        >
+                          {log.route.name}
+                        </button>
+                      ) : <span className="text-muted-foreground">—</span>}
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{log.method}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); const next = new Set(method.split(',').map(s=>s.trim()).filter(Boolean)); next.has(log.method) ? next.delete(log.method) : next.add(log.method); setMethod([...next].join(',')); setPage(1) }}
+                        className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded hover:bg-primary/20 hover:text-primary transition-colors"
+                        title={`Filter by ${log.method}`}
+                      >
+                        {log.method}
+                      </button>
                     </td>
                     <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={log.path}>
                       {log.path}
                     </td>
                     <td className="px-4 py-2.5">
-                      <span className={`font-semibold text-sm ${getStatusColor(log.responseStatus)}`}>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          // Map the row's status onto the closest statusType bucket
+                          const s = log.responseStatus
+                          const bucket =
+                            s == null ? 'error'
+                            : s === 429 ? 'throttled'
+                            : log.error?.includes('Circuit breaker') ? 'degraded'
+                            : log.error === 'MAINTENANCE_MODE' ? 'maintenance'
+                            : s >= 500 ? 'error'
+                            : s >= 400 ? 'client'
+                            : 'success'
+                          setStatusType(statusType === bucket ? '' : bucket); setPage(1)
+                        }}
+                        className={`font-semibold text-sm hover:underline ${getStatusColor(log.responseStatus)}`}
+                        title="Filter by this status bucket"
+                      >
                         {log.responseStatus ?? 'ERR'}
-                      </span>
+                      </button>
                     </td>
                     <td className="px-4 py-2.5 text-right text-xs text-muted-foreground">
                       {formatDuration(log.duration)}

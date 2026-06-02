@@ -289,7 +289,7 @@ export interface RouteFilters {
 export interface LogFilters {
   routeId?: string
   method?: string
-  statusType?: 'success' | 'error' | 'client'
+  statusType?: 'success' | 'error' | 'client' | 'throttled' | 'maintenance' | 'degraded'
   dateFrom?: string
   dateTo?: string
   page?: number

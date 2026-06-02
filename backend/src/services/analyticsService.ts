@@ -91,7 +91,7 @@ export async function getOverview(routeId?: string, days = 7, scopeRouteIds?: st
     SELECT
       COUNT(*)::bigint AS total_requests,
       AVG(duration)::float AS avg_duration,
-      COUNT(*) FILTER (WHERE "responseStatus" >= 500 OR error IS NOT NULL)::bigint AS error_count,
+      COUNT(*) FILTER (WHERE (("responseStatus" >= 500 AND (error IS NULL OR (error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%'))) OR (error IS NOT NULL AND error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%' AND error NOT LIKE '%Rate limit%')) AND "responseStatus" <> 429)::bigint AS error_count,
       PERCENTILE_CONT(0.50) WITHIN GROUP (ORDER BY duration) AS p50,
       PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration) AS p95,
       PERCENTILE_CONT(0.99) WITHIN GROUP (ORDER BY duration) AS p99
@@ -177,7 +177,7 @@ export async function getErrorRateTrend(routeId?: string, days = 7, scopeRouteId
     SELECT
       date_trunc('hour', "createdAt") AS bucket,
       COUNT(*)::bigint AS total,
-      COUNT(*) FILTER (WHERE "responseStatus" >= 500 OR error IS NOT NULL)::bigint AS errors
+      COUNT(*) FILTER (WHERE (("responseStatus" >= 500 AND (error IS NULL OR (error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%'))) OR (error IS NOT NULL AND error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%' AND error NOT LIKE '%Rate limit%')) AND "responseStatus" <> 429)::bigint AS errors
     FROM "request_logs"
     WHERE "createdAt" >= ${since}
       ${routeFilter}
@@ -292,7 +292,7 @@ export async function getDashboardSummary(days = 7, scopeRouteIds?: string[]) {
     SELECT
       COUNT(*)::int as "totalRequests",
       AVG(duration)::float as "avgResponseTime",
-      (COUNT(*) FILTER (WHERE "responseStatus" >= 500 OR error IS NOT NULL)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
+      (COUNT(*) FILTER (WHERE (("responseStatus" >= 500 AND (error IS NULL OR (error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%'))) OR (error IS NOT NULL AND error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%' AND error NOT LIKE '%Rate limit%')) AND "responseStatus" <> 429)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
     FROM request_logs
     WHERE "createdAt" >= $1${scoped ? ' AND "routeId" = ANY($2::text[])' : ''}
   `, ...(scoped ? [since, scopeRouteIds] : [since]))
@@ -302,7 +302,7 @@ export async function getDashboardSummary(days = 7, scopeRouteIds?: string[]) {
     SELECT
       COUNT(*)::int as "totalRequests",
       AVG(duration)::float as "avgResponseTime",
-      (COUNT(*) FILTER (WHERE "responseStatus" >= 500 OR error IS NOT NULL)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
+      (COUNT(*) FILTER (WHERE (("responseStatus" >= 500 AND (error IS NULL OR (error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%'))) OR (error IS NOT NULL AND error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%' AND error NOT LIKE '%Rate limit%')) AND "responseStatus" <> 429)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
     FROM request_logs
     WHERE "createdAt" >= $1 AND "createdAt" < $2${scoped ? ' AND "routeId" = ANY($3::text[])' : ''}
   `, ...(scoped ? [prevSince, since, scopeRouteIds] : [prevSince, since]))
