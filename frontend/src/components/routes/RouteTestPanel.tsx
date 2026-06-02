@@ -144,6 +144,9 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
   }
 
   const [result, setResult] = useState<TestResult | null>(null)
+  // Briefly hide the previous result on every retest so the user always sees
+  // the response area redraw — even when the round-trip is faster than the eye.
+  const [reloading, setReloading] = useState(false)
   const [showRequestHeaders, setShowRequestHeaders] = useState(false)
   const [showResponseHeaders, setShowResponseHeaders] = useState(false)
   const [copied, setCopied] = useState(false)
@@ -217,8 +220,19 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
       return
     }
 
-    const res = await testMutation.mutateAsync(params)
-    setResult(res.data)
+    // Force a visible reload animation even on sub-millisecond round-trips:
+    // clear the previous result, then hold the loading state for at least 350ms.
+    setReloading(true)
+    setResult(null)
+    const started = Date.now()
+    try {
+      const res = await testMutation.mutateAsync(params)
+      const elapsed = Date.now() - started
+      if (elapsed < 350) await new Promise((r) => setTimeout(r, 350 - elapsed))
+      setResult(res.data)
+    } finally {
+      setReloading(false)
+    }
   }
 
   const handleStreamTest = async (params: { method: string; path: string; headers: Record<string, string>; body?: string; skipAuth?: boolean }) => {
@@ -519,8 +533,8 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
           </div>
         )}
 
-        <Button onClick={handleTest} disabled={testMutation.isPending || isStreaming} className="w-full">
-          {testMutation.isPending || isStreaming ? (
+        <Button onClick={handleTest} disabled={reloading || testMutation.isPending || isStreaming} className="w-full">
+          {reloading || testMutation.isPending || isStreaming ? (
             <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> {isStreaming ? 'Streaming...' : 'Sending...'}</>
           ) : (
             <><Play className="w-4 h-4 mr-2" /> Send Request</>
