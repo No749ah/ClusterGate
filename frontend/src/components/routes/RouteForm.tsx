@@ -318,6 +318,12 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       return
     }
     const { rateLimitWindowSeconds, ...rest } = data
+    // Trim a trailing /* or / from the target URL so wildcard routes append the
+    // suffix to a clean base (server also defends against this, but we want the
+    // saved form to reflect the cleaned value).
+    if (typeof rest.targetUrl === 'string') {
+      rest.targetUrl = rest.targetUrl.trim().replace(/\/\*$/, '').replace(/\/$/, '')
+    }
     const formData: RouteFormData = {
       ...rest,
       // Production routes are automatically delete-protected (no separate toggle)
@@ -482,7 +488,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 <div className="flex items-center justify-between p-2 rounded-md border border-border/50 bg-muted/30">
                   <div>
                     <p className="text-xs font-medium">Wildcard routing</p>
-                    <p className="text-xs text-muted-foreground">Match all sub-paths (adds /* suffix)</p>
+                    <p className="text-xs text-muted-foreground">Match all sub-paths — the remaining path is appended to the Target URL</p>
                   </div>
                   <Switch
                     checked={wildcardEnabled}
@@ -492,12 +498,35 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                       if (v && !current.endsWith('/*')) {
                         const base = current.replace(/\/+$/, '')
                         setValue('publicPath', base + '/*')
+                        // Wildcard + stripPrefix would forward every sub-path to
+                        // the target root — that defeats wildcard routing, so
+                        // disable stripPrefix when wildcard is turned on.
+                        if (form.getValues('stripPrefix')) setValue('stripPrefix', false)
                       } else if (!v && current.endsWith('/*')) {
                         setValue('publicPath', current.slice(0, -2))
                       }
                     }}
                   />
                 </div>
+                {/* Live forwarding preview — shows how a sample request maps to the target */}
+                {(() => {
+                  const t = (watch('targetUrl') || '').trim().replace(/\/\*$/, '').replace(/\/$/, '')
+                  const pp = publicPath.replace(/\/\*$/, '')
+                  if (!t || !pp || pp === '/r/') return null
+                  const stripped = form.getValues('stripPrefix')
+                  if (wildcardEnabled) {
+                    return (
+                      <p className="text-xs text-muted-foreground font-mono break-all">
+                        <span className="text-foreground">{pp}/foo/bar</span> → <span className="text-foreground">{stripped ? t : `${t}/foo/bar`}</span>
+                      </p>
+                    )
+                  }
+                  return (
+                    <p className="text-xs text-muted-foreground font-mono break-all">
+                      <span className="text-foreground">{pp}</span> → <span className="text-foreground">{stripped ? t : t}</span>
+                    </p>
+                  )
+                })()}
               </div>
             </Field>
             <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal service URL or Kubernetes service address">

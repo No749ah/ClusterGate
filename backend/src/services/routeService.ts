@@ -129,6 +129,13 @@ async function freeSoftDeletedPublicPath(publicPath: string) {
 }
 
 export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId: string) {
+  // Normalise the target URL: trim a trailing "/*" or "/" so the proxy's
+  // suffix-append logic produces a clean URL when the public path is a
+  // wildcard. Without this, e.g. target "https://x/abc/*" produces "/abc/*/def".
+  if (typeof data.targetUrl === 'string') {
+    data.targetUrl = data.targetUrl.replace(/\/\*$/, '').replace(/\/$/, '')
+  }
+
   // Validate target URL (format + SSRF protection)
   try {
     await validateTargetUrl(data.targetUrl as string)
@@ -186,6 +193,9 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
 
   // Validate target URL if changed (SSRF protection)
   if (data.targetUrl) {
+    if (typeof data.targetUrl === 'string') {
+      data.targetUrl = data.targetUrl.replace(/\/\*$/, '').replace(/\/$/, '')
+    }
     try {
       await validateTargetUrl(data.targetUrl as string)
     } catch (err) {
