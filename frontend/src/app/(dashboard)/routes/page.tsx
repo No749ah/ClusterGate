@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { usePageSize, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSize'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
@@ -120,6 +121,7 @@ export default function RoutesPage() {
   const tagFilter = searchParams.get('tag') ?? 'ALL'
   const envFilter = (searchParams.get('env') ?? 'ALL') as Environment | 'ALL'
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
+  const [pageSize, setPageSize] = usePageSize('routes', 20)
 
   const updateParams = (patch: Record<string, string | null>, opts?: { resetPage?: boolean }) => {
     const next = new URLSearchParams(searchParams.toString())
@@ -170,7 +172,7 @@ export default function RoutesPage() {
     environment: envFilter !== 'ALL' ? envFilter : undefined,
     organizationId: orgFilter !== 'ALL' ? orgFilter : undefined,
     page,
-    pageSize: 20,
+    pageSize,
   })
 
   const confirm = useConfirm()
@@ -325,8 +327,8 @@ export default function RoutesPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Header — sticks to the top of the viewport while scrolling long lists */}
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Routes</h1>
           <p className="text-sm text-muted-foreground mt-1">
@@ -635,29 +637,34 @@ export default function RoutesPage() {
           </table>
         </div>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
+        {/* Pagination — shows X–Y of Z and lets the user choose rows per page */}
+        {total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 border-t border-border/50">
             <p className="text-xs text-muted-foreground">
-              Page {page} of {totalPages} ({total} total)
+              {(() => {
+                const from = (page - 1) * pageSize + 1
+                const to = Math.min(page * pageSize, total)
+                return `${from.toLocaleString()}–${to.toLocaleString()} of ${total.toLocaleString()}`
+              })()}
             </p>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
-                Previous
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={page === totalPages}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </Button>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <span>Rows</span>
+                <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(parseInt(v, 10)); setPage(1) }}>
+                  <SelectTrigger className="h-7 px-2 text-xs w-[70px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {PAGE_SIZE_OPTIONS.map((n) => (
+                      <SelectItem key={n} value={String(n)}>{n}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {totalPages > 1 && (
+                <>
+                  <Button variant="outline" size="sm" disabled={page === 1} onClick={() => setPage((p) => p - 1)}>Previous</Button>
+                  <Button variant="outline" size="sm" disabled={page === totalPages} onClick={() => setPage((p) => p + 1)}>Next</Button>
+                </>
+              )}
             </div>
           </div>
         )}
