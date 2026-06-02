@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { AlertCircle, ArrowRight } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -9,18 +10,25 @@ import { useRecentErrors } from '@/hooks/useLogs'
 import { formatRelativeTime, getStatusColor } from '@/lib/utils'
 
 export function RecentErrors() {
+  const router = useRouter()
   const { data, isLoading } = useRecentErrors(undefined, 5)
   const errors = data?.data ?? []
 
   return (
-    <Card>
+    <Card
+      onClick={(e) => {
+        if ((e.target as HTMLElement).closest('a, button')) return
+        router.push('/activity?statusType=error')
+      }}
+      className="cursor-pointer hover:border-primary/30 transition-colors"
+    >
       <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="flex items-center gap-2">
           <AlertCircle className="w-4 h-4 text-red-500" />
           Recent Errors
         </CardTitle>
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/activity">
+          <Link href="/activity?statusType=error">
             View all <ArrowRight className="w-3 h-3 ml-1" />
           </Link>
         </Button>

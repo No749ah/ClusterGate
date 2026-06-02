@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   Route, Activity, AlertCircle, Plus, ScrollText, ArrowRight, Clock,
   Settings2, Eye, EyeOff, ChevronUp, ChevronDown, RotateCcw, X,
@@ -104,6 +105,7 @@ function WidgetEditor({
 }
 
 export default function DashboardPage() {
+  const router = useRouter()
   const { data: routesData, isLoading: routesLoading } = useRoutes({ pageSize: 100 })
   const { data: logsData, isLoading: logsLoading } = useLogs({ pageSize: 10 })
 
@@ -188,7 +190,7 @@ export default function DashboardPage() {
           sparklineColor="#ef4444"
           isLoading={statsLoading}
           colorClass="text-red-500 bg-red-500/10"
-          href="/activity"
+          href="/activity?statusType=error"
         />
       </div>
     ),
@@ -196,7 +198,16 @@ export default function DashboardPage() {
     'requests-chart': () => <RequestsChart />,
 
     'active-routes': () => (
-      <Card>
+      // Card-wrapper navigates to /routes when the click isn't on a child
+      // link/button — so the whole tile feels clickable but per-route links
+      // still take precedence.
+      <Card
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('a, button')) return
+          router.push('/routes')
+        }}
+        className="cursor-pointer hover:border-primary/30 transition-colors"
+      >
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Active Routes</CardTitle>
           <Button variant="ghost" size="sm" asChild>
@@ -250,7 +261,13 @@ export default function DashboardPage() {
     ),
 
     'recent-requests': () => (
-      <Card>
+      <Card
+        onClick={(e) => {
+          if ((e.target as HTMLElement).closest('a, button')) return
+          router.push('/activity')
+        }}
+        className="cursor-pointer hover:border-primary/30 transition-colors"
+      >
         <CardHeader className="flex flex-row items-center justify-between">
           <CardTitle>Recent Requests</CardTitle>
           <Button variant="ghost" size="sm" asChild>
