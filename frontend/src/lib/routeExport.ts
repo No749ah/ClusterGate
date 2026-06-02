@@ -5,11 +5,12 @@ import type { Route } from '@/types'
 const EXPORT_FIELDS = [
   'name', 'description', 'publicPath', 'targetUrl', 'methods', 'status', 'tags', 'environment',
   'timeout', 'retryCount', 'retryDelay', 'stripPrefix', 'sslVerify', 'streamResponse',
-  'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules', 'corsEnabled', 'corsOrigins',
-  'ipAllowlist', 'requireAuth', 'authType', 'upstreamAuthType', 'upstreamAuthHeader', 'targetType',
-  'healthCheckMethod', 'healthCheckPath', 'healthCheckBody', 'maintenanceMode', 'maintenanceMessage',
+  'rewriteRedirects', 'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules',
+  'corsEnabled', 'corsOrigins', 'ipAllowlist', 'requireAuth', 'authType', 'upstreamAuthType',
+  'upstreamAuthHeader', 'targetType', 'healthCheckMethod', 'healthCheckPath', 'healthCheckBody',
+  'healthCheckInterval', 'maintenanceMode', 'maintenanceMessage',
   'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow', 'wsEnabled', 'circuitBreakerEnabled',
-  'cbFailureThreshold', 'cbRecoveryTimeout', 'lbStrategy',
+  'cbFailureThreshold', 'cbRecoveryTimeout', 'lbStrategy', 'protected',
 ] as const
 
 export type RouteConfig = Record<string, unknown>
@@ -26,16 +27,19 @@ export function toExportConfig(route: Route): RouteConfig {
 
 /**
  * Prepare pasted configs for creation: draft status + a unique public path and
- * name so they never collide with an existing route.
+ * name so they never collide with an existing route. A trailing /* (wildcard)
+ * is preserved at the end so wildcard routes stay wildcard routes after paste.
  */
 export function prepareForPaste(configs: RouteConfig[]): RouteConfig[] {
   return configs.map((c) => {
     const suffix = Math.random().toString(36).slice(2, 6)
-    const path = typeof c.publicPath === 'string' ? c.publicPath.replace(/\/$/, '') : '/r/imported'
+    const raw = typeof c.publicPath === 'string' ? c.publicPath : '/r/imported'
+    const isWildcard = raw.endsWith('/*')
+    const base = (isWildcard ? raw.slice(0, -2) : raw).replace(/\/$/, '')
     return {
       ...c,
       name: `${c.name ?? 'Imported route'} (copy)`,
-      publicPath: `${path}-copy-${suffix}`,
+      publicPath: `${base}-copy-${suffix}${isWildcard ? '/*' : ''}`,
       status: 'DRAFT',
     }
   })

@@ -388,6 +388,9 @@ export async function restoreRouteVersion(routeId: string, versionId: string, us
 }
 
 export async function exportRoutes() {
+  // Mirror every saveable, non-secret config field so an exported route can be
+  // re-imported and behave identically. Secret values (authValue,
+  // upstreamAuthValue, webhookSecret) are deliberately omitted.
   const routes = await prisma.route.findMany({
     where: { deletedAt: null },
     select: {
@@ -405,6 +408,7 @@ export async function exportRoutes() {
       stripPrefix: true,
       sslVerify: true,
       streamResponse: true,
+      rewriteRedirects: true,
       requestBodyLimit: true,
       addHeaders: true,
       removeHeaders: true,
@@ -420,8 +424,19 @@ export async function exportRoutes() {
       healthCheckMethod: true,
       healthCheckPath: true,
       healthCheckBody: true,
+      healthCheckInterval: true,
       maintenanceMode: true,
       maintenanceMessage: true,
+      // Traffic shaping & reliability
+      rateLimitEnabled: true,
+      rateLimitMax: true,
+      rateLimitWindow: true,
+      wsEnabled: true,
+      circuitBreakerEnabled: true,
+      cbFailureThreshold: true,
+      cbRecoveryTimeout: true,
+      lbStrategy: true,
+      protected: true,
     },
   })
   return routes

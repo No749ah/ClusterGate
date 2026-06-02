@@ -28,6 +28,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { key: 'two_factor', title: 'Fort Knox', description: 'Enable two-factor authentication', icon: '🔐', rarity: 'common' },
   { key: 'first_incident_resolved', title: 'Fire Fighter', description: 'Resolve your first incident', icon: '🧑‍🚒', rarity: 'rare' },
   { key: 'reviewer', title: 'Gatekeeper', description: 'Review a change request', icon: '🔍', rarity: 'rare' },
+  { key: 'globe_trotter', title: 'Globe Trotter', description: 'Receive traffic from 5 different countries', icon: '🌍', rarity: 'epic' },
 ]
 
 export const achievementService = {
@@ -136,19 +137,37 @@ export const achievementService = {
   },
 
   async checkSpeedDemon(userId: string) {
-    // Check if any route owned by this user has avg response time under 10ms
+    // Check if any route owned by this user has avg proxy duration under 10ms.
+    // The column on request_logs is `duration` (responseTime exists only on
+    // health_checks); the previous reference silently returned 0 rows.
     const result = await prisma.$queryRaw<Array<{ cnt: bigint }>>`
       SELECT COUNT(*) as cnt FROM routes r
       WHERE r."createdById" = ${userId} AND r."deletedAt" IS NULL
       AND EXISTS (
         SELECT 1 FROM request_logs rl
-        WHERE rl."routeId" = r.id
+        WHERE rl."routeId" = r.id AND rl."duration" IS NOT NULL
         GROUP BY rl."routeId"
-        HAVING AVG(rl."responseTime") < 10
+        HAVING COUNT(*) >= 5 AND AVG(rl."duration") < 10
       )
     `
-    if (result[0]?.cnt > 0) {
+    if (Number(result[0]?.cnt ?? 0) > 0) {
       await this.unlock(userId, 'speed_demon')
+    }
+  },
+
+  async checkGlobeTrotter(userId: string) {
+    // Awarded when 5+ distinct countries have hit any of the user's routes.
+    // Uses the GeoIP enrichment that already runs on every proxied request.
+    const result = await prisma.$queryRaw<Array<{ cnt: bigint }>>`
+      SELECT COUNT(DISTINCT rl."geoCountry") as cnt
+      FROM request_logs rl
+      JOIN routes r ON r.id = rl."routeId"
+      WHERE r."createdById" = ${userId}
+        AND rl."geoCountry" IS NOT NULL
+        AND rl."geoCountry" != ''
+    `
+    if (Number(result[0]?.cnt ?? 0) >= 5) {
+      await this.unlock(userId, 'globe_trotter')
     }
   },
 

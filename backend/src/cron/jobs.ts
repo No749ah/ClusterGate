@@ -74,6 +74,7 @@ export function startCronJobs() {
       for (const user of users) {
         await achievementService.checkSpeedDemon(user.id).catch(() => {})
         await achievementService.checkZeroDowntime(user.id).catch(() => {})
+        await achievementService.checkGlobeTrotter(user.id).catch(() => {})
       }
     } catch (err) {
       logger.error('Achievement check cron failed', { error: (err as Error).message })
