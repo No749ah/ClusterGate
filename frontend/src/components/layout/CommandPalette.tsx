@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive, Sparkles, Cat, Binary, User } from 'lucide-react'
+import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive, Sparkles, Cat, Binary, User, Clock } from 'lucide-react'
+import { useRecentRoutes } from '@/hooks/useRecentRoutes'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -70,7 +71,8 @@ export function CommandPalette() {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [activeIndex, setActiveIndex] = useState(0)
-  const [routeResults, setRouteResults] = useState<{ id: string; name: string; publicPath: string }[]>([])
+  const [routeResults, setRouteResults] = useState<{ id: string; slug: string | null; name: string; publicPath: string }[]>([])
+  const recentRoutes = useRecentRoutes()
   const router = useRouter()
   const { user } = useAuth()
   const inputRef = useRef<HTMLInputElement>(null)
@@ -126,7 +128,7 @@ export function CommandPalette() {
     searchTimeout.current = setTimeout(async () => {
       try {
         const res = await api.routes.list({ search: query, pageSize: 5 })
-        setRouteResults(res.data.map((r) => ({ id: r.id, name: r.name, publicPath: r.publicPath })))
+        setRouteResults(res.data.map((r) => ({ id: r.id, slug: (r as any).slug ?? null, name: r.name, publicPath: r.publicPath })))
       } catch {
         setRouteResults([])
       }
@@ -144,8 +146,24 @@ export function CommandPalette() {
     s.trigger.toLowerCase().startsWith(query.toLowerCase())
   ) : []
 
+  // Recents only show when the user hasn't typed anything yet — they're a
+  // shortcut, not a search result. Filter out the route currently being
+  // viewed if anyone shows the palette mid-page.
+  const showRecents = !query && recentRoutes.length > 0
+  const recentItems = showRecents
+    ? recentRoutes.map((r) => ({
+        type: 'recent' as const,
+        id: r.id,
+        label: r.name,
+        description: r.publicPath,
+        icon: Clock,
+        href: `/routes/${r.slug || r.id}`,
+      }))
+    : []
+
   const allItems = [
     ...matchedSecrets.map((s) => ({ type: 'secret' as const, ...s, href: '' })),
+    ...recentItems,
     ...filteredPages.map((p) => ({ type: 'page' as const, ...p })),
     ...routeResults.map((r) => ({
       type: 'route' as const,
@@ -153,7 +171,7 @@ export function CommandPalette() {
       label: r.name,
       description: r.publicPath,
       icon: Route,
-      href: `/routes/${r.id}`,
+      href: `/routes/${r.slug || r.id}`,
     })),
   ]
 
@@ -240,11 +258,36 @@ export function CommandPalette() {
                 </div>
               )}
 
+              {recentItems.length > 0 && (
+                <div className="mb-1">
+                  <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Recent</p>
+                  {recentItems.map((item, i) => {
+                    const idx = matchedSecrets.length + i
+                    const Icon = item.icon
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => navigate(item.href)}
+                        onMouseEnter={() => setActiveIndex(idx)}
+                        className={cn(
+                          'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm transition-colors',
+                          activeIndex === idx ? 'bg-primary/10 text-foreground' : 'text-muted-foreground hover:bg-muted/50'
+                        )}
+                      >
+                        <Icon className="w-4 h-4 flex-shrink-0" />
+                        <span className="font-medium">{item.label}</span>
+                        <span className="text-xs text-muted-foreground ml-auto truncate">{item.description}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
               {filteredPages.length > 0 && (
                 <div className="mb-1">
                   <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Pages</p>
                   {filteredPages.map((item, i) => {
-                    const idx = matchedSecrets.length + i
+                    const idx = matchedSecrets.length + recentItems.length + i
                     const Icon = item.icon
                     return (
                       <button
@@ -271,11 +314,11 @@ export function CommandPalette() {
                 <div>
                   <p className="px-2 py-1 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Routes</p>
                   {routeResults.map((item, i) => {
-                    const idx = matchedSecrets.length + filteredPages.length + i
+                    const idx = matchedSecrets.length + recentItems.length + filteredPages.length + i
                     return (
                       <button
                         key={item.id}
-                        onClick={() => navigate(`/routes/${item.id}`)}
+                        onClick={() => navigate(`/routes/${item.slug || item.id}`)}
                         onMouseEnter={() => setActiveIndex(idx)}
                         className={cn(
                           'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm transition-colors',

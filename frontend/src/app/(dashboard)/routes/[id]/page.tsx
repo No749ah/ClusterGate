@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, use } from 'react'
+import { useState, use, useEffect } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Edit, Play, CheckCircle2, XCircle, Clock, Activity, Copy, Check, RefreshCw, Target, Zap, ArrowRightLeft, Plus, Trash2, Power, PowerOff, Shield, Wifi, Terminal, FileDown, Share2, ChevronDown, FileJson } from 'lucide-react'
 import {
@@ -14,6 +14,9 @@ import { buildCurl, toExportConfig, downloadJson } from '@/lib/routeExport'
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useRouteVersions, useRestoreRouteVersion, useRouteHealth, useDeleteRoute } from '@/hooks/useRoutes'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { rememberRoute } from '@/hooks/useRecentRoutes'
+import { usePinnedRoutes, togglePin } from '@/hooks/usePinnedRoutes'
+import { Pin, PinOff } from 'lucide-react'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
 import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
@@ -94,7 +97,13 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   const healthCheck = useRouteHealth(id)
   const restoreVersion = useRestoreRouteVersion(id)
 
+  const pinnedList = usePinnedRoutes()
   const route = routeData?.data
+  // Remember this route in the localStorage "recent" list so the command
+  // palette can offer it as a quick jump-back.
+  useEffect(() => {
+    if (route) rememberRoute({ id: route.id, slug: (route as any).slug, name: route.name, publicPath: route.publicPath })
+  }, [route?.id, route?.slug, route?.name, route?.publicPath])
   const stats = statsData?.data
   const uptime = uptimeData?.data
   const logs = logsData?.data ?? []
@@ -223,6 +232,23 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          {route && (() => {
+            const pinned = pinnedList.some((r) => r.id === route.id)
+            return (
+              <Button
+                variant="outline"
+                size="sm"
+                title={pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
+                onClick={() => {
+                  togglePin({ id: route.id, slug: (route as any).slug, name: route.name, publicPath: route.publicPath })
+                  toast.success(pinned ? 'Unpinned' : 'Pinned to sidebar')
+                }}
+              >
+                {pinned ? <PinOff className="w-3.5 h-3.5 mr-2" /> : <Pin className="w-3.5 h-3.5 mr-2" />}
+                {pinned ? 'Unpin' : 'Pin'}
+              </Button>
+            )
+          })()}
           <Button size="sm" asChild>
             <Link href={`/routes/${id}/edit`}>
               <Edit className="w-3.5 h-3.5 mr-2" />

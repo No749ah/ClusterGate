@@ -28,6 +28,8 @@ import { cn } from '@/lib/utils'
 import { useAuth, useLogout } from '@/hooks/useAuth'
 import { useKonamiCode } from '@/hooks/useKonamiCode'
 import { usePartyMode } from '@/hooks/usePartyMode'
+import { usePinnedRoutes } from '@/hooks/usePinnedRoutes'
+import { Pin } from 'lucide-react'
 
 const COLLAPSED_KEY = 'clustergate-sidebar-collapsed'
 
@@ -213,6 +215,7 @@ export function Sidebar() {
           </button>
         )}
 
+        <PinnedSection collapsed={!mobileOpen && collapsed} />
         {navSections.map((section, idx) => {
           const visibleItems = section.items.filter(
             (item) => !item.adminOnly || user?.role === 'ADMIN'
@@ -317,5 +320,46 @@ export function Sidebar() {
         {sidebarContent}
       </aside>
     </>
+  )
+}
+
+// Pinned routes from localStorage — shown above the regular navigation so the
+// user can jump straight into the handful they care about.
+function PinnedSection({ collapsed }: { collapsed: boolean }) {
+  const pinned = usePinnedRoutes()
+  const pathname = usePathname()
+  if (pinned.length === 0) return null
+  return (
+    <div className="mb-4">
+      {!collapsed && (
+        <p className="px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+          <Pin className="w-3 h-3" /> Pinned
+        </p>
+      )}
+      {collapsed && <div className="mx-2 my-2 border-t border-sidebar-border" />}
+      <div className="space-y-1">
+        {pinned.map((r) => {
+          const href = `/routes/${r.slug || r.id}`
+          const active = pathname === href
+          return (
+            <Link
+              key={r.id}
+              href={href}
+              title={collapsed ? r.name : undefined}
+              className={cn(
+                'flex items-center rounded-lg text-sm font-medium transition-all',
+                collapsed ? 'justify-center px-2 py-2.5' : 'gap-3 px-3 py-2',
+                active
+                  ? 'bg-primary/15 text-primary'
+                  : 'text-muted-foreground hover:bg-white/5 hover:text-sidebar-foreground'
+              )}
+            >
+              <Pin className={cn('w-3.5 h-3.5 flex-shrink-0', active ? 'text-primary' : 'text-muted-foreground/70')} />
+              {!collapsed && <span className="truncate">{r.name}</span>}
+            </Link>
+          )
+        })}
+      </div>
+    </div>
   )
 }
