@@ -16,7 +16,7 @@ import { useRoute, useRouteStats, useRouteUptime, usePublishRoute, useDeactivate
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { rememberRoute } from '@/hooks/useRecentRoutes'
 import { usePinnedRoutes, togglePin } from '@/hooks/usePinnedRoutes'
-import { Pin, PinOff } from 'lucide-react'
+import { Pin } from 'lucide-react'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
 import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
@@ -143,6 +143,30 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
           <div className="min-w-0">
             <div className="flex items-center gap-3 min-w-0">
               <h1 className="text-2xl font-bold text-foreground truncate">{route.name}</h1>
+              {/* Low-key pin: small icon next to the name, click to toggle.
+                  Filled+accented when pinned, outlined+dim when not. */}
+              {(() => {
+                const pinned = pinnedList.some((r) => r.id === route.id)
+                return (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      togglePin({ id: route.id, slug: (route as any).slug, name: route.name, publicPath: route.publicPath })
+                      toast.success(pinned ? 'Unpinned from sidebar' : 'Pinned to sidebar')
+                    }}
+                    title={pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
+                    aria-label={pinned ? 'Unpin route' : 'Pin route'}
+                    className={cn(
+                      'shrink-0 rounded-md p-1 transition-colors',
+                      pinned
+                        ? 'text-primary hover:text-primary/80'
+                        : 'text-muted-foreground/40 hover:text-foreground'
+                    )}
+                  >
+                    <Pin className={cn('w-4 h-4', pinned && 'fill-current')} />
+                  </button>
+                )
+              })()}
               <RouteStatusBadge status={route.status} isActive={route.isActive} />
               <EnvironmentBadge environment={route.environment} />
               <HealthIndicator status={health?.status} responseTime={health?.responseTime} error={health?.error} showLabel />
@@ -232,23 +256,6 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          {route && (() => {
-            const pinned = pinnedList.some((r) => r.id === route.id)
-            return (
-              <Button
-                variant="outline"
-                size="sm"
-                title={pinned ? 'Unpin from sidebar' : 'Pin to sidebar'}
-                onClick={() => {
-                  togglePin({ id: route.id, slug: (route as any).slug, name: route.name, publicPath: route.publicPath })
-                  toast.success(pinned ? 'Unpinned' : 'Pinned to sidebar')
-                }}
-              >
-                {pinned ? <PinOff className="w-3.5 h-3.5 mr-2" /> : <Pin className="w-3.5 h-3.5 mr-2" />}
-                {pinned ? 'Unpin' : 'Pin'}
-              </Button>
-            )
-          })()}
           <Button size="sm" asChild>
             <Link href={`/routes/${id}/edit`}>
               <Edit className="w-3.5 h-3.5 mr-2" />

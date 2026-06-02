@@ -23,33 +23,64 @@ import { Pagination } from '@/components/ui/pagination'
 
 export default function LogsPage() {
   const queryClient = useQueryClient()
-  // Seed filters from the URL so dashboard tiles can deep-link
-  // (e.g. /activity?statusType=error from the Error Rate card).
+  // Every filter — including the rarely-bookmarked ones — survives reloads
+  // and the browser back button by living in the URL search params. The
+  // initial state seeds from the URL; every setter writes back via the
+  // effect below.
   const params = useSearchParams()
+  const router = useRouter()
+  const pathname = usePathname()
   const [routeId, setRouteId] = useState<string>(params?.get('routeId') ?? '')
   const [method, setMethod] = useState<string>(params?.get('method') ?? '')
   const [statusType, setStatusType] = useState<string>(params?.get('statusType') ?? '')
-  // Apply later URL changes too (e.g. user navigates with a different filter
-  // while already on this page).
-  useEffect(() => {
-    const r = params?.get('routeId') ?? ''
-    const m = params?.get('method') ?? ''
-    const s = params?.get('statusType') ?? ''
-    if (r) setRouteId(r)
-    if (m) setMethod(m)
-    if (s) setStatusType(s)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params?.get('routeId'), params?.get('method'), params?.get('statusType')])
   const [search, setSearch] = useState<string>(params?.get('search') ?? '')
+  const [dateFrom, setDateFrom] = useState<string>(params?.get('dateFrom') ?? '')
+  const [dateTo, setDateTo] = useState<string>(params?.get('dateTo') ?? '')
+  const [liveTail, setLiveTail] = useState<boolean>(params?.get('live') === '1')
   // Debounce free-text search to avoid hammering the API on every keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 300)
     return () => clearTimeout(t)
   }, [search])
-  const [dateFrom, setDateFrom] = useState<string>(params?.get('dateFrom') ?? '')
-  const [dateTo, setDateTo] = useState<string>(params?.get('dateTo') ?? '')
-  const [liveTail, setLiveTail] = useState<boolean>(false)
+
+  // Mirror state → URL. Empty values are dropped to keep links tidy. We use
+  // replace so the back button skips intermediate keystrokes.
+  useEffect(() => {
+    const next = new URLSearchParams()
+    if (routeId) next.set('routeId', routeId)
+    if (method) next.set('method', method)
+    if (statusType) next.set('statusType', statusType)
+    if (debouncedSearch) next.set('search', debouncedSearch)
+    if (dateFrom) next.set('dateFrom', dateFrom)
+    if (dateTo) next.set('dateTo', dateTo)
+    if (liveTail) next.set('live', '1')
+    const qs = next.toString()
+    const current = params?.toString() ?? ''
+    if (qs !== current) {
+      router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeId, method, statusType, debouncedSearch, dateFrom, dateTo, liveTail])
+
+  // External navigations (e.g. dashboard deep-links) overwrite local state.
+  useEffect(() => {
+    const r = params?.get('routeId') ?? ''
+    const m = params?.get('method') ?? ''
+    const s = params?.get('statusType') ?? ''
+    const q = params?.get('search') ?? ''
+    const df = params?.get('dateFrom') ?? ''
+    const dt = params?.get('dateTo') ?? ''
+    const lt = params?.get('live') === '1'
+    if (r !== routeId) setRouteId(r)
+    if (m !== method) setMethod(m)
+    if (s !== statusType) setStatusType(s)
+    if (q !== search) setSearch(q)
+    if (df !== dateFrom) setDateFrom(df)
+    if (dt !== dateTo) setDateTo(dt)
+    if (lt !== liveTail) setLiveTail(lt)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params?.toString()])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize('activity', 25)
   const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
