@@ -537,7 +537,21 @@ export default function AnalyticsPage() {
                       'Requests',
                     ]}
                   />
-                  <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                  <Bar
+                    dataKey="count"
+                    radius={[4, 4, 0, 0]}
+                    cursor="pointer"
+                    onClick={(payload: any) => {
+                      // Drill into /activity filtered by the clicked bucket
+                      const bucket = payload?.bucket as string | undefined
+                      const map: Record<string, string> = { '2xx': 'success', '3xx': 'success', '4xx': 'client', '5xx': 'error' }
+                      const statusType = bucket ? map[bucket] : undefined
+                      const params = new URLSearchParams()
+                      if (statusType) params.set('statusType', statusType)
+                      if (routeId) params.set('routeId', routeId)
+                      window.location.href = `/activity${params.toString() ? `?${params}` : ''}`
+                    }}
+                  >
                     {statusDist.map((entry) => (
                       <Cell
                         key={entry.bucket}
