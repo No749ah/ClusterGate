@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useForm, useFieldArray } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, Shuffle, AlertCircle, CheckCircle2, Building2 } from 'lucide-react'
+import { Loader2, Plus, Trash2, ArrowLeft, ArrowRight, Check, Shuffle, AlertCircle, CheckCircle2, Building2, Play } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -66,7 +66,7 @@ const routeSchema = z.object({
 
 type RouteFormValues = z.infer<typeof routeSchema>
 
-const STEPS = ['Basic Info', 'Advanced', 'Features', 'Headers', 'Security', 'Maintenance']
+const STEPS = ['Where?', 'What?', 'Endpoint', 'Scope', 'Advanced']
 const HTTP_METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
 function generateRandomPath(): string {
@@ -193,7 +193,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
 
   // Test connection state
   const [testingConn, setTestingConn] = useState(false)
-  const [connResult, setConnResult] = useState<{ ok: boolean; status?: number; error?: string; detectedTool?: string; hint?: string } | null>(null)
+  const [connResult, setConnResult] = useState<{ ok: boolean; status?: number; duration?: number; error?: string; detectedTool?: string; hint?: string } | null>(null)
 
   const handleTestConnection = async () => {
     setTestingConn(true)
@@ -280,18 +280,18 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   }
 
   const handleNext = async () => {
+    // 5-step guided layout: Where → What → Endpoint → Scope → Advanced
     const stepFields: (keyof RouteFormValues)[][] = [
-      ['name', 'publicPath', 'targetUrl', 'methods'],
-      ['timeout', 'retryCount', 'retryDelay'],
-      [], // Features step - no required validation
-      [], // Headers
-      [], // Security
-      [], // Maintenance
+      ['targetUrl'],            // Where
+      ['name'],                 // What
+      ['publicPath', 'methods'], // Endpoint
+      [],                       // Scope (Org checked manually for non-admins)
+      [],                       // Advanced (all optional)
     ]
     const fields = stepFields[step] ?? []
     const valid = fields.length === 0 ? true : await trigger(fields)
-    // Block non-admins from proceeding without an org on step 0
-    if (step === 0 && !isAdmin && orgs.length > 0 && !form.getValues('organizationId')) {
+    // Non-admins need an org — checked on the Scope step
+    if (step === 3 && !isAdmin && orgs.length > 0 && !form.getValues('organizationId')) {
       return
     }
     if (valid) setStep((s) => Math.min(s + 1, STEPS.length - 1))
@@ -314,7 +314,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
     // Prevent accidental submit when not on the last step (e.g. Enter key in input)
     if (step < STEPS.length - 1) return
     if (!isAdmin && !data.organizationId) {
-      setStep(0)
+      // Scope step is where the org is picked
+      setStep(3)
       return
     }
     const { rateLimitWindowSeconds, ...rest } = data
@@ -394,613 +395,635 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
 
       {/* Step content */}
       <div className="min-h-[300px]">
-        {/* Step 0: Basic Info */}
+        {/* ============================================================== */}
+        {/* Step 0: Where? — Target URL + test                              */}
+        {/* ============================================================== */}
         {step === 0 && (
           <div className="space-y-4">
-            <Field label="Route Name" error={errors.name?.message} required>
-              <input {...register('name')} placeholder="My API Service" className={fieldClass(errors.name)} />
-            </Field>
-            {orgs.length > 0 && (
-              <Field label="Organization" required={!isAdmin} hint={isAdmin ? 'Optional for admins — routes without an org are globally accessible' : 'Select the organization this route belongs to'}>
-                <Select
-                  value={watch('organizationId') ?? '_none'}
-                  onValueChange={(v) => setValue('organizationId', v === '_none' ? null : v)}
-                >
-                  <SelectTrigger>
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
-                      <SelectValue placeholder="Select organization..." />
-                    </div>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {isAdmin && <SelectItem value="_none">No organization (global)</SelectItem>}
-                    {orgs.map((org) => (
-                      <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {!isAdmin && !watch('organizationId') && (
-                  <p className="text-xs text-destructive">Organization is required</p>
-                )}
-              </Field>
-            )}
-            <Field label="Description" error={errors.description?.message}>
-              <Textarea {...register('description')} placeholder="Optional description..." rows={2} />
-            </Field>
-            <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'Mirrors the wildcard from the Target URL — all sub-paths are proxied.' : 'e.g. my-service'}>
-              <div className="flex gap-2">
-                <div className="relative flex-1 flex">
-                  <span
-                    className={cn(
-                      'inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-mono select-none transition-all',
-                      prefixShake && 'animate-[shake_0.4s_ease-in-out] text-destructive border-destructive/50 bg-destructive/10'
-                    )}
-                  >
-                    /r/
-                  </span>
-                  <input
-                    value={publicPath.startsWith('/r/') ? publicPath.slice(3).replace(/\/\*$/, '') : publicPath.replace(/\/\*$/, '')}
-                    onChange={(e) => {
-                      const val = e.target.value.replace(/^\/+/, '').replace(/\/\*$/, '')
-                      setValue('publicPath', `/r/${val}${wildcardEnabled ? '/*' : ''}`, { shouldValidate: true })
-                    }}
-                    onKeyDown={(e) => {
-                      const suffix = publicPath.startsWith('/r/') ? publicPath.slice(3) : publicPath
-                      if (e.key === 'Backspace' && suffix === '') {
-                        e.preventDefault()
-                        setPrefixShake(true)
-                        setTimeout(() => setPrefixShake(false), 400)
-                      }
-                    }}
-                    placeholder="my-service"
-                    className={cn(fieldClass(errors.publicPath), 'rounded-l-none', wildcardEnabled && 'rounded-r-none')}
-                  />
-                  {/* /* suffix badge — visible mirror of the wildcard toggled on the Target URL */}
-                  {wildcardEnabled && (
-                    <span
-                      className="inline-flex items-center px-2.5 rounded-r-md border border-l-0 border-input bg-amber-500/10 text-amber-500 text-sm font-mono select-none"
-                      title="Wildcard suffix (managed via the Target URL field)"
-                    >
-                      /*
-                    </span>
-                  )}
-                  {pathStatus === 'checking' && (
-                    <Loader2 className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground', wildcardEnabled ? 'right-12' : 'right-3')} />
-                  )}
-                  {pathStatus === 'available' && (
-                    <CheckCircle2 className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-green-500', wildcardEnabled ? 'right-12' : 'right-3')} />
-                  )}
-                  {pathStatus === 'taken' && (
-                    <AlertCircle className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-destructive', wildcardEnabled ? 'right-12' : 'right-3')} />
-                  )}
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  title="Generate random path"
-                  onClick={() => {
-                    const newPath = generateRandomPath()
-                    setValue('publicPath', wildcardEnabled ? newPath + '/*' : newPath)
-                  }}
-                >
-                  <Shuffle className="w-3.5 h-3.5" />
-                </Button>
-              </div>
-              {pathStatus === 'taken' && (
-                <p className="text-xs text-destructive mt-1">
-                  This path is already used by &quot;{pathConflict}&quot;
-                </p>
-              )}
-            </Field>
-            <Field label="Target URL" error={errors.targetUrl?.message} required hint="Internal service URL or Kubernetes service address">
-              <div className="space-y-2">
+            <Section
+              title="Where does this route forward to?"
+              description="Paste the upstream URL. You can test reachability right here before configuring anything else."
+            >
+              <Field label="Target URL" error={errors.targetUrl?.message} required>
                 <input
                   {...register('targetUrl')}
                   placeholder="http://my-service.default.svc.cluster.local:8080"
                   className={fieldClass(errors.targetUrl)}
+                  autoFocus
                 />
-                <div className="flex items-center justify-between p-2 rounded-md border border-border/50 bg-muted/30">
-                  <div>
-                    <p className="text-xs font-medium">Forward all sub-paths (/*)</p>
-                    <p className="text-xs text-muted-foreground">Any path after the Target URL is appended verbatim — the Public Path mirrors this as /* above.</p>
-                  </div>
-                  <Switch
-                    checked={wildcardEnabled}
-                    onCheckedChange={(v) => {
-                      setWildcardEnabled(v)
-                      const current = form.getValues('publicPath')
-                      if (v && !current.endsWith('/*')) {
-                        const base = current.replace(/\/+$/, '')
-                        setValue('publicPath', base + '/*')
-                        // Wildcard + stripPrefix forwards every sub-path to the
-                        // target root, defeating wildcard routing — turn it off.
-                        if (form.getValues('stripPrefix')) setValue('stripPrefix', false)
-                      } else if (!v && current.endsWith('/*')) {
-                        setValue('publicPath', current.slice(0, -2))
-                      }
-                    }}
-                  />
-                </div>
-                {/* Live forwarding preview — shows how a sample request maps to the target */}
-                {(() => {
-                  const t = (watch('targetUrl') || '').trim().replace(/\/\*$/, '').replace(/\/$/, '')
-                  const pp = publicPath.replace(/\/\*$/, '')
-                  if (!t || !pp || pp === '/r/') return null
-                  const stripped = form.getValues('stripPrefix')
-                  if (wildcardEnabled) {
-                    return (
-                      <p className="text-xs text-muted-foreground font-mono break-all">
-                        <span className="text-foreground">{pp}/foo/bar</span> → <span className="text-foreground">{stripped ? t : `${t}/foo/bar`}</span>
-                      </p>
-                    )
-                  }
-                  return (
-                    <p className="text-xs text-muted-foreground font-mono break-all">
-                      <span className="text-foreground">{pp}</span> → <span className="text-foreground">{t}</span>
-                    </p>
-                  )
-                })()}
-              </div>
-            </Field>
-            <Field label="HTTP Methods" error={errors.methods?.message} required>
-              <div className="flex gap-2 flex-wrap">
-                {HTTP_METHODS.map((m) => (
-                  <button
-                    key={m}
-                    type="button"
-                    onClick={() => toggleMethod(m)}
-                    className={cn(
-                      'px-3 py-1.5 rounded-md text-xs font-medium font-mono border transition-colors',
-                      methods?.includes(m)
-                        ? 'bg-primary/20 border-primary/40 text-primary'
-                        : 'bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-primary/80'
-                    )}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-              {errors.methods && <p className="text-xs text-destructive mt-1">{errors.methods.message}</p>}
-            </Field>
+              </Field>
 
-            <Field label="Tags">
-              <div className="space-y-2">
-                <div className="flex gap-2">
-                  <input
-                    value={tagInput}
-                    onChange={(e) => setTagInput(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
-                    placeholder="Add tag and press Enter"
-                    className={fieldClass()}
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={addTag}>
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-                {tags.length > 0 && (
-                  <div className="flex gap-1 flex-wrap">
-                    {tags.map((tag) => (
-                      <Badge key={tag} variant="secondary" className="gap-1">
-                        {tag}
-                        <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">×</button>
-                      </Badge>
-                    ))}
+              <SwitchRow
+                label="Forward all sub-paths (/*)"
+                description="Any path after the Target URL is appended verbatim — useful when the upstream serves many pages under a base path."
+                checked={wildcardEnabled}
+                onCheckedChange={(v) => {
+                  setWildcardEnabled(v)
+                  const current = form.getValues('publicPath')
+                  if (v && !current.endsWith('/*')) {
+                    const base = current.replace(/\/+$/, '')
+                    setValue('publicPath', base + '/*')
+                    if (form.getValues('stripPrefix')) setValue('stripPrefix', false)
+                  } else if (!v && current.endsWith('/*')) {
+                    setValue('publicPath', current.slice(0, -2))
+                  }
+                }}
+              />
+
+              <div className="space-y-3 pt-1">
+                <Button
+                  type="button"
+                  variant="default"
+                  onClick={handleTestConnection}
+                  disabled={testingConn || !watch('targetUrl')}
+                  className="w-full"
+                >
+                  {testingConn ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Testing connection...</>
+                  ) : (
+                    <><Play className="w-4 h-4 mr-2" />Test target</>
+                  )}
+                </Button>
+                {connResult && (
+                  <div className={cn(
+                    'rounded-md border p-3 space-y-1.5',
+                    connResult.ok ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'
+                  )}>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {connResult.ok ? (
+                        <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                      ) : (
+                        <AlertCircle className="w-4 h-4 text-red-500 shrink-0" />
+                      )}
+                      <span className={cn('text-sm font-medium', connResult.ok ? 'text-emerald-500' : 'text-red-500')}>
+                        {connResult.ok ? `Reachable · HTTP ${connResult.status}` : 'Not reachable'}
+                      </span>
+                      {connResult.duration !== undefined && (
+                        <span className="text-xs text-muted-foreground">· {connResult.duration}ms</span>
+                      )}
+                    </div>
+                    {connResult.error && (
+                      <p className="text-xs text-red-500/90 font-mono break-all">{connResult.error}</p>
+                    )}
+                    {connResult.detectedTool === 'n8n' && (
+                      <p className="text-xs text-muted-foreground">
+                        n8n detected — <code className="text-foreground">chatInput</code> + <code className="text-foreground">sessionId</code> are sent automatically.
+                      </p>
+                    )}
+                    {connResult.hint && (
+                      <p className="text-xs text-muted-foreground">{connResult.hint}</p>
+                    )}
                   </div>
                 )}
               </div>
-            </Field>
+            </Section>
           </div>
         )}
 
-        {/* Step 1: Advanced */}
+        {/* ============================================================== */}
+        {/* Step 1: What? — Name + description                              */}
+        {/* ============================================================== */}
         {step === 1 && (
           <div className="space-y-4">
-            <div className="grid grid-cols-3 gap-4">
-              <Field label="Timeout (ms)" error={errors.timeout?.message} hint="1000–120000">
-                <input type="number" {...register('timeout')} className={fieldClass(errors.timeout)} />
+            <Section
+              title="What is this route called?"
+              description="A name that helps you and your team recognise it in the list."
+            >
+              <Field label="Route Name" error={errors.name?.message} required>
+                <input {...register('name')} placeholder="My API Service" className={fieldClass(errors.name)} autoFocus />
               </Field>
-              <Field label="Retry Count" hint="0–5">
-                <input type="number" {...register('retryCount')} className={fieldClass()} />
+              <Field label="Description" error={errors.description?.message} hint="Optional — what does this route expose?">
+                <Textarea {...register('description')} placeholder="Internal service that handles…" rows={2} />
               </Field>
-              <Field label="Retry Delay (ms)" hint="100–10000">
-                <input type="number" {...register('retryDelay')} className={fieldClass()} />
+              <Field label="Tags" hint="Optional — labels for filtering and grouping.">
+                <div className="space-y-2">
+                  <div className="flex gap-2">
+                    <input
+                      value={tagInput}
+                      onChange={(e) => setTagInput(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addTag())}
+                      placeholder="Add tag and press Enter"
+                      className={fieldClass()}
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={addTag}>
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  {tags.length > 0 && (
+                    <div className="flex gap-1 flex-wrap">
+                      {tags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="gap-1">
+                          {tag}
+                          <button type="button" onClick={() => removeTag(tag)} className="hover:text-destructive">×</button>
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </Field>
-            </div>
-            <Field label="Request Body Limit">
-              <Select value={watch('requestBodyLimit')} onValueChange={(v) => setValue('requestBodyLimit', v)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {['1mb', '5mb', '10mb', '25mb', '50mb', '100mb'].map((v) => (
-                    <SelectItem key={v} value={v}>{v}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">Strip Prefix</p>
-                <p className="text-xs text-muted-foreground">Forward to targetUrl root only, no path appended</p>
-              </div>
-              <Switch
-                checked={watch('stripPrefix')}
-                onCheckedChange={(v) => setValue('stripPrefix', v)}
-              />
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">Verify SSL Certificate</p>
-                <p className="text-xs text-muted-foreground">Disable for self-signed or internal certificates</p>
-              </div>
-              <Switch
-                checked={watch('sslVerify')}
-                onCheckedChange={(v) => setValue('sslVerify', v)}
-              />
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">Stream Response</p>
-                <p className="text-xs text-muted-foreground">Pipe the response through unbuffered for SSE / token streaming (e.g. n8n AI Agent)</p>
-              </div>
-              <Switch
-                checked={watch('streamResponse')}
-                onCheckedChange={(v) => setValue('streamResponse', v)}
-              />
-            </div>
-            <div className="space-y-3 rounded-lg border border-border/50 p-3">
-              <div>
-                <p className="text-sm font-medium">Health Check</p>
-                <p className="text-xs text-muted-foreground">How ClusterGate probes the target (POST + body works for n8n)</p>
-              </div>
-              <Field label="Interval">
-                <Select value={String(watch('healthCheckInterval'))} onValueChange={(v) => setValue('healthCheckInterval', Number(v))}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="5">Every 5 minutes</SelectItem>
-                    <SelectItem value="15">Every 15 minutes</SelectItem>
-                    <SelectItem value="60">Every hour</SelectItem>
-                    <SelectItem value="720">Every 12 hours</SelectItem>
-                    <SelectItem value="1440">Every 24 hours</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-              <div className="grid grid-cols-2 gap-2">
-                <Field label="Method">
-                  <Select value={watch('healthCheckMethod')} onValueChange={(v) => setValue('healthCheckMethod', v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="HEAD">HEAD</SelectItem>
-                      <SelectItem value="GET">GET</SelectItem>
-                      <SelectItem value="POST">POST</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                <Field label="Path (optional)">
-                  <input {...register('healthCheckPath')} placeholder="/health" className={fieldClass()} />
-                </Field>
-              </div>
-              {watch('healthCheckMethod') === 'POST' && (
-                <Field label="Body (JSON, optional)">
-                  <Textarea {...register('healthCheckBody')} placeholder='{"chatInput":"ping","sessionId":"healthcheck"}' rows={2} className="font-mono text-sm" />
-                </Field>
-              )}
-            </div>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">Rate Limiting</p>
-                <p className="text-xs text-muted-foreground">Limit requests per client IP</p>
-              </div>
-              <Switch
-                checked={rateLimitEnabled}
-                onCheckedChange={(v) => setValue('rateLimitEnabled', v)}
-              />
-            </div>
-            {rateLimitEnabled && (
-              <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
-                <Field label="Max Requests" hint="Per window per IP">
-                  <input type="number" {...register('rateLimitMax')} className={fieldClass()} />
-                </Field>
-                <Field label="Window (seconds)" hint="1–3600">
-                  <input type="number" {...register('rateLimitWindowSeconds')} className={fieldClass()} />
-                </Field>
-              </div>
-            )}
+            </Section>
           </div>
         )}
 
-        {/* Step 2: Features */}
+        {/* ============================================================== */}
+        {/* Step 2: How? — Public path + methods                            */}
+        {/* ============================================================== */}
         {step === 2 && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">WebSocket Support</p>
-                <p className="text-xs text-muted-foreground">Enable WebSocket upgrade handling for this route</p>
-              </div>
-              <Switch
-                checked={watch('wsEnabled')}
-                onCheckedChange={(v) => setValue('wsEnabled', v)}
-              />
-            </div>
-
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">Circuit Breaker</p>
-                <p className="text-xs text-muted-foreground">Stop forwarding after consecutive failures</p>
-              </div>
-              <Switch
-                checked={circuitBreakerEnabled}
-                onCheckedChange={(v) => setValue('circuitBreakerEnabled', v)}
-              />
-            </div>
-            {circuitBreakerEnabled && (
-              <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
-                <Field label="Failure Threshold" hint="Failures before opening circuit">
-                  <input type="number" {...register('cbFailureThreshold')} className={fieldClass()} />
-                </Field>
-                <Field label="Recovery Timeout (ms)" hint="Time before half-open retry">
-                  <input type="number" {...register('cbRecoveryTimeout')} className={fieldClass()} />
-                </Field>
-              </div>
-            )}
-
-            <Field label="Load Balancing Strategy" hint="How to distribute traffic across targets">
-              <Select value={watch('lbStrategy')} onValueChange={(v) => setValue('lbStrategy', v as any)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="ROUND_ROBIN">Round Robin</SelectItem>
-                  <SelectItem value="WEIGHTED">Weighted</SelectItem>
-                  <SelectItem value="FAILOVER">Failover</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-          </div>
-        )}
-
-        {/* Step 3: Headers */}
-        {step === 3 && (
-          <div className="space-y-6">
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-medium">Add Headers</p>
-                  <p className="text-xs text-muted-foreground">Headers to add to proxied requests</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => appendHeader({ key: '', value: '' })}>
-                  <Plus className="w-3 h-3 mr-1" /> Add
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {headerFields.map((field, i) => (
-                  <div key={field.id} className="flex gap-2">
-                    <input {...register(`addHeaders.${i}.key`)} placeholder="X-Custom-Header" className={cn(fieldClass(), 'flex-1')} />
-                    <input {...register(`addHeaders.${i}.value`)} placeholder="header-value" className={cn(fieldClass(), 'flex-1')} />
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeHeader(i)}>
-                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-                {headerFields.length === 0 && (
-                  <p className="text-xs text-muted-foreground py-2">No headers added</p>
-                )}
-              </div>
-            </div>
-
-            <Field label="Remove Headers" hint="Comma-separated header names to strip from requests">
-              <input {...register('removeHeaders')} placeholder="X-Forwarded-For, X-Real-IP" className={fieldClass()} />
-            </Field>
-
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <div>
-                  <p className="text-sm font-medium">Path Rewrite Rules</p>
-                  <p className="text-xs text-muted-foreground">Regex-based path rewrite rules</p>
-                </div>
-                <Button type="button" variant="outline" size="sm" onClick={() => appendRewrite({ from: '', to: '' })}>
-                  <Plus className="w-3 h-3 mr-1" /> Add Rule
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {rewriteFields.map((field, i) => (
-                  <div key={field.id} className="flex gap-2 items-center">
-                    <input {...register(`rewriteRules.${i}.from`)} placeholder="^/v1/(.*)" className={cn(fieldClass(), 'flex-1')} />
-                    <span className="text-muted-foreground text-sm">→</span>
-                    <input {...register(`rewriteRules.${i}.to`)} placeholder="/api/$1" className={cn(fieldClass(), 'flex-1')} />
-                    <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeRewrite(i)}>
-                      <Trash2 className="w-3.5 h-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Step 4: Security */}
-        {step === 4 && (
-          <div className="space-y-4">
-            <div className="space-y-3">
-              <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-                <div>
-                  <p className="text-sm font-medium">Require Auth</p>
-                  <p className="text-xs text-muted-foreground">Require callers to authenticate at ClusterGate level</p>
-                </div>
-                <Switch
-                  checked={requireAuth}
-                  onCheckedChange={(v) => setValue('requireAuth', v)}
-                />
-              </div>
-
-              {requireAuth && (
-                <div className="space-y-3 pl-3 border-l-2 border-primary/30">
-                  <Field label="Auth Type">
-                    <Select value={authType} onValueChange={(v) => setValue('authType', v as any)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="API_KEY">API Key</SelectItem>
-                        <SelectItem value="BASIC">Basic Auth</SelectItem>
-                        <SelectItem value="BEARER">Bearer Token</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </Field>
-                  {authType === 'API_KEY' ? (
-                    <p className="text-xs text-muted-foreground">
-                      Keys are generated and managed in the <span className="font-medium text-foreground">API Keys</span> section after saving (revoke, regenerate, expiry, usage tracking). Clients authenticate with the <code className="text-foreground">X-API-Key</code> header.
-                    </p>
-                  ) : (
-                    <Field label="Auth Value" hint="Base64 credentials (Basic) or bearer token that callers must provide">
-                      <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
-                    </Field>
-                  )}
-                </div>
-              )}
-
-              {/* Target type */}
-              <Field label="Target Type" hint="n8n targets get chatInput + sessionId sent automatically when testing">
-                <Select value={watch('targetType')} onValueChange={(v) => setValue('targetType', v as any)}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="GENERIC">Generic</SelectItem>
-                    <SelectItem value="N8N">n8n</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              {/* Upstream Authentication */}
-              <div className="space-y-3 rounded-lg border border-border/50 p-3">
-                <div>
-                  <p className="text-sm font-medium">Upstream Authentication</p>
-                  <p className="text-xs text-muted-foreground">Credentials ClusterGate sends to the target (e.g. an API key n8n requires)</p>
-                </div>
-                <Field label="Type">
-                  <Select value={upstreamAuthType} onValueChange={(v) => setValue('upstreamAuthType', v as any)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="NONE">None</SelectItem>
-                      <SelectItem value="API_KEY">API Key (header)</SelectItem>
-                      <SelectItem value="BEARER">Bearer Token</SelectItem>
-                      <SelectItem value="BASIC">Basic (Base64)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
-                {upstreamAuthType !== 'NONE' && (
-                  <>
-                    {upstreamAuthType === 'API_KEY' && (
-                      <Field label="Header Name">
-                        <input {...register('upstreamAuthHeader')} placeholder="X-API-Key" className={fieldClass()} />
-                      </Field>
-                    )}
-                    <Field label="Value">
-                      <input type="password" {...register('upstreamAuthValue')} placeholder="••••••••" className={fieldClass()} />
-                    </Field>
-                  </>
-                )}
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button type="button" variant="outline" size="sm" onClick={handleTestConnection} disabled={testingConn || !watch('targetUrl')}>
-                    {testingConn ? <><Loader2 className="w-3.5 h-3.5 mr-2 animate-spin" />Testing...</> : 'Test Connection'}
-                  </Button>
-                  {connResult && (
-                    <span className={cn('text-xs', connResult.ok ? 'text-emerald-500' : 'text-red-500')}>
-                      {connResult.ok ? `Reachable (HTTP ${connResult.status})` : `Failed: ${connResult.error ?? connResult.status}`}
-                      {connResult.detectedTool === 'n8n' ? ' · n8n detected (chatInput + sessionId sent automatically)' : ''}
+            <Section
+              title="How will callers reach it?"
+              description="The public path is what clients call. ClusterGate forwards matching requests to the Target URL you set."
+            >
+              <Field label="Public Path" error={errors.publicPath?.message} required hint={wildcardEnabled ? 'Wildcard is on — all sub-paths are proxied.' : 'A short, URL-safe identifier.'}>
+                <div className="flex gap-2">
+                  <div className="relative flex-1 flex">
+                    <span
+                      className={cn(
+                        'inline-flex items-center px-3 rounded-l-md border border-r-0 border-input bg-muted text-muted-foreground text-sm font-mono select-none transition-all',
+                        prefixShake && 'animate-[shake_0.4s_ease-in-out] text-destructive border-destructive/50 bg-destructive/10'
+                      )}
+                    >
+                      /r/
                     </span>
-                  )}
-                </div>
-              </div>
-
-              <Field label="Webhook Secret" hint="Validate X-Hub-Signature-256 / X-Webhook-Signature (HMAC-SHA256) on incoming requests">
-                <div className="flex items-center gap-2">
-                  <input type="text" {...register('webhookSecret')} placeholder="Enter or generate a webhook secret" className={fieldClass()} />
+                    <input
+                      value={publicPath.startsWith('/r/') ? publicPath.slice(3).replace(/\/\*$/, '') : publicPath.replace(/\/\*$/, '')}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/^\/+/, '').replace(/\/\*$/, '')
+                        setValue('publicPath', `/r/${val}${wildcardEnabled ? '/*' : ''}`, { shouldValidate: true })
+                      }}
+                      onKeyDown={(e) => {
+                        const suffix = publicPath.startsWith('/r/') ? publicPath.slice(3) : publicPath
+                        if (e.key === 'Backspace' && suffix === '') {
+                          e.preventDefault()
+                          setPrefixShake(true)
+                          setTimeout(() => setPrefixShake(false), 400)
+                        }
+                      }}
+                      placeholder="my-service"
+                      className={cn(fieldClass(errors.publicPath), 'rounded-l-none', wildcardEnabled && 'rounded-r-none')}
+                    />
+                    {wildcardEnabled && (
+                      <span className="inline-flex items-center px-2.5 rounded-r-md border border-l-0 border-input bg-amber-500/10 text-amber-500 text-sm font-mono select-none">
+                        /*
+                      </span>
+                    )}
+                    {pathStatus === 'checking' && (
+                      <Loader2 className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 animate-spin text-muted-foreground', wildcardEnabled ? 'right-12' : 'right-3')} />
+                    )}
+                    {pathStatus === 'available' && (
+                      <CheckCircle2 className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-green-500', wildcardEnabled ? 'right-12' : 'right-3')} />
+                    )}
+                    {pathStatus === 'taken' && (
+                      <AlertCircle className={cn('absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-destructive', wildcardEnabled ? 'right-12' : 'right-3')} />
+                    )}
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
                     size="sm"
+                    title="Generate random path"
                     onClick={() => {
-                      const bytes = new Uint8Array(32)
-                      crypto.getRandomValues(bytes)
-                      const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
-                      setValue('webhookSecret', `whsec_${hex}`, { shouldDirty: true })
+                      const newPath = generateRandomPath()
+                      setValue('publicPath', wildcardEnabled ? newPath + '/*' : newPath)
                     }}
                   >
-                    Generate
+                    <Shuffle className="w-3.5 h-3.5" />
                   </Button>
                 </div>
+                {pathStatus === 'taken' && (
+                  <p className="text-xs text-destructive mt-1">
+                    This path is already used by &quot;{pathConflict}&quot;
+                  </p>
+                )}
               </Field>
 
-              <Field label="IP Allowlist" hint="One IP or CIDR per line. Leave empty to allow all.">
-                <Textarea {...register('ipAllowlist')} placeholder={"203.0.113.0/24\n198.51.100.42"} rows={3} />
-              </Field>
+              {(() => {
+                const t = (watch('targetUrl') || '').trim().replace(/\/\*$/, '').replace(/\/$/, '')
+                const pp = publicPath.replace(/\/\*$/, '')
+                if (!t || !pp || pp === '/r/') return null
+                return (
+                  <div className="rounded-md bg-muted/30 px-3 py-2 text-xs font-mono break-all">
+                    <span className="text-muted-foreground">Preview: </span>
+                    {wildcardEnabled ? (
+                      <><span className="text-foreground">{pp}/foo</span> → <span className="text-foreground">{t}/foo</span></>
+                    ) : (
+                      <><span className="text-foreground">{pp}</span> → <span className="text-foreground">{t}</span></>
+                    )}
+                  </div>
+                )
+              })()}
 
-              <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-                <div>
-                  <p className="text-sm font-medium">CORS Enabled</p>
-                  <p className="text-xs text-muted-foreground">Allow cross-origin requests</p>
+              <Field label="HTTP Methods" error={errors.methods?.message} required hint="Which methods this route accepts.">
+                <div className="flex gap-2 flex-wrap">
+                  {HTTP_METHODS.map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => toggleMethod(m)}
+                      className={cn(
+                        'px-3 py-1.5 rounded-md text-xs font-medium font-mono border transition-colors',
+                        methods?.includes(m)
+                          ? 'bg-primary/20 border-primary/40 text-primary'
+                          : 'bg-transparent border-border text-muted-foreground hover:border-primary/40 hover:text-primary/80'
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
                 </div>
-                <Switch
-                  checked={corsEnabled}
-                  onCheckedChange={(v) => setValue('corsEnabled', v)}
-                />
-              </div>
+                {errors.methods && <p className="text-xs text-destructive mt-1">{errors.methods.message}</p>}
+              </Field>
+            </Section>
+          </div>
+        )}
 
-              {corsEnabled && (
-                <Field label="CORS Origins" hint="One origin per line">
-                  <Textarea {...register('corsOrigins')} placeholder={"https://app.yourdomain.com\nhttps://admin.yourdomain.com"} rows={3} />
+        {/* ============================================================== */}
+        {/* Step 3: Scope — Org + Environment                               */}
+        {/* ============================================================== */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <Section
+              title="Where does it live?"
+              description="Owning organization (for access scoping) and which environment this is."
+            >
+              {orgs.length > 0 && (
+                <Field label="Organization" required={!isAdmin} hint={isAdmin ? 'Admins can leave this empty for global routes.' : 'Required.'}>
+                  <Select
+                    value={watch('organizationId') ?? '_none'}
+                    onValueChange={(v) => setValue('organizationId', v === '_none' ? null : v)}
+                  >
+                    <SelectTrigger>
+                      <div className="flex items-center gap-2">
+                        <Building2 className="w-3.5 h-3.5 text-muted-foreground" />
+                        <SelectValue placeholder="Select organization..." />
+                      </div>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {isAdmin && <SelectItem value="_none">No organization (global)</SelectItem>}
+                      {orgs.map((org) => (
+                        <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {!isAdmin && !watch('organizationId') && (
+                    <p className="text-xs text-destructive">Organization is required</p>
+                  )}
                 </Field>
               )}
+
+              <Field
+                label="Environment"
+                hint={watch('environment') === 'PRODUCTION'
+                  ? 'Production routes are delete-protected — you have to type the route name to delete them.'
+                  : 'Pick the deployment stage. Production routes get automatic delete protection.'}
+              >
+                <Select value={watch('environment')} onValueChange={(v) => setValue('environment', v as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="NONE">None</SelectItem>
+                    <SelectItem value="PRODUCTION">Production (protected)</SelectItem>
+                    <SelectItem value="STAGING">Staging</SelectItem>
+                    <SelectItem value="DEVELOPMENT">Development</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+            </Section>
+
+            <div className="rounded-md border border-border/40 bg-muted/20 p-3 text-xs text-muted-foreground">
+              <p>You can save now — everything else is optional. Continue to <span className="text-foreground font-medium">Advanced</span> only if you need to tune timeouts, auth, transforms or other proxy behaviour.</p>
             </div>
           </div>
         )}
 
-        {/* Step 5: Maintenance */}
-        {step === 5 && (
-          <div className="space-y-4">
-            <Field
-              label="Environment"
-              hint={watch('environment') === 'PRODUCTION'
-                ? 'Production routes require typing the route name to delete — guards against accidental deletion'
-                : "Label this route's deployment stage. Production routes are automatically delete-protected."}
-            >
-              <Select value={watch('environment')} onValueChange={(v) => setValue('environment', v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">None</SelectItem>
-                  <SelectItem value="PRODUCTION">Production (protected)</SelectItem>
-                  <SelectItem value="STAGING">Staging</SelectItem>
-                  <SelectItem value="DEVELOPMENT">Development</SelectItem>
-                </SelectContent>
-              </Select>
-            </Field>
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">Maintenance Mode</p>
-                <p className="text-xs text-muted-foreground">Return 503 to all incoming requests</p>
-              </div>
-              <Switch
-                checked={maintenanceMode}
-                onCheckedChange={(v) => setValue('maintenanceMode', v)}
-              />
-            </div>
-            {maintenanceMode && (
-              <Field label="Maintenance Message" hint="Shown to users when maintenance mode is active">
-                <Textarea
-                  {...register('maintenanceMessage')}
-                  placeholder="This service is temporarily unavailable. Please try again later."
-                  rows={3}
+        {/* ============================================================== */}
+        {/* Step 4: Advanced — collapsible accordion                        */}
+        {/* ============================================================== */}
+        {step === 4 && (
+          <div className="space-y-3">
+            <p className="text-xs text-muted-foreground">All advanced settings are optional. Click a section to expand it.</p>
+
+            <details className="rounded-lg border border-border/50 bg-card/40 group">
+              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
+                Behavior <span className="text-xs font-normal text-muted-foreground">Timeouts · retries · SSL · streaming · health check · rate limit · circuit breaker · load balancing</span>
+              </summary>
+              <div className="px-4 pb-4 space-y-4 pt-2">
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Timeout (ms)" error={errors.timeout?.message} hint="1000–120000">
+                    <input type="number" {...register('timeout')} className={fieldClass(errors.timeout)} />
+                  </Field>
+                  <Field label="Retry Count" hint="0–5">
+                    <input type="number" {...register('retryCount')} className={fieldClass()} />
+                  </Field>
+                  <Field label="Retry Delay (ms)" hint="100–10000">
+                    <input type="number" {...register('retryDelay')} className={fieldClass()} />
+                  </Field>
+                </div>
+                <Field label="Request Body Limit">
+                  <Select value={watch('requestBodyLimit')} onValueChange={(v) => setValue('requestBodyLimit', v)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['1mb', '5mb', '10mb', '25mb', '50mb', '100mb'].map((v) => (
+                        <SelectItem key={v} value={v}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <SwitchRow
+                  label="Strip Prefix"
+                  description="Forward to the Target URL root only — no path appended. Disabled while wildcard routing is on."
+                  checked={watch('stripPrefix') && !wildcardEnabled}
+                  onCheckedChange={(v) => !wildcardEnabled && setValue('stripPrefix', v)}
                 />
-              </Field>
-            )}
-            {!maintenanceMode && (
-              <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-                <div className="text-5xl mb-4">✅</div>
-                <p className="text-sm font-medium text-foreground">Service Active</p>
-                <p className="text-xs">Toggle maintenance mode if you need to temporarily disable this route</p>
+                <SwitchRow
+                  label="Verify SSL Certificate"
+                  description="Disable for self-signed or internal certificates."
+                  checked={watch('sslVerify')}
+                  onCheckedChange={(v) => setValue('sslVerify', v)}
+                />
+                <SwitchRow
+                  label="Stream Response"
+                  description="Pipe the response through unbuffered for SSE / token streaming."
+                  checked={watch('streamResponse') ?? false}
+                  onCheckedChange={(v) => setValue('streamResponse', v)}
+                />
+                <SwitchRow
+                  label="WebSocket Support"
+                  description="Enable WebSocket upgrade handling for this route."
+                  checked={watch('wsEnabled') ?? false}
+                  onCheckedChange={(v) => setValue('wsEnabled', v)}
+                />
+                <SwitchRow
+                  label="Circuit Breaker"
+                  description="Stop forwarding after consecutive failures."
+                  checked={circuitBreakerEnabled}
+                  onCheckedChange={(v) => setValue('circuitBreakerEnabled', v)}
+                />
+                {circuitBreakerEnabled && (
+                  <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
+                    <Field label="Failure Threshold">
+                      <input type="number" {...register('cbFailureThreshold')} className={fieldClass()} />
+                    </Field>
+                    <Field label="Recovery Timeout (ms)">
+                      <input type="number" {...register('cbRecoveryTimeout')} className={fieldClass()} />
+                    </Field>
+                  </div>
+                )}
+                <Field label="Load Balancing Strategy" hint="How to distribute traffic across multiple targets (configured separately)">
+                  <Select value={watch('lbStrategy')} onValueChange={(v) => setValue('lbStrategy', v as any)}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ROUND_ROBIN">Round Robin</SelectItem>
+                      <SelectItem value="WEIGHTED">Weighted</SelectItem>
+                      <SelectItem value="FAILOVER">Failover</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+                <div className="rounded-md border border-border/50 p-3 space-y-3">
+                  <p className="text-sm font-medium">Health check</p>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <Field label="Interval">
+                      <Select value={String(watch('healthCheckInterval'))} onValueChange={(v) => setValue('healthCheckInterval', Number(v))}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="5">Every 5 minutes</SelectItem>
+                          <SelectItem value="15">Every 15 minutes</SelectItem>
+                          <SelectItem value="60">Every hour</SelectItem>
+                          <SelectItem value="720">Every 12 hours</SelectItem>
+                          <SelectItem value="1440">Every 24 hours</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Method">
+                      <Select value={watch('healthCheckMethod')} onValueChange={(v) => setValue('healthCheckMethod', v as any)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="HEAD">HEAD</SelectItem>
+                          <SelectItem value="GET">GET</SelectItem>
+                          <SelectItem value="POST">POST</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Path">
+                      <input {...register('healthCheckPath')} placeholder="/health" className={fieldClass()} />
+                    </Field>
+                  </div>
+                  {watch('healthCheckMethod') === 'POST' && (
+                    <Field label="Body (JSON)">
+                      <Textarea {...register('healthCheckBody')} placeholder='{"chatInput":"ping","sessionId":"healthcheck"}' rows={2} className="font-mono text-sm" />
+                    </Field>
+                  )}
+                </div>
+                <SwitchRow
+                  label="Rate limiting"
+                  description="Limit requests per client IP."
+                  checked={rateLimitEnabled}
+                  onCheckedChange={(v) => setValue('rateLimitEnabled', v)}
+                />
+                {rateLimitEnabled && (
+                  <div className="grid grid-cols-2 gap-4 pl-3 border-l-2 border-primary/30">
+                    <Field label="Max Requests">
+                      <input type="number" {...register('rateLimitMax')} className={fieldClass()} />
+                    </Field>
+                    <Field label="Window (seconds)">
+                      <input type="number" {...register('rateLimitWindowSeconds')} className={fieldClass()} />
+                    </Field>
+                  </div>
+                )}
               </div>
-            )}
+            </details>
+
+            <details className="rounded-lg border border-border/50 bg-card/40 group">
+              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
+                Security <span className="text-xs font-normal text-muted-foreground">Gateway auth · upstream auth · webhook signature · IP allowlist · CORS</span>
+              </summary>
+              <div className="px-4 pb-4 space-y-4 pt-2">
+                <SwitchRow
+                  label="Require gateway authentication"
+                  description="Reject unauthenticated requests with 401."
+                  checked={requireAuth}
+                  onCheckedChange={(v) => setValue('requireAuth', v)}
+                />
+                {requireAuth && (
+                  <div className="space-y-3 pl-3 border-l-2 border-primary/30">
+                    <Field label="Auth Type">
+                      <Select value={authType} onValueChange={(v) => setValue('authType', v as any)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="API_KEY">API Key</SelectItem>
+                          <SelectItem value="BASIC">Basic Auth</SelectItem>
+                          <SelectItem value="BEARER">Bearer Token</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    {authType === 'API_KEY' ? (
+                      <p className="text-xs text-muted-foreground">
+                        Keys are managed in the <span className="font-medium text-foreground">API Keys</span> tab after saving. Clients send the <code className="text-foreground">X-API-Key</code> header.
+                      </p>
+                    ) : (
+                      <Field label="Auth Value">
+                        <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
+                      </Field>
+                    )}
+                  </div>
+                )}
+
+                <div className="rounded-md border border-border/50 p-3 space-y-3">
+                  <p className="text-sm font-medium">Upstream authentication</p>
+                  <p className="text-xs text-muted-foreground">Credentials ClusterGate sends to the target (e.g. a key n8n requires).</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <Field label="Target Type">
+                      <Select value={watch('targetType')} onValueChange={(v) => setValue('targetType', v as any)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GENERIC">Generic</SelectItem>
+                          <SelectItem value="N8N">n8n</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                    <Field label="Auth Type">
+                      <Select value={upstreamAuthType} onValueChange={(v) => setValue('upstreamAuthType', v as any)}>
+                        <SelectTrigger><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="NONE">None</SelectItem>
+                          <SelectItem value="API_KEY">API Key (header)</SelectItem>
+                          <SelectItem value="BEARER">Bearer Token</SelectItem>
+                          <SelectItem value="BASIC">Basic (Base64)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </Field>
+                  </div>
+                  {upstreamAuthType !== 'NONE' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-3 border-l-2 border-primary/30">
+                      {upstreamAuthType === 'API_KEY' && (
+                        <Field label="Header Name">
+                          <input {...register('upstreamAuthHeader')} placeholder="X-API-Key" className={fieldClass()} />
+                        </Field>
+                      )}
+                      <Field label="Value">
+                        <input type="password" {...register('upstreamAuthValue')} placeholder="••••••••" className={fieldClass()} />
+                      </Field>
+                    </div>
+                  )}
+                </div>
+
+                <Field label="Webhook Secret" hint="HMAC-SHA256 — validate X-Hub-Signature-256 / X-Webhook-Signature on incoming requests.">
+                  <div className="flex items-center gap-2">
+                    <input type="text" {...register('webhookSecret')} placeholder="Enter or generate" className={fieldClass()} />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const bytes = new Uint8Array(32)
+                        crypto.getRandomValues(bytes)
+                        const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+                        setValue('webhookSecret', `whsec_${hex}`, { shouldDirty: true })
+                      }}
+                    >
+                      Generate
+                    </Button>
+                  </div>
+                </Field>
+
+                <Field label="IP Allowlist" hint="One IP or CIDR per line. Leave empty to allow all.">
+                  <Textarea {...register('ipAllowlist')} placeholder={"203.0.113.0/24\n198.51.100.42"} rows={3} />
+                </Field>
+
+                <SwitchRow
+                  label="CORS Enabled"
+                  description="Allow cross-origin requests from the listed origins."
+                  checked={corsEnabled}
+                  onCheckedChange={(v) => setValue('corsEnabled', v)}
+                />
+                {corsEnabled && (
+                  <Field label="CORS Origins" hint="One origin per line">
+                    <Textarea {...register('corsOrigins')} placeholder={"https://app.yourdomain.com\nhttps://admin.yourdomain.com"} rows={3} />
+                  </Field>
+                )}
+              </div>
+            </details>
+
+            <details className="rounded-lg border border-border/50 bg-card/40 group">
+              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
+                Headers &amp; rewrites <span className="text-xs font-normal text-muted-foreground">Add / remove headers · regex path rewrites</span>
+              </summary>
+              <div className="px-4 pb-4 space-y-4 pt-2">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-sm font-medium">Add headers</p>
+                    <Button type="button" variant="outline" size="sm" onClick={() => appendHeader({ key: '', value: '' })}>
+                      <Plus className="w-3 h-3 mr-1" /> Add
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {headerFields.map((field, i) => (
+                      <div key={field.id} className="flex gap-2">
+                        <input {...register(`addHeaders.${i}.key`)} placeholder="X-Custom-Header" className={cn(fieldClass(), 'flex-1')} />
+                        <input {...register(`addHeaders.${i}.value`)} placeholder="header-value" className={cn(fieldClass(), 'flex-1')} />
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeHeader(i)}>
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                    {headerFields.length === 0 && (
+                      <p className="text-xs text-muted-foreground py-2">No headers added</p>
+                    )}
+                  </div>
+                </div>
+                <Field label="Remove Headers" hint="Comma-separated header names to strip from requests">
+                  <input {...register('removeHeaders')} placeholder="X-Forwarded-For, X-Real-IP" className={fieldClass()} />
+                </Field>
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <p className="text-sm font-medium">Path Rewrites</p>
+                      <p className="text-xs text-muted-foreground">Regex-based, applied to the suffix after the public path.</p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={() => appendRewrite({ from: '', to: '' })}>
+                      <Plus className="w-3 h-3 mr-1" /> Add Rule
+                    </Button>
+                  </div>
+                  <div className="space-y-2">
+                    {rewriteFields.map((field, i) => (
+                      <div key={field.id} className="flex gap-2 items-center">
+                        <input {...register(`rewriteRules.${i}.from`)} placeholder="^/v1/(.*)" className={cn(fieldClass(), 'flex-1 font-mono')} />
+                        <span className="text-muted-foreground text-sm">→</span>
+                        <input {...register(`rewriteRules.${i}.to`)} placeholder="/api/$1" className={cn(fieldClass(), 'flex-1 font-mono')} />
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={() => removeRewrite(i)}>
+                          <Trash2 className="w-3.5 h-3.5 text-destructive" />
+                        </Button>
+                      </div>
+                    ))}
+                    {rewriteFields.length === 0 && (
+                      <p className="text-xs text-muted-foreground py-2">No rewrite rules</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </details>
+
+            <details className="rounded-lg border border-border/50 bg-card/40 group">
+              <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between hover:bg-muted/30 rounded-lg">
+                Maintenance <span className="text-xs font-normal text-muted-foreground">Take the route offline temporarily</span>
+              </summary>
+              <div className="px-4 pb-4 space-y-3 pt-2">
+                <SwitchRow
+                  label="Maintenance Mode"
+                  description="Return 503 to all incoming requests."
+                  checked={maintenanceMode}
+                  onCheckedChange={(v) => setValue('maintenanceMode', v)}
+                />
+                {maintenanceMode && (
+                  <Field label="Message" hint="Shown to users when maintenance mode is active">
+                    <Textarea
+                      {...register('maintenanceMessage')}
+                      placeholder="This service is temporarily unavailable. Please try again later."
+                      rows={3}
+                    />
+                  </Field>
+                )}
+              </div>
+            </details>
           </div>
         )}
       </div>
@@ -1038,6 +1061,50 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         </div>
       </div>
     </form>
+  )
+}
+
+function Section({
+  title,
+  description,
+  children,
+  className,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <section className={cn('rounded-lg border border-border/50 bg-card/40 p-4 space-y-4', className)}>
+      <header className="space-y-0.5">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      </header>
+      {children}
+    </section>
+  )
+}
+
+function SwitchRow({
+  label,
+  description,
+  checked,
+  onCheckedChange,
+}: {
+  label: string
+  description?: string
+  checked: boolean
+  onCheckedChange: (v: boolean) => void
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">{label}</p>
+        {description && <p className="text-xs text-muted-foreground">{description}</p>}
+      </div>
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+    </div>
   )
 }
 
