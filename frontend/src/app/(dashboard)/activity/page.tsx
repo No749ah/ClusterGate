@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { Search, Filter, RefreshCw, Download } from 'lucide-react'
 import { useLogs } from '@/hooks/useLogs'
 import { useRoutes } from '@/hooks/useRoutes'
@@ -9,17 +10,33 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { formatRelativeTime, formatDuration, getStatusColor } from '@/lib/utils'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { formatRelativeTime, formatDate, formatDuration, getStatusColor } from '@/lib/utils'
 import { RequestLog } from '@/types'
 import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
-import { usePageSize, PAGE_SIZE_OPTIONS } from '@/hooks/usePageSize'
+import { usePageSize } from '@/hooks/usePageSize'
+import { Pagination } from '@/components/ui/pagination'
 
 export default function LogsPage() {
   const queryClient = useQueryClient()
-  const [routeId, setRouteId] = useState<string>('')
-  const [method, setMethod] = useState<string>('')
-  const [statusType, setStatusType] = useState<string>('')
+  // Seed filters from the URL so dashboard tiles can deep-link
+  // (e.g. /activity?statusType=error from the Error Rate card).
+  const params = useSearchParams()
+  const [routeId, setRouteId] = useState<string>(params?.get('routeId') ?? '')
+  const [method, setMethod] = useState<string>(params?.get('method') ?? '')
+  const [statusType, setStatusType] = useState<string>(params?.get('statusType') ?? '')
+  // Apply later URL changes too (e.g. user navigates with a different filter
+  // while already on this page).
+  useEffect(() => {
+    const r = params?.get('routeId') ?? ''
+    const m = params?.get('method') ?? ''
+    const s = params?.get('statusType') ?? ''
+    if (r) setRouteId(r)
+    if (m) setMethod(m)
+    if (s) setStatusType(s)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params?.get('routeId'), params?.get('method'), params?.get('statusType')])
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = usePageSize('activity', 25)
   const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
@@ -165,91 +182,52 @@ export default function LogsPage() {
         </div>
 
         {/* Detail panel */}
-        {selectedLog && (
-          <div className="border-t border-border/50 p-4 bg-muted/10">
-            <div className="grid grid-cols-2 gap-4 text-xs">
+        <Pagination
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          totalPages={totalPages}
+          onPageChange={setPage}
+          onPageSizeChange={setPageSize}
+        />
+      </div>
+
+      {/* Request/Response detail — modal instead of inline below the table */}
+      <Dialog open={!!selectedLog} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <span className="font-mono">{selectedLog?.method}</span>
+              <span className="font-mono text-muted-foreground truncate">{selectedLog?.path}</span>
+              <span className={cn(
+                'ml-auto text-sm font-mono px-1.5 py-0.5 rounded',
+                selectedLog && selectedLog.responseStatus && selectedLog.responseStatus >= 400 ? 'text-red-500 bg-red-500/10' : 'text-green-500 bg-green-500/10'
+              )}>{selectedLog?.responseStatus ?? '—'}</span>
+            </DialogTitle>
+            <DialogDescription>
+              {selectedLog?.createdAt && `${formatDate(selectedLog.createdAt)} · ${formatDuration(selectedLog.duration)}${selectedLog.ip ? ` · ${selectedLog.ip}` : ''}`}
+            </DialogDescription>
+          </DialogHeader>
+          {selectedLog && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
               <div>
                 <p className="font-medium text-muted-foreground mb-2">Request</p>
-                <pre className="font-mono text-foreground whitespace-pre-wrap break-all max-h-32 overflow-auto">
-                  {JSON.stringify(
-                    { headers: selectedLog.requestHeaders, body: selectedLog.requestBody },
-                    null,
-                    2
-                  )}
+                <pre className="font-mono text-foreground whitespace-pre-wrap break-all max-h-96 overflow-auto rounded border border-border/40 p-2 bg-muted/20">
+                  {JSON.stringify({ headers: selectedLog.requestHeaders, body: selectedLog.requestBody }, null, 2)}
                 </pre>
               </div>
               <div>
                 <p className="font-medium text-muted-foreground mb-2">Response</p>
-                <pre className="font-mono text-foreground whitespace-pre-wrap break-all max-h-32 overflow-auto">
+                <pre className="font-mono text-foreground whitespace-pre-wrap break-all max-h-96 overflow-auto rounded border border-border/40 p-2 bg-muted/20">
                   {selectedLog.error
                     ? `Error: ${selectedLog.error}`
-                    : JSON.stringify(
-                        { status: selectedLog.responseStatus, body: selectedLog.responseBody?.slice(0, 1000) },
-                        null,
-                        2
-                      )}
+                    : JSON.stringify({ status: selectedLog.responseStatus, headers: selectedLog.responseHeaders, body: selectedLog.responseBody?.slice(0, 5000) }, null, 2)}
                 </pre>
               </div>
             </div>
-          </div>
-        )}
-
-        {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-border/50">
-          <div className="flex items-center gap-3">
-            <p className="text-xs text-muted-foreground">
-              {total > 0
-                ? `Showing ${((page - 1) * pageSize) + 1}–${Math.min(page * pageSize, total)} of ${total.toLocaleString()}`
-                : 'No results'}
-            </p>
-            <Select value={String(pageSize)} onValueChange={(v) => { setPageSize(Number(v)); setPage(1) }}>
-              <SelectTrigger className="w-20 h-7 text-xs">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PAGE_SIZE_OPTIONS.map((size) => (
-                  <SelectItem key={size} value={String(size)}>{size} / page</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 1} onClick={() => setPage(1)}>
-                First
-              </Button>
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === 1} onClick={() => setPage(p => p - 1)}>
-                Prev
-              </Button>
-              {(() => {
-                const pages: number[] = []
-                const maxVisible = 5
-                let start = Math.max(1, page - Math.floor(maxVisible / 2))
-                const end = Math.min(totalPages, start + maxVisible - 1)
-                if (end - start + 1 < maxVisible) start = Math.max(1, end - maxVisible + 1)
-                for (let i = start; i <= end; i++) pages.push(i)
-                return pages.map((p) => (
-                  <Button
-                    key={p}
-                    variant={p === page ? 'default' : 'outline'}
-                    size="sm"
-                    className="h-7 w-7 px-0 text-xs"
-                    onClick={() => setPage(p)}
-                  >
-                    {p}
-                  </Button>
-                ))
-              })()}
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === totalPages} onClick={() => setPage(p => p + 1)}>
-                Next
-              </Button>
-              <Button variant="outline" size="sm" className="h-7 px-2 text-xs" disabled={page === totalPages} onClick={() => setPage(totalPages)}>
-                Last
-              </Button>
-            </div>
           )}
-        </div>
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -188,7 +188,7 @@ export default function DashboardPage() {
           sparklineColor="#ef4444"
           isLoading={statsLoading}
           colorClass="text-red-500 bg-red-500/10"
-          href="/logs"
+          href="/activity"
         />
       </div>
     ),

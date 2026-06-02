@@ -26,4 +26,4 @@ export function usePageSize(key: string, defaultSize = 20): [number, (n: number)
   return [size, update]
 }
 
-export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
+export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100]
