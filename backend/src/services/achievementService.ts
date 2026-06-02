@@ -19,7 +19,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { key: 'websocket_master', title: 'Socket Wizard', description: 'Enable WebSocket on a route', icon: '🔌', rarity: 'rare' },
   { key: 'circuit_breaker', title: 'Safety First', description: 'Enable circuit breaker on a route', icon: '⚡', rarity: 'rare' },
   { key: 'api_key_master', title: 'Key Master', description: 'Generate an API key for a route', icon: '🔑', rarity: 'rare' },
-  { key: 'night_owl', title: 'Night Owl', description: 'Make a change between 2am and 5am', icon: '🦉', rarity: 'rare' },
+  { key: 'night_owl', title: 'Night Owl', description: 'Make a change between 02:00 and 05:00', icon: '🦉', rarity: 'rare' },
   { key: 'speed_demon', title: 'Speed Demon', description: 'Route with under 10ms avg response time', icon: '⚡', rarity: 'epic' },
   { key: 'zero_downtime_7d', title: 'Rock Solid', description: '7 days with zero downtime on all routes', icon: '🪨', rarity: 'epic' },
   { key: 'party_animal', title: 'Party Animal', description: 'Trigger party mode', icon: '🎉', rarity: 'rare' },
