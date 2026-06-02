@@ -6,6 +6,7 @@ import { usePathname } from 'next/navigation'
 import { Home, ArrowLeft, ArrowRight, Compass } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
+import { routeUrl } from '@/lib/urls'
 
 const MESSAGES = [
   'This page went on vacation.',
@@ -66,7 +67,7 @@ export default function NotFound() {
           .sort((a, b) => a.d - b.d)
           .slice(0, 3)
         const fromRoutes = candidates.map((c) => ({
-          href: `/routes/${c.r.slug || c.r.id}`,
+          href: routeUrl(c.r),
           label: c.r.name,
           hint: c.r.publicPath,
         }))

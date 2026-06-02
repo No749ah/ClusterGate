@@ -32,6 +32,7 @@ import { usePinnedRoutes } from '@/hooks/usePinnedRoutes'
 import { Pin } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { api } from '@/lib/api'
+import { routeUrl } from '@/lib/urls'
 
 const COLLAPSED_KEY = 'clustergate-sidebar-collapsed'
 
@@ -352,7 +353,7 @@ function PinnedSection({ collapsed }: { collapsed: boolean }) {
       {collapsed && <div className="mx-2 my-2 border-t border-sidebar-border" />}
       <div className="space-y-1">
         {visiblePinned.map((r) => {
-          const href = `/routes/${r.slug || r.id}`
+          const href = routeUrl(r)
           const active = pathname === href
           return (
             <Link

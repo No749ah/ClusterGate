@@ -30,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RequestLog, RouteVersion, RouteTarget, TransformRule, TransformPhase, TransformType, LBStrategy } from '@/types'
 import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard, cn } from '@/lib/utils'
+import { resolveRouteLookupKey, routeEdit } from '@/lib/urls'
 import { api } from '@/lib/api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
@@ -40,11 +41,23 @@ import { Switch } from '@/components/ui/switch'
 // Removed PROXY_BASE - using window.location.origin instead
 
 export default function RouteDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params)
+  const { id: pathId } = use(params)
   const [selectedLog, setSelectedLog] = useState<RequestLog | null>(null)
   const [diffVersion, setDiffVersion] = useState<RouteVersion | null>(null)
 
-  const { data: routeData, isLoading } = useRoute(id)
+  // Persist the active tab in the URL so refresh/share/back-button preserve it.
+  const searchParams = useSearchParams()
+  const pathname = usePathname()
+  // URLs can split the slug into <friendly>?id=<tail>; glue them back together
+  // for backend lookup. Falls back to the bare path when no tail is present.
+  const idQuery = searchParams.get('id')
+  const lookupKey = resolveRouteLookupKey(pathId, idQuery)
+
+  const { data: routeData, isLoading } = useRoute(lookupKey)
+  // For sub-resources we always use the resolved cuid from the fetched route
+  // so panel APIs hit /api/routes/<cuid>/... regardless of how the URL looks.
+  const routeCuid = routeData?.data?.id ?? lookupKey
+  const id = routeCuid
   const { data: statsData } = useRouteStats(id)
   const { data: uptimeData } = useRouteUptime(id)
   const { data: logsData } = useLogs({ routeId: id, pageSize: 20 })
@@ -56,9 +69,6 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   const duplicate = useDuplicateRoute()
   const deleteRoute = useDeleteRoute()
   const router = useRouter()
-  // Persist the active tab in the URL so refresh/share/back-button preserve it.
-  const searchParams = useSearchParams()
-  const pathname = usePathname()
   const VALID_TABS = ['overview', 'test', 'logs', 'api-keys', 'targets', 'transforms', 'history']
   const tabFromUrl = searchParams.get('tab') ?? 'overview'
   const activeTab = VALID_TABS.includes(tabFromUrl) ? tabFromUrl : 'overview'
@@ -257,7 +267,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
             </DropdownMenuContent>
           </DropdownMenu>
           <Button size="sm" asChild>
-            <Link href={`/routes/${id}/edit`}>
+            <Link href={routeData?.data ? routeEdit(routeData.data as any) : `/routes/${pathId}/edit`}>
               <Edit className="w-3.5 h-3.5 mr-2" />
               Edit
             </Link>

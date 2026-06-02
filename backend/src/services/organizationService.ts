@@ -27,9 +27,18 @@ export async function getOrganizations(userId?: string) {
   })
 }
 
-export async function getOrganizationById(id: string) {
-  const org = await prisma.organization.findUnique({
-    where: { id },
+/** Resolve an org cuid from either a cuid or a slug. */
+export async function resolveOrganizationId(idOrSlug: string): Promise<string | null> {
+  const hit = await prisma.organization.findFirst({
+    where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
+    select: { id: true },
+  })
+  return hit?.id ?? null
+}
+
+export async function getOrganizationById(idOrSlug: string) {
+  const org = await prisma.organization.findFirst({
+    where: { OR: [{ id: idOrSlug }, { slug: idOrSlug }] },
     include: {
       memberships: {
         include: { user: { select: { id: true, name: true, email: true, role: true } } },

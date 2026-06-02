@@ -8,6 +8,7 @@ import { useCreateRoute } from '@/hooks/useRoutes'
 import { RouteFormData } from '@/types'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
+import { routeUrl } from '@/lib/urls'
 
 export default function NewRoutePage() {
   const router = useRouter()
@@ -15,7 +16,7 @@ export default function NewRoutePage() {
 
   const handleSubmit = async (data: RouteFormData) => {
     const route = await createRoute.mutateAsync(data)
-    router.push(`/routes/${(route.data as any).slug || route.data.id}`)
+    router.push(routeUrl(route.data as any))
   }
 
   return (

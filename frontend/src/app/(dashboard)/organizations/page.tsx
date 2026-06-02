@@ -11,6 +11,7 @@ import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Organization } from '@/types'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { orgUrl } from '@/lib/urls'
 
 export default function OrganizationsPage() {
   const router = useRouter()
@@ -189,11 +190,11 @@ export default function OrganizationsPage() {
               key={org.id}
               role="link"
               tabIndex={0}
-              onClick={() => router.push(`/organizations/${org.id}`)}
+              onClick={() => router.push(orgUrl(org))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  router.push(`/organizations/${org.id}`)
+                  router.push(orgUrl(org))
                 }
               }}
               className="rounded-lg border border-border bg-card p-5 hover:border-primary/30 hover:bg-muted/20 transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary/40"
@@ -201,7 +202,7 @@ export default function OrganizationsPage() {
               <div className="flex items-start justify-between mb-3">
                 <div>
                   <Link
-                    href={`/organizations/${org.id}`}
+                    href={orgUrl(org)}
                     onClick={(e) => e.stopPropagation()}
                     className="text-base font-semibold hover:text-primary transition-colors"
                   >

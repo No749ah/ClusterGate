@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { Search, Route, Users, Settings, ScrollText, Shield, LayoutDashboard, BarChart3, HardDrive, Sparkles, Cat, Binary, User, Clock } from 'lucide-react'
 import { useRecentRoutes } from '@/hooks/useRecentRoutes'
+import { routeUrl } from '@/lib/urls'
 import { Dialog, DialogContent } from '@/components/ui/dialog'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/useAuth'
@@ -182,7 +183,7 @@ export function CommandPalette() {
         label: r.name,
         description: r.publicPath,
         icon: Clock,
-        href: `/routes/${r.slug || r.id}`,
+        href: routeUrl(r),
       }))
     : []
 
@@ -196,7 +197,7 @@ export function CommandPalette() {
       label: r.name,
       description: r.publicPath,
       icon: Route,
-      href: `/routes/${r.slug || r.id}`,
+      href: routeUrl(r),
     })),
   ]
 
@@ -343,7 +344,7 @@ export function CommandPalette() {
                     return (
                       <button
                         key={item.id}
-                        onClick={() => navigate(`/routes/${item.slug || item.id}`)}
+                        onClick={() => navigate(routeUrl(item))}
                         onMouseEnter={() => setActiveIndex(idx)}
                         className={cn(
                           'flex items-center gap-3 w-full px-3 py-2.5 rounded-md text-sm transition-colors',
