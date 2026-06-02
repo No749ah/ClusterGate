@@ -320,6 +320,8 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
     const { rateLimitWindowSeconds, ...rest } = data
     const formData: RouteFormData = {
       ...rest,
+      // Production routes are automatically delete-protected (no separate toggle)
+      protected: rest.environment === 'PRODUCTION',
       rateLimitWindow: rateLimitWindowSeconds * 1000,
       addHeaders: Object.fromEntries(data.addHeaders.map(({ key, value }) => [key, value])),
       removeHeaders: data.removeHeaders
@@ -524,17 +526,6 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                 ))}
               </div>
               {errors.methods && <p className="text-xs text-destructive mt-1">{errors.methods.message}</p>}
-            </Field>
-            <Field label="Environment" hint="Label this route's deployment stage">
-              <Select value={watch('environment')} onValueChange={(v) => setValue('environment', v as any)}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="NONE">None</SelectItem>
-                  <SelectItem value="PRODUCTION">Production</SelectItem>
-                  <SelectItem value="STAGING">Staging</SelectItem>
-                  <SelectItem value="DEVELOPMENT">Development</SelectItem>
-                </SelectContent>
-              </Select>
             </Field>
 
             <Field label="Tags">
@@ -932,16 +923,22 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         {/* Step 5: Maintenance */}
         {step === 5 && (
           <div className="space-y-4">
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
-              <div>
-                <p className="text-sm font-medium">Protected (production)</p>
-                <p className="text-xs text-muted-foreground">Require typing the route name to delete — guards against accidental deletion</p>
-              </div>
-              <Switch
-                checked={watch('protected')}
-                onCheckedChange={(v) => setValue('protected', v)}
-              />
-            </div>
+            <Field
+              label="Environment"
+              hint={watch('environment') === 'PRODUCTION'
+                ? 'Production routes require typing the route name to delete — guards against accidental deletion'
+                : "Label this route's deployment stage. Production routes are automatically delete-protected."}
+            >
+              <Select value={watch('environment')} onValueChange={(v) => setValue('environment', v as any)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NONE">None</SelectItem>
+                  <SelectItem value="PRODUCTION">Production (protected)</SelectItem>
+                  <SelectItem value="STAGING">Staging</SelectItem>
+                  <SelectItem value="DEVELOPMENT">Development</SelectItem>
+                </SelectContent>
+              </Select>
+            </Field>
             <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
               <div>
                 <p className="text-sm font-medium">Maintenance Mode</p>
