@@ -525,7 +525,7 @@ export default function AccountPage() {
                       const res = await api.auth.twoFactorEnable(twoFactorCode)
                       setRecoveryCodes(res.data.recoveryCodes)
                       setTwoFactorStep('recovery')
-                      toast.success('Two-factor authentication enabled!')
+                      toast.success('Two-factor authentication enabled')
                     } catch (err: any) {
                       toast.error(err.message || 'Invalid verification code')
                       setTwoFactorCode('')

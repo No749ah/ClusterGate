@@ -26,7 +26,7 @@ export function StatsCard({
   icon: Icon,
   trend,
   sparklineData,
-  sparklineColor = '#6366f1',
+  sparklineColor = 'hsl(var(--primary))',
   isLoading,
   colorClass = 'text-primary bg-primary/10',
   href,

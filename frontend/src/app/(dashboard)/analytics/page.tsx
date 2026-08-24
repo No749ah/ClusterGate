@@ -199,28 +199,25 @@ export default function AnalyticsPage() {
           value={overview?.totalRequests.toLocaleString()}
           icon={Activity}
           isLoading={overviewLoading}
-          colorClass="text-blue-500 bg-blue-500/10"
         />
         <OverviewCard
           title="Avg Latency"
           value={overview ? formatMs(overview.avgResponseTime) : undefined}
           icon={Clock}
           isLoading={overviewLoading}
-          colorClass="text-purple-500 bg-purple-500/10"
         />
         <OverviewCard
           title="Error Rate"
           value={overview ? `${overview.errorRate}%` : undefined}
           icon={AlertTriangle}
           isLoading={overviewLoading}
-          colorClass="text-amber-500 bg-amber-500/10"
+          colorClass="text-destructive bg-destructive/10"
         />
         <OverviewCard
           title="P95 Latency"
           value={overview ? formatMs(overview.p95) : undefined}
           icon={Gauge}
           isLoading={overviewLoading}
-          colorClass="text-red-500 bg-red-500/10"
         />
       </div>
 
@@ -584,7 +581,7 @@ function OverviewCard({
   value?: string
   icon: typeof Activity
   isLoading: boolean
-  colorClass: string
+  colorClass?: string
 }) {
   return (
     <Card>
@@ -600,7 +597,7 @@ function OverviewCard({
               </p>
             )}
           </div>
-          <div className={cn('p-3 rounded-lg', colorClass)}>
+          <div className={cn('p-3 rounded-lg', colorClass ?? 'text-primary bg-primary/10')}>
             <Icon className="w-5 h-5" />
           </div>
         </div>

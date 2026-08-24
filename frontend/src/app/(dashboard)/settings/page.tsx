@@ -25,7 +25,6 @@ import {
 import { formatDate } from '@/lib/utils'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Confetti } from '@/components/fun/Confetti'
 import { useRouter } from 'next/navigation'
 
 function formatMB(mb: number): string {
@@ -202,7 +201,7 @@ export default function SettingsPage() {
       const result = await api.system.updateCheck()
       setUpdateInfo(result.data)
       if (result.data.updateAvailable) {
-        toast.info('A new version is available!')
+        toast.info('A new version is available')
         // Fetch release notes for the new version
         const latestTag = result.data.backend.latestTag || result.data.frontend.latestTag
         if (latestTag) {
@@ -878,8 +877,7 @@ export default function SettingsPage() {
 
       {/* Request Sanitizer — moved to dedicated /sanitizer page */}
 
-      {/* Update Success Dialog */}
-      {showUpdateSuccess && <Confetti />}
+      {/* Update success dialog */}
       <Dialog open={showUpdateSuccess} onOpenChange={setShowUpdateSuccess}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -888,7 +886,7 @@ export default function SettingsPage() {
                 <CheckCircle2 className="w-8 h-8 text-green-500" />
               </div>
             </div>
-            <DialogTitle className="text-center text-xl">Update Complete!</DialogTitle>
+            <DialogTitle className="text-center text-xl">Update complete</DialogTitle>
             <DialogDescription className="text-center">
               ClusterGate has been updated to{' '}
               <span className="font-semibold text-foreground">

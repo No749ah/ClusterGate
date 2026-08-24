@@ -100,7 +100,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
         password: data.password,
       })
       await queryClient.invalidateQueries({ queryKey: ['auth'] })
-      toast.success('Account created! Welcome to ClusterGate.')
+      toast.success('Account created')
       router.push('/dashboard')
     } catch (err: any) {
       toast.error(err.message || 'Failed to create account')
@@ -109,7 +109,6 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
-      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-background to-background pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10">
         <div className="text-center mb-8">
@@ -122,7 +121,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
           </p>
         </div>
 
-        <div className="bg-card border border-border/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
+        <div className="bg-card border border-border rounded-xl p-8 shadow-sm">
           {loading ? (
             <div className="flex flex-col items-center py-8">
               <Loader2 className="w-8 h-8 animate-spin text-primary mb-4" />
