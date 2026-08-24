@@ -2,23 +2,19 @@ import { Router } from 'express'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as logService from '../services/logService'
+import { redactLogsForViewer } from '../services/logService'
+import { getUserOrgIds } from '../services/orgAccessService'
 import { config } from '../config'
 import { safePageSize } from '../lib/security'
+import { Request } from 'express'
 
 const router = Router()
 
-// Request/response bodies and headers can contain sensitive payload data.
-// VIEWER is a read-only monitoring role, so it sees log metadata but not the
-// captured content; ADMIN/OPERATOR get the full detail.
-function redactForViewer<T extends Record<string, any>>(role: Role, entries: T[]): T[] {
-  if (role !== Role.VIEWER) return entries
-  return entries.map((e) => ({
-    ...e,
-    requestBody: e.requestBody ? '[REDACTED]' : e.requestBody,
-    responseBody: e.responseBody ? '[REDACTED]' : e.responseBody,
-    requestHeaders: e.requestHeaders ? { redacted: true } : e.requestHeaders,
-    responseHeaders: e.responseHeaders ? { redacted: true } : e.responseHeaders,
-  }))
+// Non-admins only see logs of routes in their own organizations. An empty
+// membership list matches nothing (routes without an org are admin-only).
+async function orgScopeFor(req: Request): Promise<string[] | undefined> {
+  if (req.user!.role === 'ADMIN') return undefined
+  return getUserOrgIds(req.user!.userId)
 }
 
 /**
@@ -124,11 +120,12 @@ router.get('/', authenticate, async (req, res, next) => {
         dateFrom: parsedDateFrom,
         dateTo: parsedDateTo,
         search: search ? String(search) : undefined,
+        organizationIds: await orgScopeFor(req),
       },
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )
 
-    result.data = redactForViewer(req.user!.role, result.data as any[])
+    result.data = redactLogsForViewer(req.user!.role, result.data as any[])
     res.json({ success: true, ...result })
   } catch (err) {
     next(err)
@@ -174,9 +171,10 @@ router.get('/errors', authenticate, async (req, res, next) => {
     const { limit = '10', routeId } = req.query
     const errors = await logService.getRecentErrors(
       routeId as string,
-      Math.min(parseInt(String(limit)) || 10, 100)
+      Math.min(parseInt(String(limit)) || 10, 100),
+      await orgScopeFor(req)
     )
-    res.json({ success: true, data: redactForViewer(req.user!.role, errors as any[]) })
+    res.json({ success: true, data: redactLogsForViewer(req.user!.role, errors as any[]) })
   } catch (err) {
     next(err)
   }
@@ -228,7 +226,8 @@ router.get('/daily', authenticate, async (req, res, next) => {
     const parsedDays = Math.min(Math.max(parseInt(String(days)) || 7, 1), 365)
     const daily = await logService.getDailyRequestCounts(
       routeId as string,
-      parsedDays
+      parsedDays,
+      await orgScopeFor(req)
     )
     res.json({ success: true, data: daily })
   } catch (err) {

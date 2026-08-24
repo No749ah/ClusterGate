@@ -127,7 +127,7 @@ router.post('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =
   try {
     const schema = z.object({
       email: z.string().email(),
-      password: z.string().min(8),
+      password: z.string().min(12),
       name: z.string().min(1).max(100),
       role: z.nativeEnum(Role).default(Role.VIEWER),
     })
@@ -445,7 +445,7 @@ router.post('/:id/disable-2fa', authenticate, authorize([Role.ADMIN]), async (re
 
 router.post('/:id/reset-password', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
-    const schema = z.object({ newPassword: z.string().min(8) })
+    const schema = z.object({ newPassword: z.string().min(12) })
     const { newPassword } = schema.parse(req.body)
     await userService.adminResetPassword(req.params.id, newPassword)
     res.json({ success: true, message: 'Password reset successfully' })

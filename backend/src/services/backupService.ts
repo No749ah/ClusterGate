@@ -231,8 +231,37 @@ export async function enforceRetentionPolicy(maxBackups: number): Promise<number
   return deleted
 }
 
+// Credential material that must never leave the system in a downloadable
+// export. Restores run from the backup stored in the database (full data),
+// so redacting the download loses nothing.
+const DOWNLOAD_REDACTED_FIELDS: Record<string, string[]> = {
+  user: ['passwordHash', 'twoFactorSecret', 'recoveryCodes'],
+  apiKey: ['keyHash'],
+}
+
+function sanitizeBackupForDownload(data: Record<string, any[]>): Record<string, any[]> {
+  const sanitized: Record<string, any[]> = { ...data }
+  for (const [model, fields] of Object.entries(DOWNLOAD_REDACTED_FIELDS)) {
+    const records = sanitized[model]
+    if (!Array.isArray(records)) continue
+    sanitized[model] = records.map((record) => {
+      const cleaned: any = { ...record }
+      for (const field of fields) {
+        if (cleaned[field] != null) {
+          cleaned[field] = Array.isArray(cleaned[field]) ? [] : '[REDACTED]'
+        }
+      }
+      return cleaned
+    })
+  }
+  return sanitized
+}
+
 /**
- * Returns backup data as a JSON string for download.
+ * Returns backup data as a JSON string for download. Credential material
+ * (password hashes, 2FA secrets, recovery codes, API-key hashes) is redacted;
+ * restore always uses the full copy stored in the database, so the download
+ * export doesn't need it.
  */
 export async function downloadBackup(filename: string): Promise<string> {
   if (!filename || !/^[a-zA-Z0-9_\-]+\.json$/.test(filename)) {
@@ -242,5 +271,6 @@ export async function downloadBackup(filename: string): Promise<string> {
   const backup = await prisma.backup.findUnique({ where: { filename } })
   if (!backup) throw AppError.notFound('Backup')
 
-  return JSON.stringify(backup.data, null, 2)
+  const sanitized = sanitizeBackupForDownload(backup.data as Record<string, any[]>)
+  return JSON.stringify(sanitized, null, 2)
 }

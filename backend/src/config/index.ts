@@ -5,6 +5,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(3001),
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  // Dedicated key for encrypting route secrets at rest (AES-256-GCM). Kept
+  // separate from JWT_SECRET so signing-key rotation doesn't destroy stored
+  // secrets. Required in production; dev falls back to JWT_SECRET (see
+  // lib/crypto.ts).
+  ENCRYPTION_KEY: z.string().min(32, 'ENCRYPTION_KEY must be at least 32 characters').optional(),
   JWT_EXPIRES_IN: z.string().default('7d'),
   ALLOWED_ORIGINS: z.string().default('http://localhost:3000'),
   // Express 'trust proxy' setting. Number = number of trusted proxy hops,
@@ -24,6 +29,9 @@ const envSchema = z.object({
   AUTO_MIGRATE: z.coerce.boolean().default(true),
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_DIR: z.string().default('./logs'),
+  // Serve the interactive API docs (/api/docs + /api/docs.json). Both are
+  // behind authentication; unset means on in dev and off in production.
+  SWAGGER_ENABLED: z.string().optional(),
   METRICS_ENABLED: z.coerce.boolean().default(true),
   METRICS_SECRET: z.string().optional(),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().default(60000),
@@ -49,12 +57,25 @@ if (!parsed.success) {
   process.exit(1)
 }
 
+// Refuse to start in production without a dedicated encryption key — silently
+// deriving it from JWT_SECRET breaks key separation and ties stored secrets to
+// the JWT signing key's lifecycle.
+if (parsed.data.NODE_ENV === 'production' && !parsed.data.ENCRYPTION_KEY) {
+  console.error('❌ ENCRYPTION_KEY is required in production (min. 32 characters).')
+  console.error('   Generate one with: openssl rand -hex 32')
+  process.exit(1)
+}
+
 export const config = {
   ...parsed.data,
   isDev: parsed.data.NODE_ENV === 'development',
   isProd: parsed.data.NODE_ENV === 'production',
   allowedOrigins: parsed.data.ALLOWED_ORIGINS.split(',').map((s) => s.trim()),
   trustProxy: parseTrustProxy(parsed.data.TRUST_PROXY),
+  swaggerEnabled:
+    parsed.data.SWAGGER_ENABLED !== undefined
+      ? ['true', '1', 'yes'].includes(parsed.data.SWAGGER_ENABLED.toLowerCase())
+      : parsed.data.NODE_ENV !== 'production',
 }
 
 function parseTrustProxy(value: string): boolean | number {

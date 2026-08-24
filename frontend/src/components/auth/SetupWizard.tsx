@@ -21,7 +21,7 @@ const setupSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   email: z.string().email('Please enter a valid email address'),
   password: z.string()
-    .min(8, 'Must be at least 8 characters')
+    .min(12, 'Must be at least 12 characters')
     .regex(/[A-Z]/, 'Must contain an uppercase letter')
     .regex(/[a-z]/, 'Must contain a lowercase letter')
     .regex(/[0-9]/, 'Must contain a number')
@@ -36,7 +36,7 @@ type SetupForm = z.infer<typeof setupSchema>
 
 function getPasswordStrength(password: string) {
   const checks = [
-    password.length >= 8,
+    password.length >= 12,
     /[A-Z]/.test(password),
     /[a-z]/.test(password),
     /[0-9]/.test(password),

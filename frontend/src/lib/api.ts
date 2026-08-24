@@ -224,7 +224,7 @@ class ApiClient {
       })
     },
 
-    testConnection: (data: { targetUrl: string; method?: string; sslVerify?: boolean; targetType?: string; upstreamAuthType?: string; upstreamAuthValue?: string; upstreamAuthHeader?: string; body?: unknown }) =>
+    testConnection: (data: { targetUrl: string; method?: string; sslVerify?: boolean; targetType?: string; upstreamAuthType?: string; upstreamAuthValue?: string | { username: string; password: string }; upstreamAuthHeader?: string; body?: unknown }) =>
       this.post<ApiResponse<{ ok: boolean; status?: number; duration?: number; error?: string; detectedTool?: string; hint?: string }>>('/api/routes/test-connection', data),
 
     getApiKeyPolicy: () =>

@@ -16,7 +16,8 @@ import http from 'http'
 import { isN8nTarget } from '../lib/targetDetect'
 import { achievementService } from '../services/achievementService'
 import { changeRequestService } from '../services/changeRequestService'
-import { getUserOrgIds, canManageRoute, canManageOrgRoutes, canDeleteRoute, canDeleteOrgRoutes } from '../services/orgAccessService'
+import { getUserOrgIds, canViewRouteById, canManageRoute, canManageOrgRoutes, canDeleteRoute, canDeleteOrgRoutes } from '../services/orgAccessService'
+import { redactLogsForViewer } from '../services/logService'
 
 const router = Router()
 
@@ -33,6 +34,43 @@ router.param('id', async (req, _res, next, value) => {
   } catch { /* fall through — handler will produce its own 404 */ }
   next()
 })
+
+/**
+ * Org-scoped read access for route detail endpoints. Non-admins may only read
+ * routes that belong to an organization they are a member of; routes without
+ * an organization are admin-only. Denials return 404 (not 403) so route
+ * existence is never leaked across tenants.
+ */
+async function requireRouteView(req: Request, _res: Response, next: NextFunction) {
+  try {
+    const allowed = await canViewRouteById(req.user!.userId, req.user!.role, req.params.id)
+    if (!allowed) throw AppError.notFound('Route')
+    next()
+  } catch (err) {
+    next(err)
+  }
+}
+
+// BASIC auth credentials can be sent as separate username/password fields —
+// the server encodes them to base64(user:pass) before (encrypted) storage.
+// A plain string stays accepted for backward compatibility (already-encoded
+// base64 values and older clients).
+const basicCredentialsSchema = z.object({
+  username: z.string().min(1, 'Username is required'),
+  password: z.string(),
+})
+const authValueInputSchema = z.union([z.string(), basicCredentialsSchema]).optional()
+
+/** Server-side encoding of {username, password} inputs to base64(user:pass). */
+function encodeBasicAuthInputs<T extends Record<string, unknown>>(data: T): T {
+  for (const f of ['authValue', 'upstreamAuthValue'] as const) {
+    const v = data[f] as unknown
+    if (v && typeof v === 'object' && 'username' in (v as any)) {
+      ;(data as any)[f] = Buffer.from(`${(v as any).username}:${(v as any).password}`).toString('base64')
+    }
+  }
+  return data
+}
 
 // Route schema
 const routeBodySchema = z.object({
@@ -60,9 +98,9 @@ const routeBodySchema = z.object({
   ipAllowlist: z.array(z.string()).default([]),
   requireAuth: z.boolean().default(false),
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
-  authValue: z.string().optional(),
+  authValue: authValueInputSchema,
   upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
-  upstreamAuthValue: z.string().optional(),
+  upstreamAuthValue: authValueInputSchema,
   upstreamAuthHeader: z.string().default('X-API-Key'),
   targetType: z.enum(['GENERIC', 'N8N']).default('GENERIC'),
   environment: z.enum(['NONE', 'PRODUCTION', 'STAGING', 'DEVELOPMENT']).default('NONE'),
@@ -329,11 +367,11 @@ router.post('/test-connection', authenticate, authorize([Role.ADMIN, Role.OPERAT
       sslVerify: z.boolean().default(true),
       targetType: z.enum(['GENERIC', 'N8N']).optional(),
       upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
-      upstreamAuthValue: z.string().optional(),
+      upstreamAuthValue: authValueInputSchema,
       upstreamAuthHeader: z.string().default('X-API-Key'),
       body: z.any().optional(),
     })
-    const cfg = schema.parse(req.body)
+    const cfg = encodeBasicAuthInputs(schema.parse(req.body)) as Omit<z.infer<typeof schema>, 'upstreamAuthValue'> & { upstreamAuthValue?: string }
 
     try {
       validateTargetUrlSync(cfg.targetUrl)
@@ -524,6 +562,7 @@ router.get('/export', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), asyn
 router.post('/import', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
     const { routes } = z.object({ routes: z.array(routeBodySchema) }).parse(req.body)
+    routes.forEach((r) => encodeBasicAuthInputs(r))
     const result = await routeService.importRoutes(routes as any[], req.user!.userId)
     res.json({ success: true, data: result })
   } catch (err) {
@@ -769,7 +808,7 @@ router.post('/bulk/delete', authenticate, authorize([Role.ADMIN, Role.OPERATOR])
  *       404:
  *         description: Route not found
  */
-router.get('/:id/uptime', authenticate, async (req, res, next) => {
+router.get('/:id/uptime', authenticate, requireRouteView, async (req, res, next) => {
   try {
     const days = parseInt(String(req.query.days)) || 7
     const route = await prisma.route.findUnique({
@@ -813,7 +852,7 @@ router.get('/:id/uptime', authenticate, async (req, res, next) => {
  *       404:
  *         description: Route not found
  */
-router.get('/:id', authenticate, async (req, res, next) => {
+router.get('/:id', authenticate, requireRouteView, async (req, res, next) => {
   try {
     const route = await routeService.getRouteById(req.params.id)
     const data = stripSensitiveRouteFields(route as any)
@@ -857,7 +896,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
  */
 router.post('/', authenticate, async (req, res, next) => {
   try {
-    const data = routeBodySchema.parse(req.body)
+    const data = encodeBasicAuthInputs(routeBodySchema.parse(req.body))
 
     // Non-admins must specify an org they have OWNER/ADMIN role in
     if (req.user!.role !== 'ADMIN') {
@@ -923,7 +962,9 @@ router.post('/', authenticate, async (req, res, next) => {
  */
 router.put('/:id', authenticate, async (req, res, next) => {
   try {
-    const data = routeBodySchema.partial().parse(req.body)
+    // Encode before change-request diffing so stored payloads never carry
+    // structured plaintext credentials.
+    const data = encodeBasicAuthInputs(routeBodySchema.partial().parse(req.body))
 
     // Check org-based write access
     if (req.user!.role !== 'ADMIN') {
@@ -1412,7 +1453,7 @@ router.post('/:id/test', authenticate, async (req, res, next) => {
  *       404:
  *         description: Route not found
  */
-router.get('/:id/health', authenticate, async (req, res, next) => {
+router.get('/:id/health', authenticate, requireRouteView, async (req, res, next) => {
   try {
     const route = await prisma.route.findUnique({
       where: { id: req.params.id, deletedAt: null },
@@ -1469,7 +1510,7 @@ router.get('/:id/health', authenticate, async (req, res, next) => {
  *       404:
  *         description: Route not found
  */
-router.get('/:id/versions', authenticate, async (req, res, next) => {
+router.get('/:id/versions', authenticate, requireRouteView, async (req, res, next) => {
   try {
     const versions = await routeService.getRouteVersions(req.params.id)
     res.json({ success: true, data: versions })
@@ -1586,7 +1627,7 @@ router.post('/:id/versions/:versionId/restore', authenticate, authorize([Role.AD
  *                 meta:
  *                   $ref: '#/components/schemas/PaginationMeta'
  */
-router.get('/:id/logs', authenticate, async (req, res, next) => {
+router.get('/:id/logs', authenticate, requireRouteView, async (req, res, next) => {
   try {
     const { page = '1', pageSize = '50', method, statusType, dateFrom, dateTo } = req.query
 
@@ -1601,6 +1642,8 @@ router.get('/:id/logs', authenticate, async (req, res, next) => {
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )
 
+    // Same viewer redaction as /api/logs — VIEWERs see metadata, not payloads
+    result.data = redactLogsForViewer(req.user!.role, result.data as any[])
     res.json({ success: true, ...result })
   } catch (err) {
     next(err)
@@ -1650,7 +1693,7 @@ router.get('/:id/logs', authenticate, async (req, res, next) => {
  *                           count:
  *                             type: integer
  */
-router.get('/:id/stats', authenticate, async (req, res, next) => {
+router.get('/:id/stats', authenticate, requireRouteView, async (req, res, next) => {
   try {
     const stats = await logService.getRouteStats(req.params.id)
     const daily = await logService.getDailyRequestCounts(req.params.id, 7)

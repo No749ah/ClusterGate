@@ -4,6 +4,7 @@ import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
 import * as lbService from '../services/loadBalancerService'
+import { canViewRouteById } from '../services/orgAccessService'
 
 const router = Router()
 attachRouteParamResolver(router, 'routeId')
@@ -50,6 +51,10 @@ const targetSchema = z.object({
 // GET /api/routes/:routeId/targets
 router.get('/:routeId/targets', authenticate, async (req, res, next) => {
   try {
+    // Org-scoped read access — 404 so route existence isn't leaked cross-tenant
+    if (!(await canViewRouteById(req.user!.userId, req.user!.role, req.params.routeId))) {
+      return res.status(404).json({ success: false, error: { message: 'Route not found' } })
+    }
     const targets = await lbService.getTargets(req.params.routeId)
     res.json({ success: true, data: targets })
   } catch (err) {

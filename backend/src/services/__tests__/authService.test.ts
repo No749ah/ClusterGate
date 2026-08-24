@@ -22,50 +22,50 @@ import { validatePassword } from '../authService'
 
 describe('validatePassword', () => {
   it('accepts a strong password', () => {
-    const result = validatePassword('StrongP@ss1')
+    const result = validatePassword('StrongP@ssword1')
 
     expect(result.valid).toBe(true)
     expect(result.errors).toHaveLength(0)
   })
 
   it('accepts a password with various special characters', () => {
-    expect(validatePassword('Abcdef1!').valid).toBe(true)
-    expect(validatePassword('Abcdef1@').valid).toBe(true)
-    expect(validatePassword('Abcdef1#').valid).toBe(true)
-    expect(validatePassword('Abcdef1$').valid).toBe(true)
-    expect(validatePassword('Abcdef1_').valid).toBe(true)
+    expect(validatePassword('Abcdefghij1!').valid).toBe(true)
+    expect(validatePassword('Abcdefghij1@').valid).toBe(true)
+    expect(validatePassword('Abcdefghij1#').valid).toBe(true)
+    expect(validatePassword('Abcdefghij1$').valid).toBe(true)
+    expect(validatePassword('Abcdefghij1_').valid).toBe(true)
   })
 
   it('rejects a password that is too short', () => {
-    const result = validatePassword('Aa1!xyz')
+    const result = validatePassword('Aa1!xyzabcd')
 
     expect(result.valid).toBe(false)
-    expect(result.errors).toContain('Must be at least 8 characters')
+    expect(result.errors).toContain('Must be at least 12 characters')
   })
 
   it('rejects a password with no uppercase letter', () => {
-    const result = validatePassword('lowercase1!')
+    const result = validatePassword('lowercaseonly1!')
 
     expect(result.valid).toBe(false)
     expect(result.errors).toContain('Must contain at least one uppercase letter')
   })
 
   it('rejects a password with no lowercase letter', () => {
-    const result = validatePassword('UPPERCASE1!')
+    const result = validatePassword('UPPERCASEONLY1!')
 
     expect(result.valid).toBe(false)
     expect(result.errors).toContain('Must contain at least one lowercase letter')
   })
 
   it('rejects a password with no numbers', () => {
-    const result = validatePassword('NoNumbers!')
+    const result = validatePassword('NoNumbersHere!')
 
     expect(result.valid).toBe(false)
     expect(result.errors).toContain('Must contain at least one number')
   })
 
   it('rejects a password with no special characters', () => {
-    const result = validatePassword('NoSpecial1')
+    const result = validatePassword('NoSpecialChar1')
 
     expect(result.valid).toBe(false)
     expect(result.errors).toContain('Must contain at least one special character')
@@ -77,14 +77,14 @@ describe('validatePassword', () => {
     expect(result.valid).toBe(false)
     // Too short, no uppercase, no number, no special char
     expect(result.errors.length).toBeGreaterThanOrEqual(4)
-    expect(result.errors).toContain('Must be at least 8 characters')
+    expect(result.errors).toContain('Must be at least 12 characters')
     expect(result.errors).toContain('Must contain at least one uppercase letter')
     expect(result.errors).toContain('Must contain at least one number')
     expect(result.errors).toContain('Must contain at least one special character')
   })
 
-  it('accepts exactly 8 characters', () => {
-    const result = validatePassword('Abcdef1!')
+  it('accepts exactly 12 characters', () => {
+    const result = validatePassword('Abcdefghij1!')
 
     expect(result.valid).toBe(true)
     expect(result.errors).toHaveLength(0)
@@ -94,7 +94,7 @@ describe('validatePassword', () => {
     const result = validatePassword('')
 
     expect(result.valid).toBe(false)
-    expect(result.errors).toContain('Must be at least 8 characters')
+    expect(result.errors).toContain('Must be at least 12 characters')
   })
 
   it('returns errors as an array of strings', () => {

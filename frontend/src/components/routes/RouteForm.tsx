@@ -40,8 +40,13 @@ const routeSchema = z.object({
   requireAuth: z.boolean().default(false),
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   authValue: z.string().optional(),
+  // BASIC auth as separate username/password — encoded server-side
+  authBasicUsername: z.string().optional(),
+  authBasicPassword: z.string().optional(),
   upstreamAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   upstreamAuthValue: z.string().optional(),
+  upstreamBasicUsername: z.string().optional(),
+  upstreamBasicPassword: z.string().optional(),
   upstreamAuthHeader: z.string().default('X-API-Key'),
   targetType: z.enum(['GENERIC', 'N8N']).default('GENERIC'),
   environment: z.enum(['NONE', 'PRODUCTION', 'STAGING', 'DEVELOPMENT']).default('NONE'),
@@ -133,9 +138,16 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       ipAllowlist: defaultValues?.ipAllowlist?.join('\n') ?? '',
       requireAuth: defaultValues?.requireAuth ?? false,
       authType: defaultValues?.authType ?? 'NONE',
-      authValue: defaultValues?.authValue ?? '',
+      // Stored values arrive masked (or encoded) — the string fields keep
+      // them for non-BASIC types; BASIC uses the split fields below, which
+      // start empty ("leave blank to keep the saved credentials").
+      authValue: typeof defaultValues?.authValue === 'string' ? defaultValues.authValue : '',
+      authBasicUsername: '',
+      authBasicPassword: '',
       upstreamAuthType: defaultValues?.upstreamAuthType ?? 'NONE',
-      upstreamAuthValue: defaultValues?.upstreamAuthValue ?? '',
+      upstreamAuthValue: typeof defaultValues?.upstreamAuthValue === 'string' ? defaultValues.upstreamAuthValue : '',
+      upstreamBasicUsername: '',
+      upstreamBasicPassword: '',
       upstreamAuthHeader: defaultValues?.upstreamAuthHeader ?? 'X-API-Key',
       targetType: defaultValues?.targetType ?? 'GENERIC',
       environment: (defaultValues as any)?.environment ?? 'NONE',
@@ -201,13 +213,21 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
     setTestingConn(true)
     setConnResult(null)
     try {
+      const upstreamType = form.getValues('upstreamAuthType')
+      let upstreamValue: string | { username: string; password: string } | undefined =
+        form.getValues('upstreamAuthValue') || undefined
+      if (upstreamType === 'BASIC') {
+        const username = form.getValues('upstreamBasicUsername') || ''
+        const password = form.getValues('upstreamBasicPassword') || ''
+        upstreamValue = username || password ? { username, password } : undefined
+      }
       const res = await api.routes.testConnection({
         targetUrl: form.getValues('targetUrl'),
         method: 'POST',
         sslVerify: form.getValues('sslVerify'),
         targetType: form.getValues('targetType'),
-        upstreamAuthType: form.getValues('upstreamAuthType'),
-        upstreamAuthValue: form.getValues('upstreamAuthValue') || undefined,
+        upstreamAuthType: upstreamType,
+        upstreamAuthValue: upstreamValue,
         upstreamAuthHeader: form.getValues('upstreamAuthHeader'),
       })
       setConnResult(res.data)
@@ -321,7 +341,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       setStep(3)
       return
     }
-    const { rateLimitWindowSeconds, ...rest } = data
+    const { rateLimitWindowSeconds, authBasicUsername, authBasicPassword, upstreamBasicUsername, upstreamBasicPassword, ...rest } = data
     // Trim a trailing /* or / from the target URL so wildcard routes append the
     // suffix to a clean base (server also defends against this, but we want the
     // saved form to reflect the cleaned value).
@@ -343,6 +363,22 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       ipAllowlist: data.ipAllowlist
         ? data.ipAllowlist.split('\n').map((s) => s.trim()).filter(Boolean)
         : [],
+    }
+    // BASIC auth: send structured {username, password} — the server encodes
+    // to base64(user:pass). Left blank on edit = keep the saved credentials.
+    if (data.authType === 'BASIC') {
+      if (authBasicUsername || authBasicPassword) {
+        formData.authValue = { username: authBasicUsername ?? '', password: authBasicPassword ?? '' }
+      } else {
+        delete formData.authValue
+      }
+    }
+    if (data.upstreamAuthType === 'BASIC') {
+      if (upstreamBasicUsername || upstreamBasicPassword) {
+        formData.upstreamAuthValue = { username: upstreamBasicUsername ?? '', password: upstreamBasicPassword ?? '' }
+      } else {
+        delete formData.upstreamAuthValue
+      }
     }
     formData.wsEnabled = data.wsEnabled
     formData.circuitBreakerEnabled = data.circuitBreakerEnabled
@@ -884,6 +920,20 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                     <p className="text-xs text-muted-foreground">
                       Keys are managed in the <span className="font-medium text-foreground">API Keys</span> tab after saving. Clients send the <code className="text-foreground">X-API-Key</code> header.
                     </p>
+                  ) : authType === 'BASIC' ? (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <Field label="Username">
+                          <input {...register('authBasicUsername')} placeholder="username" autoComplete="off" className={fieldClass()} />
+                        </Field>
+                        <Field label="Password">
+                          <input type="password" {...register('authBasicPassword')} placeholder="••••••••" autoComplete="new-password" className={fieldClass()} />
+                        </Field>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        Stored server-side as Base64 (user:pass).{!isNew && ' Leave blank to keep the saved credentials.'}
+                      </p>
+                    </>
                   ) : (
                     <Field label="Auth Value">
                       <input type="password" {...register('authValue')} placeholder="••••••••" className={fieldClass()} />
@@ -911,22 +961,38 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                       <SelectItem value="NONE">None</SelectItem>
                       <SelectItem value="API_KEY">API Key (header)</SelectItem>
                       <SelectItem value="BEARER">Bearer Token</SelectItem>
-                      <SelectItem value="BASIC">Basic (Base64)</SelectItem>
+                      <SelectItem value="BASIC">Basic (Username + Password)</SelectItem>
                     </SelectContent>
                   </Select>
                 </Field>
               </div>
               {upstreamAuthType !== 'NONE' && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-3 border-l-2 border-primary/30">
-                  {upstreamAuthType === 'API_KEY' && (
-                    <Field label="Header Name">
-                      <input {...register('upstreamAuthHeader')} placeholder="X-API-Key" className={fieldClass()} />
+                upstreamAuthType === 'BASIC' ? (
+                  <div className="space-y-2 pl-3 border-l-2 border-primary/30">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      <Field label="Username">
+                        <input {...register('upstreamBasicUsername')} placeholder="username" autoComplete="off" className={fieldClass()} />
+                      </Field>
+                      <Field label="Password">
+                        <input type="password" {...register('upstreamBasicPassword')} placeholder="••••••••" autoComplete="new-password" className={fieldClass()} />
+                      </Field>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Sent to the target as Base64 (user:pass).{!isNew && ' Leave blank to keep the saved credentials.'}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pl-3 border-l-2 border-primary/30">
+                    {upstreamAuthType === 'API_KEY' && (
+                      <Field label="Header Name">
+                        <input {...register('upstreamAuthHeader')} placeholder="X-API-Key" className={fieldClass()} />
+                      </Field>
+                    )}
+                    <Field label="Value">
+                      <input type="password" {...register('upstreamAuthValue')} placeholder="••••••••" className={fieldClass()} />
                     </Field>
-                  )}
-                  <Field label="Value">
-                    <input type="password" {...register('upstreamAuthValue')} placeholder="••••••••" className={fieldClass()} />
-                  </Field>
-                </div>
+                  </div>
+                )
               )}
             </Section>
 
