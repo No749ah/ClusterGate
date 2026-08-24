@@ -16,7 +16,7 @@ import http from 'http'
 import { isN8nTarget } from '../lib/targetDetect'
 import { achievementService } from '../services/achievementService'
 import { changeRequestService } from '../services/changeRequestService'
-import { getUserOrgIds, canViewRoute, canManageRoute, canManageOrgRoutes, canDeleteRoute, canDeleteOrgRoutes } from '../services/orgAccessService'
+import { getUserOrgIds, canViewRouteById, canManageRoute, canManageOrgRoutes, canDeleteRoute, canDeleteOrgRoutes } from '../services/orgAccessService'
 import { redactLogsForViewer } from '../services/logService'
 
 const router = Router()
@@ -43,16 +43,8 @@ router.param('id', async (req, _res, next, value) => {
  */
 async function requireRouteView(req: Request, _res: Response, next: NextFunction) {
   try {
-    if (req.user!.role !== 'ADMIN') {
-      const route = await prisma.route.findFirst({
-        where: { id: req.params.id, deletedAt: null },
-        select: { organizationId: true },
-      })
-      const allowed = route
-        ? await canViewRoute(req.user!.userId, req.user!.role, route.organizationId)
-        : false
-      if (!allowed) throw AppError.notFound('Route')
-    }
+    const allowed = await canViewRouteById(req.user!.userId, req.user!.role, req.params.id)
+    if (!allowed) throw AppError.notFound('Route')
     next()
   } catch (err) {
     next(err)

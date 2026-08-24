@@ -57,6 +57,22 @@ export async function canViewRoute(userId: string, systemRole: string, routeOrga
 }
 
 /**
+ * Check if user can view a specific route by id (looks up the route's org).
+ * Route missing/deleted counts as not viewable so callers can 404 uniformly.
+ */
+export async function canViewRouteById(userId: string, systemRole: string, routeId: string): Promise<boolean> {
+  if (systemRole === 'ADMIN') return true
+
+  const route = await prisma.route.findFirst({
+    where: { id: routeId, deletedAt: null },
+    select: { organizationId: true },
+  })
+
+  if (!route) return false
+  return canViewRoute(userId, systemRole, route.organizationId)
+}
+
+/**
  * Check if user can manage a specific route (edit/publish).
  */
 export async function canManageRoute(userId: string, systemRole: string, routeId: string): Promise<boolean> {

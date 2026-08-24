@@ -35,6 +35,8 @@ export interface LogFilters {
   dateFrom?: Date
   dateTo?: Date
   search?: string
+  /** Restrict to logs of routes in these organizations (org scoping for non-admins). */
+  organizationIds?: string[]
 }
 
 // Free-text markers stored in the RequestLog.error column. The Prisma `contains`
@@ -97,6 +99,9 @@ export async function getRouteLogs(filters: LogFilters, pagination = { page: 1, 
       const ids = filters.routeId.split(',').map((s) => s.trim()).filter(Boolean)
       return ids.length > 1 ? { routeId: { in: ids } } : { routeId: ids[0] }
     })()),
+    ...(filters.organizationIds && {
+      route: { organizationId: { in: filters.organizationIds } },
+    }),
     ...(filters.method && (() => {
       const methods = filters.method.split(',').map((m) => m.trim().toUpperCase()).filter(Boolean)
       return methods.length > 1 ? { method: { in: methods } } : { method: methods[0] }
@@ -177,11 +182,12 @@ export async function getRouteStats(routeId: string) {
   }
 }
 
-export async function getRecentErrors(routeId?: string, limit = 10) {
+export async function getRecentErrors(routeId?: string, limit = 10, organizationIds?: string[]) {
   return prisma.requestLog.findMany({
     where: {
       AND: [
         ...(routeId ? [{ routeId }] : []),
+        ...(organizationIds ? [{ route: { organizationId: { in: organizationIds } } }] : []),
         statusTypeWhere('error'),
       ],
     },
@@ -205,13 +211,14 @@ export async function cleanOldLogs(daysToKeep: number): Promise<number> {
   return result.count
 }
 
-export async function getDailyRequestCounts(routeId?: string, days = 7) {
+export async function getDailyRequestCounts(routeId?: string, days = 7, organizationIds?: string[]) {
   const since = new Date()
   since.setDate(since.getDate() - days)
 
   const logs = await prisma.requestLog.findMany({
     where: {
       ...(routeId && { routeId }),
+      ...(organizationIds && { route: { organizationId: { in: organizationIds } } }),
       createdAt: { gte: since },
     },
     select: { createdAt: true, responseStatus: true, error: true },

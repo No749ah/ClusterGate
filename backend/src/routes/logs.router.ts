@@ -3,10 +3,19 @@ import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as logService from '../services/logService'
 import { redactLogsForViewer } from '../services/logService'
+import { getUserOrgIds } from '../services/orgAccessService'
 import { config } from '../config'
 import { safePageSize } from '../lib/security'
+import { Request } from 'express'
 
 const router = Router()
+
+// Non-admins only see logs of routes in their own organizations. An empty
+// membership list matches nothing (routes without an org are admin-only).
+async function orgScopeFor(req: Request): Promise<string[] | undefined> {
+  if (req.user!.role === 'ADMIN') return undefined
+  return getUserOrgIds(req.user!.userId)
+}
 
 /**
  * @openapi
@@ -111,6 +120,7 @@ router.get('/', authenticate, async (req, res, next) => {
         dateFrom: parsedDateFrom,
         dateTo: parsedDateTo,
         search: search ? String(search) : undefined,
+        organizationIds: await orgScopeFor(req),
       },
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }
     )
@@ -161,7 +171,8 @@ router.get('/errors', authenticate, async (req, res, next) => {
     const { limit = '10', routeId } = req.query
     const errors = await logService.getRecentErrors(
       routeId as string,
-      Math.min(parseInt(String(limit)) || 10, 100)
+      Math.min(parseInt(String(limit)) || 10, 100),
+      await orgScopeFor(req)
     )
     res.json({ success: true, data: redactLogsForViewer(req.user!.role, errors as any[]) })
   } catch (err) {
@@ -215,7 +226,8 @@ router.get('/daily', authenticate, async (req, res, next) => {
     const parsedDays = Math.min(Math.max(parseInt(String(days)) || 7, 1), 365)
     const daily = await logService.getDailyRequestCounts(
       routeId as string,
-      parsedDays
+      parsedDays,
+      await orgScopeFor(req)
     )
     res.json({ success: true, data: daily })
   } catch (err) {
