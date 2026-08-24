@@ -120,7 +120,17 @@ const options: swaggerJsdoc.Options = {
             ipAllowlist: { type: 'array', items: { type: 'string' } },
             requireAuth: { type: 'boolean', default: false },
             authType: { type: 'string', enum: ['NONE', 'API_KEY', 'BASIC', 'BEARER'], default: 'NONE' },
-            authValue: { type: 'string' },
+            authValue: {
+              description: 'Auth secret. For BASIC, either a pre-encoded base64(user:pass) string or a { username, password } object — the server encodes objects to base64 before encrypted storage.',
+              oneOf: [
+                { type: 'string' },
+                {
+                  type: 'object',
+                  required: ['username'],
+                  properties: { username: { type: 'string' }, password: { type: 'string' } },
+                },
+              ],
+            },
             webhookSecret: { type: 'string' },
             rateLimitEnabled: { type: 'boolean', default: false },
             rateLimitMax: { type: 'integer', minimum: 1, maximum: 100000, default: 100 },

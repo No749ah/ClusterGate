@@ -108,7 +108,7 @@ router.post('/setup', authLimiter, async (req: Request, res: Response, next: Nex
   try {
     const schema = z.object({
       email: z.string().email('Invalid email address'),
-      password: z.string().min(8, 'Password must be at least 8 characters'),
+      password: z.string().min(12, 'Password must be at least 12 characters'),
       name: z.string().min(1, 'Name is required'),
     })
 
@@ -232,7 +232,7 @@ router.post('/accept-invite', authLimiter, async (req: Request, res: Response, n
     const schema = z.object({
       token: z.string().min(1, 'Token is required'),
       name: z.string().min(1, 'Name is required'),
-      password: z.string().min(8, 'Password must be at least 8 characters'),
+      password: z.string().min(12, 'Password must be at least 12 characters'),
     })
 
     const data = schema.parse(req.body)
@@ -817,7 +817,7 @@ router.post('/change-password', authenticate, async (req: Request, res: Response
   try {
     const schema = z.object({
       currentPassword: z.string().min(1, 'Current password is required'),
-      newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+      newPassword: z.string().min(12, 'New password must be at least 12 characters'),
     })
 
     const { currentPassword, newPassword } = schema.parse(req.body)

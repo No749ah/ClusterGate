@@ -1,7 +1,9 @@
 // =============================================================================
 // ClusterGate - Rate Limit Store (fixed-window counter)
 // Shared across replicas via Postgres so limits are correct in HA setups.
-// Falls back to allow-on-error (fail-open) so the proxy never hard-fails.
+// Defaults to allow-on-error (fail-open) so the proxy never hard-fails;
+// security-critical callers (auth brute-force protection) opt into
+// fail-closed so a store outage throttles instead of letting everything pass.
 // =============================================================================
 import { prisma } from './prisma'
 
@@ -15,7 +17,8 @@ export async function checkRateLimit(
   routeId: string,
   clientIp: string,
   max: number,
-  windowMs: number
+  windowMs: number,
+  options?: { failClosed?: boolean }
 ): Promise<RateLimitResult> {
   const now = Date.now()
   const windowStart = Math.floor(now / windowMs) * windowMs
@@ -35,6 +38,10 @@ export async function checkRateLimit(
     const count = Number(rows[0]?.count ?? 1)
     return { allowed: count <= max, remaining: Math.max(0, max - count), resetAt }
   } catch {
+    if (options?.failClosed) {
+      // Fail closed — a broken store must not disable brute-force protection
+      return { allowed: false, remaining: 0, resetAt }
+    }
     // Fail open — never block traffic because the limiter store is unavailable
     return { allowed: true, remaining: max, resetAt }
   }

@@ -24,6 +24,40 @@ describe('isMetadataIp', () => {
     expect(isMetadataIp('169.253.1.1')).toBe(false)
     expect(isMetadataIp('not-an-ip')).toBe(false)
   })
+
+  it('blocks IPv6 link-local (fe80::/10)', () => {
+    expect(isMetadataIp('fe80::1')).toBe(true)
+    expect(isMetadataIp('FE80::1')).toBe(true)
+    expect(isMetadataIp('fe80::1%eth0')).toBe(true) // zone index stripped
+    expect(isMetadataIp('febf:ffff::1')).toBe(true) // end of the /10
+    expect(isMetadataIp('fec0::1')).toBe(false) // outside the /10
+  })
+
+  it('blocks IPv6 unique-local (fc00::/7), incl. the AWS IPv6 metadata IP', () => {
+    expect(isMetadataIp('fd00:ec2::254')).toBe(true) // AWS IMDS over IPv6
+    expect(isMetadataIp('fc00::1')).toBe(true)
+    expect(isMetadataIp('fdff:ffff::1')).toBe(true)
+    expect(isMetadataIp('fb00::1')).toBe(false) // outside the /7
+  })
+
+  it('blocks IPv4-mapped IPv6 forms of metadata IPs', () => {
+    expect(isMetadataIp('::ffff:169.254.169.254')).toBe(true)
+    expect(isMetadataIp('::ffff:a9fe:a9fe')).toBe(true) // hex form of 169.254.169.254
+    expect(isMetadataIp('::ffff:100.100.100.200')).toBe(true)
+    expect(isMetadataIp('::ffff:8.8.8.8')).toBe(false)
+  })
+
+  it('handles bracketed IPv6 literals as produced by URL.hostname', () => {
+    expect(isMetadataIp('[::ffff:169.254.169.254]')).toBe(true)
+    expect(isMetadataIp('[fd00:ec2::254]')).toBe(true)
+    expect(isMetadataIp('[2001:db8::1]')).toBe(false)
+  })
+
+  it('allows normal IPv6 addresses', () => {
+    expect(isMetadataIp('::1')).toBe(false)
+    expect(isMetadataIp('2001:db8::1')).toBe(false)
+    expect(isMetadataIp('2606:4700:4700::1111')).toBe(false)
+  })
 })
 
 describe('isSafeRegex', () => {

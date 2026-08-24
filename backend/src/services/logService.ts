@@ -1,6 +1,20 @@
-import { Prisma } from '@prisma/client'
+import { Prisma, Role } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
+
+// Request/response bodies and headers can contain sensitive payload data.
+// VIEWER is a read-only monitoring role, so it sees log metadata but not the
+// captured content; ADMIN/OPERATOR get the full detail.
+export function redactLogsForViewer<T extends Record<string, any>>(role: Role, entries: T[]): T[] {
+  if (role !== Role.VIEWER) return entries
+  return entries.map((e) => ({
+    ...e,
+    requestBody: e.requestBody ? '[REDACTED]' : e.requestBody,
+    responseBody: e.responseBody ? '[REDACTED]' : e.responseBody,
+    requestHeaders: e.requestHeaders ? { redacted: true } : e.requestHeaders,
+    responseHeaders: e.responseHeaders ? { redacted: true } : e.responseHeaders,
+  }))
+}
 
 export interface LogFilters {
   /** Single route id or multiple ids ("id1,id2") to filter by. */

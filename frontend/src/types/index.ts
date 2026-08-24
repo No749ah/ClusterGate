@@ -28,6 +28,13 @@ export interface User {
   updatedAt: string
 }
 
+// Structured BASIC credentials — the backend encodes these to
+// base64(username:password) server-side before (encrypted) storage.
+export interface BasicAuthCredentials {
+  username: string
+  password: string
+}
+
 export interface RewriteRule {
   from: string
   to: string
@@ -236,7 +243,7 @@ export interface RouteFormData {
   rewriteRedirects?: boolean
   requestBodyLimit: string
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
-  upstreamAuthValue?: string
+  upstreamAuthValue?: string | BasicAuthCredentials
   upstreamAuthHeader?: string
   targetType?: 'GENERIC' | 'N8N'
   healthCheckMethod?: 'HEAD' | 'GET' | 'POST'
@@ -252,7 +259,7 @@ export interface RouteFormData {
   ipAllowlist: string[]
   requireAuth: boolean
   authType: AuthType
-  authValue?: string
+  authValue?: string | BasicAuthCredentials
   webhookSecret?: string
   rateLimitEnabled: boolean
   rateLimitMax: number

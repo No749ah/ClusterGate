@@ -254,7 +254,7 @@ Public Request
 | `DATABASE_URL`          | Yes      | —         | PostgreSQL connection string         |
 | `JWT_SECRET`            | Yes      | —         | JWT signing secret (min 32 chars)    |
 | `JWT_EXPIRES_IN`        | No       | `7d`      | JWT token lifetime                   |
-| `ENCRYPTION_KEY`        | No       | derived from `JWT_SECRET` | Key for encrypting route secrets at rest (AES-256-GCM). Keep stable; required to restore secret backups across instances |
+| `ENCRYPTION_KEY`        | Yes (production) | dev only: derived from `JWT_SECRET` | Key for encrypting route secrets at rest (AES-256-GCM), min 32 chars. Required when `NODE_ENV=production` — the backend refuses to start without it. Keep stable; required to restore secret backups across instances |
 | `PORT`                  | No       | `3001`    | Backend HTTP port                    |
 | `NODE_ENV`              | No       | `development` | Environment                     |
 | `ALLOWED_ORIGINS`       | No       | `http://localhost:3000` | CORS origins (comma-sep) |
@@ -629,7 +629,7 @@ ClusterGate supports TOTP-based two-factor authentication:
 - **Per-session management** — Each login is tracked as a session (device/user-agent, IP, created + last-seen). From **Account → Active Sessions** you can see every signed-in device and revoke one individually or "sign out all other sessions". The session id is carried in the JWT (`sid` claim) and validated on every request; expired/revoked sessions are pruned by a daily cron.
 - **Global revocation** — Password change, admin reset, and force-logout-all still invalidate *all* of a user's sessions via `tokenVersion`
 - **CSRF protection** — Double-submit cookie pattern (`cg_csrf` cookie + `X-CSRF-Token` header) on all state-changing requests
-- **Password policy** — Min 8 chars, uppercase, lowercase, number, special character (enforced on all forms)
+- **Password policy** — Min 12 chars, uppercase, lowercase, number, special character (enforced on all forms)
 - **API versioning** — `X-API-Version: 1` header on all responses
 
 ### Webhook Signature Verification
@@ -638,7 +638,7 @@ Routes can require an HMAC-SHA256 signature on incoming requests. Set a **Webhoo
 
 ### Secrets at Rest
 
-Route secrets — inbound auth values, upstream credentials, and webhook secrets — are encrypted with **AES-256-GCM** before being stored, using `ENCRYPTION_KEY` (or a key derived from `JWT_SECRET` if unset) and decrypted only at point of use. Generated API keys are stored as SHA-256 hashes. Keep `ENCRYPTION_KEY` stable: changing it makes existing secrets unreadable, and the same value is required to restore a backup containing secrets onto a different instance (undecryptable secrets are cleared on restore with a warning).
+Route secrets — inbound auth values, upstream credentials, and webhook secrets — are encrypted with **AES-256-GCM** before being stored, using `ENCRYPTION_KEY` and decrypted only at point of use. `ENCRYPTION_KEY` is mandatory in production (the backend refuses to start without it); only in development is a key derived from `JWT_SECRET` as a fallback. Generated API keys are stored as SHA-256 hashes. Keep `ENCRYPTION_KEY` stable: changing it makes existing secrets unreadable, and the same value is required to restore a backup containing secrets onto a different instance (undecryptable secrets are cleared on restore with a warning).
 
 ### Production Checklist
 

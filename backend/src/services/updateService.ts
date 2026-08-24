@@ -348,12 +348,15 @@ async function updateK8sDeployment(namespace: string, deploymentName: string, ne
   const matchesImage = (img: string) => typeof img === 'string' && img.split(':')[0] === newImage
   const toPatch = (c: any) => ({ name: c.name, image: `${newImage}:${newTag}` })
 
-  let containerPatches = containers.filter((c: any) => matchesImage(c.image)).map(toPatch)
-  // Fallback to the legacy behaviour (patch all main containers) if none match
-  // by image name — e.g. digest-pinned images or registry mirrors — so the
-  // update is never a silent no-op.
+  const containerPatches = containers.filter((c: any) => matchesImage(c.image)).map(toPatch)
+  // No blind fallback: patching every container when nothing matches by image
+  // name could overwrite unrelated sidecar images. Fail loudly instead —
+  // digest-pinned or mirrored images need a manual update.
   if (containerPatches.length === 0) {
-    containerPatches = containers.map(toPatch)
+    const found = containers.map((c: any) => c.image).join(', ') || '(none)'
+    throw new Error(
+      `No container in deployment ${deploymentName} runs image ${newImage} (found: ${found}) — refusing to patch. Update the deployment manually if the image is digest-pinned or mirrored.`
+    )
   }
   // initContainers are only patched when they match by image, so unrelated
   // init steps (e.g. the busybox wait-for-postgres) are never overwritten.

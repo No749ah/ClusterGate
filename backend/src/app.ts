@@ -16,6 +16,7 @@ import { getVersion } from './lib/version'
 import { prisma } from './lib/prisma'
 import { registry } from './lib/metrics'
 import { globalLimiter, proxyLimiter } from './middleware/rateLimiter'
+import { authenticate } from './middleware/authenticate'
 import { csrfProtection } from './middleware/csrf'
 import { requestLogger } from './middleware/requestLogger'
 import { auditLogger } from './middleware/auditLogger'
@@ -54,7 +55,17 @@ const app = express()
 
 app.use(
   helmet({
-    contentSecurityPolicy: false, // Managed by frontend
+    // Strict CSP for an API that serves JSON, not pages — locks down any
+    // response a browser might render directly (error pages, docs JSON).
+    // The interactive Swagger UI gets its own relaxed policy below.
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'none'"],
+        formAction: ["'none'"],
+      },
+    },
     crossOriginEmbedderPolicy: false,
   })
 )
@@ -138,16 +149,30 @@ app.get('/metrics', async (req, res) => {
 })
 
 // ============================================================================
-// Swagger / OpenAPI Docs
+// Swagger / OpenAPI Docs — authenticated, and off in production by default
+// (opt back in with SWAGGER_ENABLED=true)
 // ============================================================================
 
-app.get('/api/docs.json', (_req, res) => {
-  res.setHeader('Content-Type', 'application/json')
-  res.send(swaggerSpec)
-})
-app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
-  customSiteTitle: 'ClusterGate API Docs',
-}))
+if (config.swaggerEnabled) {
+  // The Swagger UI page needs inline scripts/styles — relax the CSP for this
+  // path only; the strict API-wide policy stays in place everywhere else.
+  const docsCsp = helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", 'data:'],
+      frameAncestors: ["'none'"],
+    },
+  })
+  app.get('/api/docs.json', authenticate, (_req, res) => {
+    res.setHeader('Content-Type', 'application/json')
+    res.send(swaggerSpec)
+  })
+  app.use('/api/docs', authenticate, docsCsp, swaggerUi.serve, swaggerUi.setup(swaggerSpec, {
+    customSiteTitle: 'ClusterGate API Docs',
+  }))
+}
 
 // ============================================================================
 // API Routes

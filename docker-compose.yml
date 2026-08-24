@@ -1,5 +1,12 @@
 # =============================================================================
 # ClusterGate - Docker Compose (Local Development)
+#
+# SECURITY: The default values below (`changeme`, `dev-secret-…`,
+# `dev-metrics-secret`) are DEV-ONLY placeholders so `docker compose up`
+# works out of the box. NEVER run this file against the internet or in
+# production with these defaults — set real values via a `.env` file
+# (see .env.example) for at least POSTGRES_PASSWORD, JWT_SECRET,
+# ENCRYPTION_KEY and METRICS_SECRET.
 # =============================================================================
 
 networks:
@@ -21,6 +28,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-clustergate}
+      # dev-only default — override via .env for anything non-local
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
       POSTGRES_DB: ${POSTGRES_DB:-clustergate}
     volumes:
@@ -52,12 +60,14 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-clustergate}:${POSTGRES_PASSWORD:-changeme}@postgres:5432/${POSTGRES_DB:-clustergate}?schema=public
       NODE_ENV: ${NODE_ENV:-development}
       PORT: 3001
+      # dev-only default — override via .env for anything non-local
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000}
       PROXY_TIMEOUT: ${PROXY_TIMEOUT:-30000}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      # dev-only default — override via .env for anything non-local
       METRICS_SECRET: ${METRICS_SECRET:-dev-metrics-secret}
       LOG_RETENTION_DAYS: ${LOG_RETENTION_DAYS:-90}
     volumes:

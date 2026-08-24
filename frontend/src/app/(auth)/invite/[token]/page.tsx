@@ -13,7 +13,7 @@ import { api } from '@/lib/api'
 
 const acceptSchema = z.object({
   name: z.string().min(1, 'Name is required'),
-  password: z.string().min(8, 'Password must be at least 8 characters'),
+  password: z.string().min(12, 'Password must be at least 12 characters'),
   confirmPassword: z.string(),
 }).refine((d) => d.password === d.confirmPassword, {
   message: "Passwords don't match",
@@ -24,7 +24,7 @@ type AcceptForm = z.infer<typeof acceptSchema>
 
 function getPasswordStrength(password: string) {
   const checks = [
-    password.length >= 8,
+    password.length >= 12,
     /[A-Z]/.test(password),
     /[a-z]/.test(password),
     /[0-9]/.test(password),
@@ -187,7 +187,7 @@ export default function InvitePage({ params }: { params: Promise<{ token: string
                     <input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Min 8 characters"
+                      placeholder="Min 12 characters"
                       className={`w-full h-10 pl-10 pr-10 rounded-md border bg-background text-sm outline-none transition-colors
                         focus:ring-2 focus:ring-primary/30 focus:border-primary
                         ${errors.password ? 'border-destructive focus:ring-destructive/30' : 'border-input'}`}

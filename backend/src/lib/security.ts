@@ -24,13 +24,48 @@ const BLOCKED_METADATA_IPS = new Set(['100.100.100.200'])
  * Blocks the entire 169.254.0.0/16 link-local range (covers AWS/GCP/Azure
  * 169.254.169.254, ECS 169.254.170.2 and any other link-local target) plus
  * known provider metadata IPs.
+ *
+ * IPv6 is covered too: link-local (fe80::/10), unique-local (fc00::/7 —
+ * where e.g. AWS's fd00:ec2::254 metadata endpoint lives) and IPv4-mapped
+ * addresses (::ffff:169.254.169.254) are blocked so the guard can't be
+ * bypassed by resolving/connecting over IPv6.
  */
 export function isMetadataIp(ip: string): boolean {
-  if (BLOCKED_METADATA_IPS.has(ip)) return true
-  const parts = ip.split('.').map(Number)
+  // Normalise: URL.hostname keeps IPv6 brackets, dns may append a zone index
+  let addr = ip.toLowerCase()
+  if (addr.startsWith('[') && addr.endsWith(']')) addr = addr.slice(1, -1)
+  const zone = addr.indexOf('%')
+  if (zone !== -1) addr = addr.slice(0, zone)
+
+  if (BLOCKED_METADATA_IPS.has(addr)) return true
+
+  if (addr.includes(':')) return isMetadataIpv6(addr)
+
+  const parts = addr.split('.').map(Number)
   if (parts.length !== 4 || parts.some((p) => Number.isNaN(p) || p < 0 || p > 255)) return false
   // 169.254.0.0/16 — IPv4 link-local (cloud metadata lives here)
   if (parts[0] === 169 && parts[1] === 254) return true
+  return false
+}
+
+function isMetadataIpv6(addr: string): boolean {
+  // IPv4-mapped IPv6 — dotted (::ffff:169.254.169.254) or hex
+  // (::ffff:a9fe:a9fe) notation: recheck the embedded IPv4 address.
+  const mappedDotted = addr.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/)
+  if (mappedDotted) return isMetadataIp(mappedDotted[1])
+  const mappedHex = addr.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/)
+  if (mappedHex) {
+    const hi = parseInt(mappedHex[1], 16)
+    const lo = parseInt(mappedHex[2], 16)
+    return isMetadataIp(`${hi >> 8}.${hi & 0xff}.${lo >> 8}.${lo & 0xff}`)
+  }
+
+  // The first hextet decides both blocked ranges. "::…" shorthand starts with
+  // a zero hextet, which is in neither range.
+  const first = parseInt(addr.split(':')[0] || '0', 16)
+  if (Number.isNaN(first)) return false
+  if ((first & 0xffc0) === 0xfe80) return true // fe80::/10 — IPv6 link-local
+  if ((first & 0xfe00) === 0xfc00) return true // fc00::/7 — unique-local (fd00:ec2::254 etc.)
   return false
 }
 
@@ -59,10 +94,19 @@ export async function validateTargetUrl(targetUrl: string): Promise<void> {
     throw new Error(`Blocked cloud metadata endpoint: ${hostname}`)
   }
 
-  // Resolve DNS and check for metadata IPs
+  // IP-literal hostnames (including bracketed IPv6 like [fd00:ec2::254])
+  // don't need DNS — check them directly.
+  if (isMetadataIp(hostname)) {
+    throw new Error(`Blocked cloud metadata endpoint: ${hostname}`)
+  }
+
+  // Resolve DNS (both address families) and check for metadata IPs
   try {
-    const addresses = await dns.resolve4(hostname)
-    for (const addr of addresses) {
+    const [v4, v6] = await Promise.all([
+      dns.resolve4(hostname).catch(() => [] as string[]),
+      dns.resolve6(hostname).catch(() => [] as string[]),
+    ])
+    for (const addr of [...v4, ...v6]) {
       if (isMetadataIp(addr)) {
         throw new Error(`Target hostname ${hostname} resolves to cloud metadata IP ${addr}`)
       }
@@ -96,6 +140,11 @@ export function validateTargetUrlSync(targetUrl: string): void {
   if (BLOCKED_HOSTNAMES.has(hostname)) {
     throw new Error(`Blocked cloud metadata endpoint: ${hostname}`)
   }
+
+  // IP-literal hostnames (including bracketed IPv6) are checked directly
+  if (isMetadataIp(hostname)) {
+    throw new Error(`Blocked cloud metadata endpoint: ${hostname}`)
+  }
 }
 
 /**
@@ -117,7 +166,9 @@ export function safeLookup(
       ? address
       : [{ address: address as string, family: family as number }]
     for (const a of addrs) {
-      if (a.family === 4 && isMetadataIp(a.address)) {
+      // isMetadataIp covers both families (IPv4 link-local/provider IPs,
+      // IPv6 link-local/ULA/IPv4-mapped) — never skip family 6 here.
+      if (isMetadataIp(a.address)) {
         return cb(new Error(`Blocked SSRF to cloud metadata IP ${a.address}`), address, family)
       }
     }

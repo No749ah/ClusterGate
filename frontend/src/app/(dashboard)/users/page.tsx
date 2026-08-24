@@ -364,7 +364,7 @@ export default function UsersPage() {
               onChange={(e) => setNewPassword(e.target.value)}
             />
             <p className="text-xs text-muted-foreground">
-              Min 8 chars with uppercase, lowercase, number, and special character
+              Min 12 chars with uppercase, lowercase, number, and special character
             </p>
             <DialogFooter>
               <Button variant="outline" onClick={() => setResetPasswordUser(null)}>Cancel</Button>

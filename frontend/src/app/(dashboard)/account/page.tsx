@@ -21,7 +21,7 @@ const passwordSchema = z
   .object({
     currentPassword: z.string().min(1, 'Current password required'),
     newPassword: z.string()
-      .min(8, 'Min 8 characters')
+      .min(12, 'Min 12 characters')
       .regex(/[A-Z]/, 'Must contain an uppercase letter')
       .regex(/[a-z]/, 'Must contain a lowercase letter')
       .regex(/[0-9]/, 'Must contain a number')
@@ -299,7 +299,7 @@ export default function AccountPage() {
             <Lock className="w-4 h-4" /> Change Password
           </CardTitle>
           <CardDescription>
-            Password must be at least 8 characters with uppercase, lowercase, number, and special character.
+            Password must be at least 12 characters with uppercase, lowercase, number, and special character.
           </CardDescription>
         </CardHeader>
         <CardContent>

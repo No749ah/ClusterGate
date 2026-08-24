@@ -1,5 +1,6 @@
 ---
-# ClusterRole for backend to read services (for proxy target resolution)
+# ClusterRole for backend to read services (for proxy target resolution).
+# Read-only — deployment patching is deliberately NOT cluster-wide.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -13,9 +14,6 @@ rules:
   - apiGroups: [""]
     resources: ["namespaces"]
     verbs: ["get", "list"]
-  - apiGroups: ["apps"]
-    resources: ["deployments"]
-    verbs: ["get", "patch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -30,4 +28,35 @@ subjects:
 roleRef:
   kind: ClusterRole
   name: clustergate-backend
+  apiGroup: rbac.authorization.k8s.io
+---
+# Namespaced Role for the self-update feature: the backend only ever patches
+# its own deployments in the clustergate namespace, so deployment access is
+# scoped there instead of cluster-wide.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: clustergate-backend-update
+  namespace: clustergate
+  labels:
+    app.kubernetes.io/name: clustergate
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: clustergate-backend-update
+  namespace: clustergate
+  labels:
+    app.kubernetes.io/name: clustergate
+subjects:
+  - kind: ServiceAccount
+    name: clustergate-backend
+    namespace: clustergate
+roleRef:
+  kind: Role
+  name: clustergate-backend-update
   apiGroup: rbac.authorization.k8s.io
