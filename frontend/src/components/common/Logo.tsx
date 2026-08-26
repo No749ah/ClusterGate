@@ -83,15 +83,15 @@ export function LogoLarge({ size = 64, className }: LogoProps) {
       height={size}
       className={className}
     >
+      {/* Follows the theme accent, same as the small mark */}
       <defs>
         <linearGradient id="logo-glow" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#6366f1" />
-          <stop offset="50%" stopColor="#8b5cf6" />
-          <stop offset="100%" stopColor="#a78bfa" />
+          <stop offset="0%" stopColor="hsl(var(--primary))" />
+          <stop offset="100%" stopColor="hsl(var(--primary) / 0.6)" />
         </linearGradient>
         <linearGradient id="logo-gate" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#818cf8" />
-          <stop offset="100%" stopColor="#c4b5fd" />
+          <stop offset="0%" stopColor="hsl(var(--primary) / 0.9)" />
+          <stop offset="100%" stopColor="hsl(var(--primary) / 0.5)" />
         </linearGradient>
       </defs>
       {/* Outer ring */}
@@ -102,7 +102,7 @@ export function LogoLarge({ size = 64, className }: LogoProps) {
       <path d="M256 90 L408 178 L408 334 L256 422 L104 334 L104 178 Z" stroke="url(#logo-gate)" strokeWidth="4" fill="none" opacity="0.5" />
       {/* Central node */}
       <circle cx="256" cy="256" r="44" fill="url(#logo-glow)" />
-      <circle cx="256" cy="256" r="28" fill="#1e1b4b" opacity="0.6" />
+      <circle cx="256" cy="256" r="28" fill="hsl(var(--background))" opacity="0.6" />
       <circle cx="256" cy="256" r="14" fill="url(#logo-gate)" />
       {/* Connection lines */}
       <line x1="256" y1="212" x2="256" y2="108" stroke="url(#logo-gate)" strokeWidth="4" opacity="0.7" />
@@ -119,12 +119,12 @@ export function LogoLarge({ size = 64, className }: LogoProps) {
       <circle cx="112" cy="318" r="20" fill="url(#logo-glow)" opacity="0.9" />
       <circle cx="400" cy="318" r="20" fill="url(#logo-glow)" opacity="0.9" />
       {/* Inner dots */}
-      <circle cx="256" cy="98" r="7" fill="#c4b5fd" />
-      <circle cx="256" cy="414" r="7" fill="#c4b5fd" />
-      <circle cx="112" cy="194" r="7" fill="#c4b5fd" />
-      <circle cx="400" cy="194" r="7" fill="#c4b5fd" />
-      <circle cx="112" cy="318" r="7" fill="#c4b5fd" />
-      <circle cx="400" cy="318" r="7" fill="#c4b5fd" />
+      <circle cx="256" cy="98" r="7" fill="hsl(var(--primary) / 0.85)" />
+      <circle cx="256" cy="414" r="7" fill="hsl(var(--primary) / 0.85)" />
+      <circle cx="112" cy="194" r="7" fill="hsl(var(--primary) / 0.85)" />
+      <circle cx="400" cy="194" r="7" fill="hsl(var(--primary) / 0.85)" />
+      <circle cx="112" cy="318" r="7" fill="hsl(var(--primary) / 0.85)" />
+      <circle cx="400" cy="318" r="7" fill="hsl(var(--primary) / 0.85)" />
       {/* Arrows */}
       <polygon points="256,130 248,146 264,146" fill="url(#logo-gate)" opacity="0.8" />
       <polygon points="256,382 248,366 264,366" fill="url(#logo-gate)" opacity="0.8" />

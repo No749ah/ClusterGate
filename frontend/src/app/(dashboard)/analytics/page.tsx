@@ -211,7 +211,6 @@ export default function AnalyticsPage() {
           value={overview ? `${overview.errorRate}%` : undefined}
           icon={AlertTriangle}
           isLoading={overviewLoading}
-          colorClass="text-destructive bg-destructive/10"
         />
         <OverviewCard
           title="P95 Latency"
@@ -575,32 +574,26 @@ function OverviewCard({
   value,
   icon: Icon,
   isLoading,
-  colorClass,
 }: {
   title: string
   value?: string
   icon: typeof Activity
   isLoading: boolean
-  colorClass?: string
 }) {
   return (
     <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            {isLoading ? (
-              <Skeleton className="h-8 w-24 mt-1" />
-            ) : (
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {value ?? '--'}
-              </p>
-            )}
-          </div>
-          <div className={cn('p-3 rounded-lg', colorClass ?? 'text-primary bg-primary/10')}>
-            <Icon className="w-5 h-5" />
-          </div>
-        </div>
+      <CardContent className="p-5">
+        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <Icon className="w-3.5 h-3.5" />
+          {title}
+        </p>
+        {isLoading ? (
+          <Skeleton className="h-8 w-24 mt-3" />
+        ) : (
+          <p className="text-2xl font-semibold tabular-nums text-foreground mt-3">
+            {value ?? '--'}
+          </p>
+        )}
       </CardContent>
     </Card>
   )

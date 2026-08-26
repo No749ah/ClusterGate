@@ -185,7 +185,6 @@ export default function DashboardPage() {
           sparklineData={dailyErrors.length > 1 ? dailyErrors : undefined}
           sparklineColor="hsl(var(--destructive))"
           isLoading={statsLoading}
-          colorClass="text-destructive bg-destructive/10"
           href="/activity?statusType=error"
         />
       </div>

@@ -3,55 +3,60 @@
 @tailwind utilities;
 
 @layer base {
+  /* ClusterGate design tokens.
+     Neutrals are near-desaturated (no blue-tinted slate), surfaces are layered
+     by lightness rather than shadows, and the accent is a deliberate infra
+     cyan — used sparingly for interaction, never as decoration. The sidebar
+     stays dark in both themes (console chrome). */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    --background: 210 20% 99%;
+    --foreground: 220 14% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 220 14% 11%;
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
-    --sidebar: 222.2 84% 4.9%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-border: 217.2 32.6% 17.5%;
+    --popover-foreground: 220 14% 11%;
+    --primary: 192 80% 29%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 216 12% 95%;
+    --secondary-foreground: 220 14% 15%;
+    --muted: 216 12% 95%;
+    --muted-foreground: 217 10% 42%;
+    --accent: 216 12% 93%;
+    --accent-foreground: 220 14% 15%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 216 12% 88%;
+    --input: 216 12% 85%;
+    --ring: 192 80% 32%;
+    --radius: 0.375rem;
+    --sidebar: 220 14% 5%;
+    --sidebar-foreground: 214 12% 92%;
+    --sidebar-border: 219 11% 14%;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 47.4% 8%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 47.4% 12%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 50%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 48%;
-    --sidebar: 222.2 47.4% 6%;
-    --sidebar-foreground: 210 40% 98%;
-    --sidebar-border: 217.2 32.6% 14%;
+    --background: 220 12% 6.5%;
+    --foreground: 214 12% 92%;
+    --card: 219 11% 9%;
+    --card-foreground: 214 12% 92%;
+    --popover: 219 11% 12%;
+    --popover-foreground: 214 12% 92%;
+    --primary: 188 74% 46%;
+    --primary-foreground: 220 15% 7%;
+    --secondary: 218 11% 15%;
+    --secondary-foreground: 214 12% 92%;
+    --muted: 218 11% 14%;
+    --muted-foreground: 216 8% 60%;
+    --accent: 218 11% 15%;
+    --accent-foreground: 214 12% 92%;
+    --destructive: 0 66% 54%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 218 11% 16%;
+    --input: 218 11% 18%;
+    --ring: 188 74% 40%;
+    --sidebar: 220 14% 5%;
+    --sidebar-foreground: 214 12% 92%;
+    --sidebar-border: 219 11% 14%;
   }
 }
 

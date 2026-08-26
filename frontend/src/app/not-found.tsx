@@ -122,7 +122,7 @@ export default function NotFound() {
         <div className="flex items-center justify-center gap-3">
           <Button variant="outline" onClick={() => history.back()}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Go Back
+            Go back
           </Button>
           <Button asChild>
             <Link href="/dashboard">
