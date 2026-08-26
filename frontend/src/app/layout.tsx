@@ -43,8 +43,8 @@ export default function RootLayout({
         <title>ClusterGate — Kubernetes Routing Gateway</title>
         <meta name="description" content="Manage and expose internal Kubernetes services over public domains" />
         <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-        <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link rel="apple-touch-icon" href="/logo.svg" />
+        <link rel="icon" href="/favicon.svg?v=2" type="image/svg+xml" />
+        <link rel="apple-touch-icon" href="/logo.svg?v=2" />
         <link rel="manifest" href="/manifest.json" />
         <meta name="theme-color" content="#0f1013" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
