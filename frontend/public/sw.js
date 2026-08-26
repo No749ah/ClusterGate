@@ -1,6 +1,6 @@
 // Bumping CACHE_NAME purges old caches (which may hold stale JS chunks that
 // cause "module factory not available" after a deploy).
-const CACHE_NAME = 'clustergate-v2'
+const CACHE_NAME = 'clustergate-v3'
 const STATIC_ASSETS = [
   '/favicon.svg',
   '/logo.svg',
