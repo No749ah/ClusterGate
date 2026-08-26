@@ -149,7 +149,6 @@ export default function DashboardPage() {
           description={`${publishedRoutes} active`}
           icon={Route}
           isLoading={statsLoading}
-          colorClass="text-blue-500 bg-blue-500/10"
           href="/routes"
         />
         <StatsCard
@@ -159,9 +158,7 @@ export default function DashboardPage() {
           icon={Activity}
           trend={summary ? calcTrend(summary.totalRequests, summary.previousTotalRequests) : undefined}
           sparklineData={dailyTotals.length > 1 ? dailyTotals : undefined}
-          sparklineColor="#8b5cf6"
           isLoading={statsLoading}
-          colorClass="text-purple-500 bg-purple-500/10"
           href="/analytics"
         />
         <StatsCard
@@ -174,7 +171,6 @@ export default function DashboardPage() {
             return t ? { value: -t.value, label: t.label } : undefined
           })() : undefined}
           isLoading={statsLoading}
-          colorClass="text-amber-500 bg-amber-500/10"
           href="/analytics"
         />
         <StatsCard
@@ -187,9 +183,8 @@ export default function DashboardPage() {
             return t ? { value: -t.value, label: t.label } : undefined
           })() : undefined}
           sparklineData={dailyErrors.length > 1 ? dailyErrors : undefined}
-          sparklineColor="#ef4444"
+          sparklineColor="hsl(var(--destructive))"
           isLoading={statsLoading}
-          colorClass="text-red-500 bg-red-500/10"
           href="/activity?statusType=error"
         />
       </div>

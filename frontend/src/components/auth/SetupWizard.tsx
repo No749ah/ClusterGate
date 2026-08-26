@@ -90,7 +90,7 @@ export function SetupWizard({ open }: { open: boolean }) {
         name: data.name,
       })
       queryClient.invalidateQueries({ queryKey: ['auth'] })
-      toast.success('Admin account created! Welcome to ClusterGate.')
+      toast.success('Admin account created')
       router.push('/dashboard')
       router.refresh()
     } catch (err: any) {

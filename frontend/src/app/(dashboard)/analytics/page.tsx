@@ -199,28 +199,24 @@ export default function AnalyticsPage() {
           value={overview?.totalRequests.toLocaleString()}
           icon={Activity}
           isLoading={overviewLoading}
-          colorClass="text-blue-500 bg-blue-500/10"
         />
         <OverviewCard
           title="Avg Latency"
           value={overview ? formatMs(overview.avgResponseTime) : undefined}
           icon={Clock}
           isLoading={overviewLoading}
-          colorClass="text-purple-500 bg-purple-500/10"
         />
         <OverviewCard
           title="Error Rate"
           value={overview ? `${overview.errorRate}%` : undefined}
           icon={AlertTriangle}
           isLoading={overviewLoading}
-          colorClass="text-amber-500 bg-amber-500/10"
         />
         <OverviewCard
           title="P95 Latency"
           value={overview ? formatMs(overview.p95) : undefined}
           icon={Gauge}
           isLoading={overviewLoading}
-          colorClass="text-red-500 bg-red-500/10"
         />
       </div>
 
@@ -578,32 +574,26 @@ function OverviewCard({
   value,
   icon: Icon,
   isLoading,
-  colorClass,
 }: {
   title: string
   value?: string
   icon: typeof Activity
   isLoading: boolean
-  colorClass: string
 }) {
   return (
     <Card>
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">{title}</p>
-            {isLoading ? (
-              <Skeleton className="h-8 w-24 mt-1" />
-            ) : (
-              <p className="text-2xl font-bold text-foreground mt-1">
-                {value ?? '--'}
-              </p>
-            )}
-          </div>
-          <div className={cn('p-3 rounded-lg', colorClass)}>
-            <Icon className="w-5 h-5" />
-          </div>
-        </div>
+      <CardContent className="p-5">
+        <p className="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+          <Icon className="w-3.5 h-3.5" />
+          {title}
+        </p>
+        {isLoading ? (
+          <Skeleton className="h-8 w-24 mt-3" />
+        ) : (
+          <p className="text-2xl font-semibold tabular-nums text-foreground mt-3">
+            {value ?? '--'}
+          </p>
+        )}
       </CardContent>
     </Card>
   )

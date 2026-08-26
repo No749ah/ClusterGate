@@ -8,17 +8,6 @@ import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
 import { routeUrl } from '@/lib/urls'
 
-const MESSAGES = [
-  'This page went on vacation.',
-  'Looks like this route took a wrong turn.',
-  'The packets arrived, but no one was home.',
-  '404: Gateway to nowhere.',
-  'Even our proxy can\'t find this one.',
-  'This page is playing hide and seek. It\'s winning.',
-  'You\'ve reached the edge of the cluster.',
-  'Route not found. Have you tried /r/?',
-]
-
 type Suggestion = { href: string; label: string; hint: string }
 
 // Levenshtein distance — used for "did you mean…" fuzzy match.
@@ -42,8 +31,6 @@ function distance(a: string, b: string): number {
 }
 
 export default function NotFound() {
-  const [message, setMessage] = useState('')
-  const [glitch, setGlitch] = useState(false)
   const pathname = usePathname() ?? '/'
   const [suggestions, setSuggestions] = useState<Suggestion[]>([])
 
@@ -99,42 +86,16 @@ export default function NotFound() {
     if (collected.length) setSuggestions((prev) => [...collected, ...prev])
   }, [pathname])
 
-  useEffect(() => {
-    setMessage(MESSAGES[Math.floor(Math.random() * MESSAGES.length)])
-  }, [])
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setGlitch(true)
-      setTimeout(() => setGlitch(false), 200)
-    }, 4000)
-    return () => clearInterval(interval)
-  }, [])
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="text-center space-y-6 max-w-md">
-        <div className="relative">
-          <h1
-            className={`text-8xl font-bold text-primary/20 select-none transition-transform ${
-              glitch ? 'translate-x-1 skew-x-2' : ''
-            }`}
-          >
-            404
-          </h1>
-          <p
-            className={`absolute inset-0 flex items-center justify-center text-8xl font-bold text-primary transition-transform ${
-              glitch ? '-translate-x-1 -skew-x-1' : ''
-            }`}
-            style={glitch ? { clipPath: 'inset(30% 0 40% 0)' } : undefined}
-          >
-            404
-          </p>
-        </div>
+        <h1 className="text-7xl font-bold text-muted-foreground/30 select-none">404</h1>
 
         <div className="space-y-2">
-          <h2 className="text-xl font-semibold text-foreground">Page Not Found</h2>
-          <p className="text-muted-foreground">{message}</p>
+          <h2 className="text-xl font-semibold text-foreground">Page not found</h2>
+          <p className="text-muted-foreground">
+            The page you&apos;re looking for doesn&apos;t exist or has moved.
+          </p>
         </div>
 
         {suggestions.length > 0 && (
@@ -161,7 +122,7 @@ export default function NotFound() {
         <div className="flex items-center justify-center gap-3">
           <Button variant="outline" onClick={() => history.back()}>
             <ArrowLeft className="w-4 h-4 mr-2" />
-            Go Back
+            Go back
           </Button>
           <Button asChild>
             <Link href="/dashboard">

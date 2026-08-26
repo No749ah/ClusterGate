@@ -738,7 +738,7 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
             }}
           >
             {curlCopied ? (
-              <><Check className="w-3.5 h-3.5 mr-2" /> Copied!</>
+              <><Check className="w-3.5 h-3.5 mr-2" /> Copied</>
             ) : (
               <><Copy className="w-3.5 h-3.5 mr-2" /> Copy as cURL</>
             )}

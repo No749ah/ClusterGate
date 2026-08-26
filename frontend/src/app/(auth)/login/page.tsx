@@ -91,7 +91,7 @@ function LoginContent() {
       }
 
       await queryClient.invalidateQueries({ queryKey: ['auth'] })
-      toast.success('Welcome back!')
+      toast.success('Signed in')
       const redirect = searchParams.get('redirect')
       router.push(redirect || '/dashboard')
     } catch (err: any) {
@@ -107,7 +107,7 @@ function LoginContent() {
     try {
       await api.auth.twoFactorVerify(tempToken, twoFactorCode.trim())
       await queryClient.invalidateQueries({ queryKey: ['auth'] })
-      toast.success('Welcome back!')
+      toast.success('Signed in')
       const redirect = searchParams.get('redirect')
       router.push(redirect || '/dashboard')
     } catch (err: any) {
@@ -136,8 +136,6 @@ function LoginContent() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <SetupWizard open={showSetup} />
-      {/* Background gradient */}
-      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-background to-background pointer-events-none" />
 
       <div className="w-full max-w-md relative z-10">
         {/* Logo & Header */}
@@ -152,7 +150,7 @@ function LoginContent() {
         </div>
 
         {/* Login / 2FA Card */}
-        <div className="bg-card border border-border/50 rounded-2xl p-8 shadow-2xl shadow-black/20">
+        <div className="bg-card border border-border rounded-xl p-8 shadow-sm">
           {twoFactorPending ? (
             <>
               <div className="mb-6">
@@ -318,11 +316,6 @@ function LoginContent() {
             </>
           )}
         </div>
-
-        {/* Footer */}
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          ClusterGate — Kubernetes Routing Gateway Platform
-        </p>
       </div>
     </div>
   )
