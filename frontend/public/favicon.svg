@@ -1,7 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <!-- Cluster boundary with a gate opening; traffic enters through it -->
-  <path d="M6 12 V11 Q6 5 12 5 H20 Q26 5 26 11 V21 Q26 27 20 27 H12 Q6 27 6 21 V20"
-    stroke="#1fb5cc" stroke-width="3.25" stroke-linecap="round"/>
-  <path d="M11.5 10.5 L18 16 L11.5 21.5"
-    stroke="#1fb5cc" stroke-width="3.25" stroke-linecap="round" stroke-linejoin="round"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Kubernetes hexagon with the gate cut out of it -->
+  <path fill-rule="evenodd" fill="#1fb5cc" d="M10.6 3.74 L21.4 3.74 Q23.2 3.74 24.1 5.3 L29.5 14.65 Q30.3 16 29.5 17.35 L24.1 26.7 Q23.2 28.26 21.4 28.26 L10.6 28.26 Q8.8 28.26 7.9 26.7 L2.5 17.35 Q1.7 16 2.5 14.65 L7.9 5.3 Q8.8 3.74 10.6 3.74 Z M12.6 28.26 L12.6 17.6 Q12.6 14.2 16 14.2 Q19.4 14.2 19.4 17.6 L19.4 28.26 Z"/>
 </svg>

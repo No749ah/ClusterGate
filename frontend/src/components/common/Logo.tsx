@@ -32,26 +32,17 @@ export function Logo({ size = 32, className, onSecretClick }: LogoProps) {
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 32 32"
-      fill="none"
       width={size}
       height={size}
       className={className}
       onClick={handleClick}
       style={{ cursor: 'pointer' }}
     >
-      {/* Cluster boundary with a gate opening on the left; traffic enters through it */}
+      {/* Kubernetes hexagon with the gate cut out of it — the door into the cluster */}
       <path
-        d="M6 12 V11 Q6 5 12 5 H20 Q26 5 26 11 V21 Q26 27 20 27 H12 Q6 27 6 21 V20"
-        stroke="hsl(var(--primary))"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-      <path
-        d="M11.5 10.5 L18 16 L11.5 21.5"
-        stroke="hsl(var(--primary))"
-        strokeWidth="3"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        fillRule="evenodd"
+        fill="hsl(var(--primary))"
+        d="M10.6 3.74 L21.4 3.74 Q23.2 3.74 24.1 5.3 L29.5 14.65 Q30.3 16 29.5 17.35 L24.1 26.7 Q23.2 28.26 21.4 28.26 L10.6 28.26 Q8.8 28.26 7.9 26.7 L2.5 17.35 Q1.7 16 2.5 14.65 L7.9 5.3 Q8.8 3.74 10.6 3.74 Z M12.6 28.26 L12.6 17.6 Q12.6 14.2 16 14.2 Q19.4 14.2 19.4 17.6 L19.4 28.26 Z"
       />
     </svg>
   )
@@ -62,23 +53,14 @@ export function LogoLarge({ size = 64, className }: LogoProps) {
     <svg
       xmlns="http://www.w3.org/2000/svg"
       viewBox="0 0 32 32"
-      fill="none"
       width={size}
       height={size}
       className={className}
     >
       <path
-        d="M6 12 V11 Q6 5 12 5 H20 Q26 5 26 11 V21 Q26 27 20 27 H12 Q6 27 6 21 V20"
-        stroke="hsl(var(--primary))"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-      />
-      <path
-        d="M11.5 10.5 L18 16 L11.5 21.5"
-        stroke="hsl(var(--primary))"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
+        fillRule="evenodd"
+        fill="hsl(var(--primary))"
+        d="M10.6 3.74 L21.4 3.74 Q23.2 3.74 24.1 5.3 L29.5 14.65 Q30.3 16 29.5 17.35 L24.1 26.7 Q23.2 28.26 21.4 28.26 L10.6 28.26 Q8.8 28.26 7.9 26.7 L2.5 17.35 Q1.7 16 2.5 14.65 L7.9 5.3 Q8.8 3.74 10.6 3.74 Z M12.6 28.26 L12.6 17.6 Q12.6 14.2 16 14.2 Q19.4 14.2 19.4 17.6 L19.4 28.26 Z"
       />
     </svg>
   )
