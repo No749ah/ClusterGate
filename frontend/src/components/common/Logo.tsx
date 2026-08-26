@@ -38,14 +38,13 @@ export function Logo({ size = 32, className, onSecretClick }: LogoProps) {
       onClick={handleClick}
       style={{ cursor: 'pointer' }}
     >
-      {/* Brand tile: one route in, splitting into the cluster's services */}
-      <rect width="32" height="32" rx="8" fill="hsl(var(--primary))" />
+      {/* One route in, splitting into the cluster's lanes */}
       <path
         fill="none"
-        stroke="hsl(var(--sidebar))"
-        strokeWidth="3"
+        stroke="hsl(var(--primary))"
+        strokeWidth="3.3"
         strokeLinecap="round"
-        d="M6 16 H12.5 M12.5 16 C16.2 16 16.2 10 19.9 10 H26 M12.5 16 C16.2 16 16.2 22 19.9 22 H26"
+        d="M3.5 16 H11.5 M11.5 16 C16 16 16 8.5 20.5 8.5 H28.5 M11.5 16 C16 16 16 23.5 20.5 23.5 H28.5"
       />
     </svg>
   )
@@ -60,13 +59,12 @@ export function LogoLarge({ size = 64, className }: LogoProps) {
       height={size}
       className={className}
     >
-      <rect width="32" height="32" rx="8" fill="hsl(var(--primary))" />
       <path
         fill="none"
-        stroke="hsl(var(--sidebar))"
+        stroke="hsl(var(--primary))"
         strokeWidth="3"
         strokeLinecap="round"
-        d="M6 16 H12.5 M12.5 16 C16.2 16 16.2 10 19.9 10 H26 M12.5 16 C16.2 16 16.2 22 19.9 22 H26"
+        d="M3.5 16 H11.5 M11.5 16 C16 16 16 8.5 20.5 8.5 H28.5 M11.5 16 C16 16 16 23.5 20.5 23.5 H28.5"
       />
     </svg>
   )
