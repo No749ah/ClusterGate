@@ -1,7 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- App icon: dark tile so the mark works as apple-touch/maskable icon -->
-  <rect width="512" height="512" rx="96" fill="#0f1013"/>
-  <g transform="translate(96 96) scale(10)">
-    <path fill-rule="evenodd" fill="#1fb5cc" d="M10.6 3.74 L21.4 3.74 Q23.2 3.74 24.1 5.3 L29.5 14.65 Q30.3 16 29.5 17.35 L24.1 26.7 Q23.2 28.26 21.4 28.26 L10.6 28.26 Q8.8 28.26 7.9 26.7 L2.5 17.35 Q1.7 16 2.5 14.65 L7.9 5.3 Q8.8 3.74 10.6 3.74 Z M12.6 28.26 L12.6 17.6 Q12.6 14.2 16 14.2 Q19.4 14.2 19.4 17.6 L19.4 28.26 Z"/>
+  <!-- App icon: brand tile at full bleed (maskable-safe margins on the mark) -->
+  <rect width="512" height="512" rx="120" fill="#1fb5cc"/>
+  <g transform="scale(16)">
+    <path fill="none" stroke="#0c0d10" stroke-width="3" stroke-linecap="round"
+      d="M6 16 H12.5 M12.5 16 C16.2 16 16.2 10 19.9 10 H26 M12.5 16 C16.2 16 16.2 22 19.9 22 H26"/>
   </g>
 </svg>
