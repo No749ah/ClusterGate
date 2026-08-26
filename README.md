@@ -6,7 +6,7 @@
 
 **Kubernetes Routing Gateway Platform**
 
-Expose internal Kubernetes services over public domains with a beautiful, secure management UI.
+Expose internal Kubernetes services over public domains with a secure management UI.
 
 <br/>
 
@@ -20,10 +20,7 @@ Expose internal Kubernetes services over public domains with a beautiful, secure
 
 <br/>
 
-[![Get Started](https://img.shields.io/badge/🚀%20Get%20Started-Quick%20Start-22c55e?style=for-the-badge)](#quick-start-local)
-[![API Docs](https://img.shields.io/badge/📖%20API%20Docs-Swagger%20UI-3b82f6?style=for-the-badge)](#api-documentation)
-[![Report Bug](https://img.shields.io/badge/🐛%20Report%20Bug-Issues-ef4444?style=for-the-badge)](https://github.com/No749ah/ClusterGate/issues/new?template=bug_report.md)
-[![Request Feature](https://img.shields.io/badge/✨%20Request%20Feature-Issues-a855f7?style=for-the-badge)](https://github.com/No749ah/ClusterGate/issues/new?template=feature_request.md)
+[Quick Start](#quick-start-local) · [API Docs](#api-documentation) · [Report a Bug](https://github.com/No749ah/ClusterGate/issues/new?template=bug_report.md) · [Request a Feature](https://github.com/No749ah/ClusterGate/issues/new?template=feature_request.md)
 
 </div>
 
@@ -766,9 +763,7 @@ clustergate/
 +-- .env.example                # Environment template
 +-- .github/workflows/          # CI/CD (type-check, test, build, Docker)
 +-- LICENSE                     # MIT License
-+-- CODE_OF_CONDUCT.md
-+-- CONTRIBUTING.md
-+-- SECURITY.md
++-- docs/                 # Project docs (contributing, security policy, code of conduct)
 +-- README.md
 ```
 
@@ -822,7 +817,7 @@ docker push ghcr.io/no749ah/clustergate-frontend:latest
 
 ## Contributing
 
-Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) before opening an issue or pull request.
+Contributions are welcome! Please read the [Contributing Guide](docs/CONTRIBUTING.md) before opening an issue or pull request.
 
 [![Open Issues](https://img.shields.io/github/issues/No749ah/ClusterGate?color=ef4444)](https://github.com/No749ah/ClusterGate/issues)
 [![Open PRs](https://img.shields.io/github/issues-pr/No749ah/ClusterGate?color=3b82f6)](https://github.com/No749ah/ClusterGate/pulls)
@@ -831,13 +826,13 @@ Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md)
 
 ## Security Policy
 
-Found a vulnerability? Please **do not** open a public issue. Follow the [Security Policy](SECURITY.md) to report it privately.
+Found a vulnerability? Please **do not** open a public issue. Follow the [Security Policy](docs/SECURITY.md) to report it privately.
 
 ---
 
 ## Code of Conduct
 
-This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold it.
+This project follows the [Contributor Covenant Code of Conduct](docs/CODE_OF_CONDUCT.md). By participating, you agree to uphold it.
 
 ---
 

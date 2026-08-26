@@ -1,49 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <defs>
-    <linearGradient id="glow" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#22b8cf"/>
-      <stop offset="50%" stop-color="#189db4"/>
-      <stop offset="100%" stop-color="#0e7490"/>
-    </linearGradient>
-    <linearGradient id="gate" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#35c3da"/>
-      <stop offset="100%" stop-color="#7fd9e8"/>
-    </linearGradient>
-  </defs>
-  <!-- Outer ring - the "cluster" -->
-  <circle cx="256" cy="256" r="230" stroke="url(#glow)" stroke-width="18" fill="none" opacity="0.25"/>
-  <circle cx="256" cy="256" r="230" stroke="url(#glow)" stroke-width="6" fill="none" opacity="0.6"/>
-  <!-- Gate shape - hexagonal shield -->
-  <path d="M256 60 L430 160 L430 352 L256 452 L82 352 L82 160 Z" stroke="url(#glow)" stroke-width="10" fill="none" opacity="0.35"/>
-  <path d="M256 90 L408 178 L408 334 L256 422 L104 334 L104 178 Z" stroke="url(#gate)" stroke-width="4" fill="none" opacity="0.5"/>
-  <!-- Central node -->
-  <circle cx="256" cy="256" r="44" fill="url(#glow)"/>
-  <circle cx="256" cy="256" r="28" fill="#0f1013" opacity="0.6"/>
-  <circle cx="256" cy="256" r="14" fill="url(#gate)"/>
-  <!-- Connection lines from center to outer nodes -->
-  <line x1="256" y1="212" x2="256" y2="108" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
-  <line x1="256" y1="300" x2="256" y2="404" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
-  <line x1="212" y1="256" x2="120" y2="200" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
-  <line x1="300" y1="256" x2="392" y2="200" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
-  <line x1="212" y1="256" x2="120" y2="312" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
-  <line x1="300" y1="256" x2="392" y2="312" stroke="url(#gate)" stroke-width="4" opacity="0.7"/>
-  <!-- Outer nodes - the cluster endpoints -->
-  <circle cx="256" cy="98" r="20" fill="url(#glow)" opacity="0.9"/>
-  <circle cx="256" cy="414" r="20" fill="url(#glow)" opacity="0.9"/>
-  <circle cx="112" cy="194" r="20" fill="url(#glow)" opacity="0.9"/>
-  <circle cx="400" cy="194" r="20" fill="url(#glow)" opacity="0.9"/>
-  <circle cx="112" cy="318" r="20" fill="url(#glow)" opacity="0.9"/>
-  <circle cx="400" cy="318" r="20" fill="url(#glow)" opacity="0.9"/>
-  <!-- Small inner dots on outer nodes -->
-  <circle cx="256" cy="98" r="7" fill="#7fd9e8"/>
-  <circle cx="256" cy="414" r="7" fill="#7fd9e8"/>
-  <circle cx="112" cy="194" r="7" fill="#7fd9e8"/>
-  <circle cx="400" cy="194" r="7" fill="#7fd9e8"/>
-  <circle cx="112" cy="318" r="7" fill="#7fd9e8"/>
-  <circle cx="400" cy="318" r="7" fill="#7fd9e8"/>
-  <!-- Arrow indicators on two lines (gateway arrows) -->
-  <polygon points="256,130 248,146 264,146" fill="url(#gate)" opacity="0.8"/>
-  <polygon points="256,382 248,366 264,366" fill="url(#gate)" opacity="0.8"/>
-  <polygon points="148,206 156,220 142,216" fill="url(#gate)" opacity="0.8"/>
-  <polygon points="364,206 356,220 370,216" fill="url(#gate)" opacity="0.8"/>
+  <!-- App icon: dark tile so the mark works as apple-touch/maskable icon -->
+  <rect width="512" height="512" rx="96" fill="#0f1013"/>
+  <g transform="translate(96 96) scale(10)">
+    <path d="M6 12 V11 Q6 5 12 5 H20 Q26 5 26 11 V21 Q26 27 20 27 H12 Q6 27 6 21 V20"
+      stroke="#1fb5cc" stroke-width="3" stroke-linecap="round"/>
+    <path d="M11.5 10.5 L18 16 L11.5 21.5"
+      stroke="#1fb5cc" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
 </svg>
