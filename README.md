@@ -647,6 +647,7 @@ Route secrets — inbound auth values, upstream credentials, and webhook secrets
 - [ ] Set a strong `POSTGRES_PASSWORD`
 - [ ] Enable TLS via cert-manager or bring your own certs
 - [ ] Apply NetworkPolicies (`k8s/ingress/networkpolicy.yaml`)
+- [ ] Keep the per-IP rate limits on the ingress (`limit-rps`, `limit-connections`) and put a CDN/WAF in front for public exposure — application-level limits alone don't stop distributed or volumetric DDoS
 - [ ] Apply RBAC (`k8s/rbac.yaml`)
 - [ ] Configure `ALLOWED_ORIGINS` to your exact frontend URL
 - [ ] Use Sealed Secrets or External Secrets Operator instead of plain k8s Secrets
