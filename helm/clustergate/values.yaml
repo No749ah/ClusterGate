@@ -106,6 +106,14 @@ ingress:
     cert-manager.io/cluster-issuer: letsencrypt-prod
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
     nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Per-client-IP rate limiting at the edge — first line of defense against
+    # single-source floods (the app's own limiters are the second line).
+    # burst-multiplier allows short spikes (rps x N); limit-connections caps
+    # concurrent connections per IP (slowloris et al). Distributed/volumetric
+    # DDoS needs an upstream CDN/WAF in addition.
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
   host: clustergate.example.com
   tls:
     enabled: true

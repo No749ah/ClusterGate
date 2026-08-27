@@ -15,8 +15,13 @@ metadata:
     nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
     # TLS - cert-manager
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
-    # Rate limiting at ingress level (additional layer)
+    # Per-client-IP rate limiting at the edge — first line of defense against
+    # single-source floods. burst-multiplier allows short spikes (rps x N);
+    # limit-connections caps concurrent connections per IP (slowloris et al).
+    # Note: distributed/volumetric DDoS needs an upstream CDN/WAF in addition.
     nginx.ingress.kubernetes.io/limit-rps: "50"
+    nginx.ingress.kubernetes.io/limit-burst-multiplier: "5"
+    nginx.ingress.kubernetes.io/limit-connections: "20"
     # Security headers
     nginx.ingress.kubernetes.io/configuration-snippet: |
       more_set_headers "X-Frame-Options: DENY";
