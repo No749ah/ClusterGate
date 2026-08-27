@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Download, Upload, Loader2, Info, RefreshCw, ArrowUpCircle, CheckCircle2, AlertCircle, AlertTriangle, Shield, Wrench, Database, Activity, LogOut, ExternalLink } from 'lucide-react'
 import { toast } from 'sonner'
-import { useQuery } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 import { useRoutes } from '@/hooks/useRoutes'
 import { api } from '@/lib/api'
@@ -61,6 +61,7 @@ export default function SettingsPage() {
   const { user } = useAuth()
   const router = useRouter()
   const confirm = useConfirm()
+  const queryClient = useQueryClient()
   const { data: routesData } = useRoutes({ pageSize: 1 })
   const [isExporting, setIsExporting] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
@@ -113,6 +114,8 @@ export default function SettingsPage() {
   const [exportingAuditLogs, setExportingAuditLogs] = useState(false)
   const [forcingLogout, setForcingLogout] = useState(false)
   const [forceApiKeys, setForceApiKeys] = useState<boolean | null>(null)
+  const [publicBaseUrl, setPublicBaseUrl] = useState<string | null>(null)
+  const [savingBaseUrl, setSavingBaseUrl] = useState(false)
 
   // Redirect non-admins to account page
   useEffect(() => {
@@ -139,7 +142,28 @@ export default function SettingsPage() {
     api.routes.getApiKeyPolicy().then((res) => {
       if (res.data) setForceApiKeys(res.data.forceApiKeys)
     }).catch(() => {})
+    api.routes.getPublicBaseUrl().then((res) => {
+      setPublicBaseUrl(res.data?.publicBaseUrl ?? '')
+    }).catch(() => setPublicBaseUrl(''))
   }, [user?.role])
+
+  const handleSavePublicBaseUrl = async () => {
+    if (publicBaseUrl === null) return
+    setSavingBaseUrl(true)
+    try {
+      const res = await api.routes.setPublicBaseUrl(publicBaseUrl.trim())
+      setPublicBaseUrl(res.data.publicBaseUrl)
+      // Copy buttons cache the value via react-query — make them pick it up immediately
+      queryClient.invalidateQueries({ queryKey: ['public-base-url'] })
+      toast.success(res.data.publicBaseUrl
+        ? `Copied route URLs will use ${res.data.publicBaseUrl}`
+        : 'Copied route URLs will use the dashboard origin')
+    } catch {
+      toast.error('Invalid URL — use an absolute http(s) URL, e.g. https://api.example.com')
+    } finally {
+      setSavingBaseUrl(false)
+    }
+  }
 
   const handleToggleForceApiKeys = async (value: boolean) => {
     setForceApiKeys(value)
@@ -560,7 +584,7 @@ export default function SettingsPage() {
             <Shield className="w-4 h-4" /> Security
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-3">
           <div className="flex items-center justify-between p-3 rounded-lg border border-border/50">
             <div>
               <p className="text-sm font-medium">Require API key by default</p>
@@ -571,6 +595,34 @@ export default function SettingsPage() {
               disabled={forceApiKeys === null}
               onCheckedChange={handleToggleForceApiKeys}
             />
+          </div>
+
+          <div className="p-3 rounded-lg border border-border/50 space-y-2">
+            <div>
+              <p className="text-sm font-medium">Public proxy URL</p>
+              <p className="text-xs text-muted-foreground">
+                External base URL under which /r/ routes are reachable. Copy buttons and cURL snippets
+                use it instead of the dashboard&apos;s address. Leave empty to use the dashboard origin.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="https://api.example.com"
+                value={publicBaseUrl ?? ''}
+                disabled={publicBaseUrl === null}
+                onChange={(e) => setPublicBaseUrl(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') handleSavePublicBaseUrl() }}
+                className="font-mono text-sm"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSavePublicBaseUrl}
+                disabled={savingBaseUrl || publicBaseUrl === null}
+              >
+                {savingBaseUrl ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Save'}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>

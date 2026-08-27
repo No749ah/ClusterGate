@@ -59,6 +59,7 @@ import {
 import { useConfirm } from '@/components/ui/confirm-dialog'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { formatRelativeTime, copyToClipboard } from '@/lib/utils'
+import { useProxyOrigin } from '@/hooks/useProxyOrigin'
 import { routeUrl, routeEdit } from '@/lib/urls'
 import { toExportConfig, prepareForPaste, parseConfigs, buildCurl, downloadJson } from '@/lib/routeExport'
 import { Route, RouteStatus, Environment } from '@/types'
@@ -691,7 +692,7 @@ export default function RoutesPage() {
 
 function CopyUrlButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const origin = useProxyOrigin()
   const proxyPath = path.startsWith('/r/') ? path : `/r${path.startsWith('/') ? path : `/${path}`}`
   const url = `${origin}${proxyPath}`
 
@@ -737,6 +738,7 @@ function RouteRow({
   isLoading: boolean
 }) {
   const health = route.healthChecks?.[0]
+  const proxyOrigin = useProxyOrigin()
 
   return (
     <tr className="hover:bg-muted/20 transition-colors group">
@@ -867,8 +869,7 @@ function RouteRow({
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={async () => {
-                  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-                  await copyToClipboard(buildCurl(route, origin))
+                  await copyToClipboard(buildCurl(route, proxyOrigin))
                   toast.success('cURL command copied')
                 }}
               >

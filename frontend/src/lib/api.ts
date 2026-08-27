@@ -233,6 +233,12 @@ class ApiClient {
     setApiKeyPolicy: (forceApiKeys: boolean) =>
       this.put<ApiResponse<{ forceApiKeys: boolean }>>('/api/routes/api-key-policy', { forceApiKeys }),
 
+    getPublicBaseUrl: () =>
+      this.get<ApiResponse<{ publicBaseUrl: string }>>('/api/routes/public-base-url'),
+
+    setPublicBaseUrl: (publicBaseUrl: string) =>
+      this.put<ApiResponse<{ publicBaseUrl: string }>>('/api/routes/public-base-url', { publicBaseUrl }),
+
     health: (id: string) =>
       this.get<ApiResponse<HealthCheck>>(`/api/routes/${id}/health`),
 
