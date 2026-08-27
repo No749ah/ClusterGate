@@ -486,6 +486,74 @@ router.put('/api-key-policy', authenticate, authorize([Role.ADMIN]), async (req,
 
 /**
  * @openapi
+ * /api/routes/public-base-url:
+ *   get:
+ *     tags: [Routes]
+ *     summary: Get the public base URL for route links
+ *     description: External base URL the dashboard uses when copying route URLs / cURL commands. Empty means the dashboard's own origin.
+ *     responses:
+ *       200: { description: "{ publicBaseUrl: string }" }
+ *   put:
+ *     tags: [Routes]
+ *     summary: Set the public base URL (admin)
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [publicBaseUrl]
+ *             properties:
+ *               publicBaseUrl: { type: string, example: "https://api.example.com" }
+ *     responses:
+ *       200: { description: "{ publicBaseUrl: string }" }
+ */
+// Public base URL — the external origin under which /r/ routes are reachable
+// (e.g. when the ingress maps a separate domain onto the proxy). Copy buttons
+// in the dashboard use it instead of the dashboard's own origin.
+router.get('/public-base-url', authenticate, async (_req, res, next) => {
+  try {
+    const row = await prisma.systemSetting.findUnique({ where: { key: 'publicBaseUrl' } })
+    const publicBaseUrl = typeof (row?.value as any)?.url === 'string' ? (row!.value as any).url : ''
+    res.json({ success: true, data: { publicBaseUrl } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+router.put('/public-base-url', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+  try {
+    const { publicBaseUrl } = z
+      .object({
+        publicBaseUrl: z
+          .string()
+          .trim()
+          .max(2000)
+          .refine((v) => {
+            if (v === '') return true // empty clears the setting → dashboard origin
+            try {
+              const u = new URL(v)
+              return u.protocol === 'http:' || u.protocol === 'https:'
+            } catch {
+              return false
+            }
+          }, 'Must be an absolute http(s) URL or empty'),
+      })
+      .parse(req.body)
+    const normalized = publicBaseUrl.replace(/\/+$/, '')
+    await prisma.systemSetting.upsert({
+      where: { key: 'publicBaseUrl' },
+      create: { key: 'publicBaseUrl', value: { url: normalized } },
+      update: { value: { url: normalized } },
+    })
+    res.json({ success: true, data: { publicBaseUrl: normalized } })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
  * /api/routes/export:
  *   get:
  *     tags: [Routes]

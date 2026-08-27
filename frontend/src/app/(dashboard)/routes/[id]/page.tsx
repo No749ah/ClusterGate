@@ -30,6 +30,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { RequestLog, RouteVersion, RouteTarget, TransformRule, TransformPhase, TransformType, LBStrategy } from '@/types'
 import { formatRelativeTime, formatDate, formatDuration, getStatusColor, copyToClipboard, cn } from '@/lib/utils'
+import { useProxyOrigin } from '@/hooks/useProxyOrigin'
 import { resolveRouteLookupKey, routeEdit } from '@/lib/urls'
 import { api } from '@/lib/api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -62,6 +63,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   const { data: uptimeData } = useRouteUptime(id)
   const { data: logsData } = useLogs({ routeId: id, pageSize: 20 })
   const { data: versionsData } = useRouteVersions(id)
+  const proxyOrigin = useProxyOrigin()
 
   const confirm = useConfirm()
   const publish = usePublishRoute()
@@ -229,8 +231,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuItem
                 onClick={async () => {
-                  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-                  await copyToClipboard(buildCurl(route, origin))
+                  await copyToClipboard(buildCurl(route, proxyOrigin))
                   toast.success('cURL command copied')
                 }}
               >
@@ -566,7 +567,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
 
 function CopyUrlButton({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  const origin = useProxyOrigin()
   const proxyPath = path.startsWith('/r/') ? path : `/r${path.startsWith('/') ? path : `/${path}`}`
   const url = `${origin}${proxyPath}`
 
