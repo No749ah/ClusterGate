@@ -226,9 +226,13 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
   const handleGenerateTestKey = async () => {
     setGeneratingKey(true)
     try {
-      const res = await api.apiKeys.create(routeId, { name: `test-${Date.now()}` })
+      // Test keys are throwaways — expire them after 7 days so they don't pile up as live credentials
+      const res = await api.apiKeys.create(routeId, {
+        name: `test-${Date.now()}`,
+        expiresAt: new Date(Date.now() + 7 * 86400000).toISOString(),
+      })
       setApiKeyValue(res.data.key)
-      toast.success('Test key generated and filled in')
+      toast.success('Test key generated and filled in (expires in 7 days)')
     } catch {
       toast.error('Failed to generate key')
     } finally {

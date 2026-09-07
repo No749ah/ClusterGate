@@ -28,7 +28,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
   const confirm = useConfirm()
   const [createOpen, setCreateOpen] = useState(false)
   const [keyName, setKeyName] = useState('')
-  const [expiresInDays, setExpiresInDays] = useState('0')
+  const [expiresInDays, setExpiresInDays] = useState('180')
   const [scope, setScope] = useState<'READ' | 'FULL'>('FULL')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [newKeyValue, setNewKeyValue] = useState<string | null>(null)
@@ -43,7 +43,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
     const result = await createKey.mutateAsync({ name: keyName, expiresAt: computeExpiry(expiresInDays), scope })
     setNewKeyValue(result.data.key)
     setKeyName('')
-    setExpiresInDays('0')
+    setExpiresInDays('180')
     setScope('FULL')
     setCreateOpen(false)
   }
@@ -252,11 +252,12 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
               <Select value={expiresInDays} onValueChange={setExpiresInDays}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="0">Never</SelectItem>
                   <SelectItem value="7">7 days</SelectItem>
                   <SelectItem value="30">30 days</SelectItem>
                   <SelectItem value="90">90 days</SelectItem>
+                  <SelectItem value="180">6 months</SelectItem>
                   <SelectItem value="365">1 year</SelectItem>
+                  <SelectItem value="0">Never</SelectItem>
                 </SelectContent>
               </Select>
             </div>
