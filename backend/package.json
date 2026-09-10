@@ -1,6 +1,6 @@
 {
   "name": "clustergate-backend",
-  "version": "1.10.6",
+  "version": "1.10.7",
   "description": "ClusterGate - Kubernetes Routing Gateway Backend",
   "main": "dist/app.js",
   "scripts": {
@@ -36,7 +36,7 @@
     "helmet": "^8.1.0",
     "http-proxy": "^1.18.1",
     "jsonwebtoken": "^9.0.3",
-    "morgan": "^1.10.1",
+    "morgan": "^1.12.0",
     "node-cron": "^4.2.1",
     "otpauth": "^9.5.0",
     "prisma": "^5.10.0",
@@ -67,9 +67,10 @@
     "@types/swagger-ui-express": "^4.1.8",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.11"
   },
   "overrides": {
-    "esbuild": ">=0.28.1"
+    "esbuild": ">=0.28.1",
+    "qs": ">=6.15.4"
   }
 }
