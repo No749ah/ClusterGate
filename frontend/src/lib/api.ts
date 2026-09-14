@@ -433,6 +433,12 @@ class ApiClient {
 
     delete: (routeId: string, keyId: string) =>
       this.delete<ApiResponse<null>>(`/api/routes/${routeId}/api-keys/${keyId}`),
+
+    setRoutes: (routeId: string, keyId: string, routeIds: string[]) =>
+      this.put<ApiResponse<{ id: string; sharedRoutes: { id: string; name: string; publicPath: string }[] }>>(
+        `/api/routes/${routeId}/api-keys/${keyId}/routes`,
+        { routeIds }
+      ),
   }
 
   // ============================================================================

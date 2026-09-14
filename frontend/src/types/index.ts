@@ -176,6 +176,8 @@ export interface ApiKey {
   usageCount?: number
   expiresAt: string | null
   createdAt: string
+  /** Additional routes this key is valid for (beyond its owning route) */
+  sharedRoutes?: { id: string; name: string; publicPath: string }[]
 }
 
 export interface HealthCheck {

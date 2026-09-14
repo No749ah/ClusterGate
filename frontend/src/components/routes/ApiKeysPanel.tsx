@@ -4,7 +4,8 @@ import { useState } from 'react'
 import { Plus, Trash2, Copy, Check, Key, Ban, Loader2, RefreshCw, X, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey } from '@/hooks/useApiKeys'
+import { useApiKeys, useCreateApiKey, useRevokeApiKey, useDeleteApiKey, useSetApiKeyRoutes } from '@/hooks/useApiKeys'
+import { useRoutes } from '@/hooks/useRoutes'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -24,6 +25,10 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
   const createKey = useCreateApiKey(routeId)
   const revokeKey = useRevokeApiKey(routeId)
   const deleteKey = useDeleteApiKey(routeId)
+  const setKeyRoutes = useSetApiKeyRoutes(routeId)
+  // Candidates for sharing a key with other routes (agent + documents case)
+  const { data: allRoutesData } = useRoutes({ pageSize: 100 })
+  const otherRoutes = (allRoutesData?.data ?? []).filter((r) => r.id !== routeId)
 
   const confirm = useConfirm()
   const [createOpen, setCreateOpen] = useState(false)
@@ -221,6 +226,61 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
                         ? `${formatRelativeTime(key.lastUsedAt)}${key.lastUsedIp ? ` · ${key.lastUsedIp}` : ''}`
                         : 'Never'}
                     </span>
+                  </div>
+
+                  {/* Share the key with additional routes so one client credential
+                      covers several endpoints (e.g. agent + documents) */}
+                  <div className="pt-2 mt-1 border-t border-border/50">
+                    <p className="text-muted-foreground mb-1.5">Also valid for</p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {(key.sharedRoutes ?? []).map((r) => (
+                        <Badge key={r.id} variant="secondary" className="gap-1 font-normal" title={r.publicPath}>
+                          {r.name}
+                          <button
+                            type="button"
+                            title={`Remove ${r.name}`}
+                            className="hover:text-destructive"
+                            disabled={setKeyRoutes.isPending}
+                            onClick={() =>
+                              setKeyRoutes.mutate({
+                                keyId: key.id,
+                                routeIds: (key.sharedRoutes ?? []).map((s) => s.id).filter((id) => id !== r.id),
+                              })
+                            }
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                      {(key.sharedRoutes ?? []).length === 0 && (
+                        <span className="text-muted-foreground italic">Only this route</span>
+                      )}
+                      {otherRoutes.some((r) => !(key.sharedRoutes ?? []).some((s) => s.id === r.id)) && (
+                        <Select
+                          value=""
+                          onValueChange={(newRouteId) =>
+                            setKeyRoutes.mutate({
+                              keyId: key.id,
+                              routeIds: [...(key.sharedRoutes ?? []).map((s) => s.id), newRouteId],
+                            })
+                          }
+                        >
+                          <SelectTrigger className="h-6 w-auto gap-1 px-2 text-xs border-dashed">
+                            <Plus className="w-3 h-3" />
+                            Add route
+                          </SelectTrigger>
+                          <SelectContent>
+                            {otherRoutes
+                              .filter((r) => !(key.sharedRoutes ?? []).some((s) => s.id === r.id))
+                              .map((r) => (
+                                <SelectItem key={r.id} value={r.id}>
+                                  {r.name} <span className="text-muted-foreground font-mono">{r.publicPath}</span>
+                                </SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}

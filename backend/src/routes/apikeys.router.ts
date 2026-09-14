@@ -215,6 +215,56 @@ router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.AD
 
 /**
  * @openapi
+ * /api/routes/{routeId}/api-keys/{keyId}/routes:
+ *   put:
+ *     tags: [API Keys]
+ *     summary: Set additional routes a key is valid for
+ *     description: Replaces the list of additional routes this key authenticates against (beyond its owning route). Pass an empty array to make the key route-exclusive again. Requires ADMIN or OPERATOR role.
+ *     parameters:
+ *       - in: path
+ *         name: routeId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: keyId
+ *         required: true
+ *         schema: { type: string }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [routeIds]
+ *             properties:
+ *               routeIds:
+ *                 type: array
+ *                 items: { type: string }
+ *     responses:
+ *       200: { description: "{ id, sharedRoutes: [{ id, name, publicPath }] }" }
+ *       404: { description: API key not found }
+ */
+router.put('/:routeId/api-keys/:keyId/routes', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+  try {
+    const { routeIds } = z.object({ routeIds: z.array(z.string()).max(100) }).parse(req.body)
+    const result = await apiKeyService.setApiKeyRoutes(req.params.keyId, req.params.routeId, routeIds)
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'apikey.routes.set',
+      resource: 'route',
+      resourceId: req.params.routeId,
+      details: { keyId: req.params.keyId, sharedRouteIds: result.sharedRoutes.map((r) => r.id) },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+    res.json({ success: true, data: result })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
  * /api/routes/{routeId}/api-keys/{keyId}:
  *   delete:
  *     tags: [API Keys]

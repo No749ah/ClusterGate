@@ -30,6 +30,18 @@ describe('verifyApiKey', () => {
     expect(await verifyApiKey('cgk_bad', 'route-b')).toBeNull()
   })
 
+  it('matches keys owned by OR shared with the route', async () => {
+    findFirst.mockResolvedValue({ id: 'k9', scope: 'FULL', expiresAt: null })
+    await verifyApiKey('cgk_shared_key', 'route-shared')
+    const where = findFirst.mock.calls[0][0].where
+    // Route match must be an OR of ownership and the shared-routes join
+    expect(where.AND).toEqual(
+      expect.arrayContaining([
+        { OR: [{ routeId: 'route-shared' }, { sharedRoutes: { some: { routeId: 'route-shared' } } }] },
+      ])
+    )
+  })
+
   it('caches positive lookups to avoid a DB read every request', async () => {
     findFirst.mockResolvedValue({ id: 'k2', scope: 'READ', expiresAt: null })
     await verifyApiKey('cgk_cache_c', 'route-c')

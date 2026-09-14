@@ -41,6 +41,22 @@ export function useRevokeApiKey(routeId: string) {
   })
 }
 
+export function useSetApiKeyRoutes(routeId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: ({ keyId, routeIds }: { keyId: string; routeIds: string[] }) =>
+      api.apiKeys.setRoutes(routeId, keyId, routeIds),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apiKeys', routeId] })
+      toast.success('Key routes updated')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to update key routes')
+    },
+  })
+}
+
 export function useDeleteApiKey(routeId: string) {
   const queryClient = useQueryClient()
 
