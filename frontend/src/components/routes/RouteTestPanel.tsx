@@ -307,16 +307,21 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
       const contentType = res.headers.get('content-type') || ''
       const isEventStream = contentType.includes('text/event-stream') || contentType.includes('ndjson')
       setWasStream(isEventStream)
+      // Pick the view up front so the right one is live while data arrives:
+      // assembled text for real streams, raw for single documents.
+      setShowStreamRaw(!isEventStream)
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let collectedText = ''
+      let rawLength = 0
       // eslint-disable-next-line no-constant-condition
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value, { stream: true })
         buffer += chunk
+        rawLength += chunk.length
         setStreamRaw((prev) => prev + chunk)
         // Process complete lines for readable text extraction
         const lines = buffer.split('\n')
@@ -327,6 +332,12 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
             collectedText += text
             setStreamText((prev) => prev + text)
           }
+        }
+        // A stream whose frames we can't extract text from (unknown format)
+        // would leave the text view blank while it runs — flip to raw live
+        // instead of only after completion.
+        if (isEventStream && collectedText === '' && rawLength > 1024) {
+          setShowStreamRaw(true)
         }
       }
       if (buffer.trim()) {
