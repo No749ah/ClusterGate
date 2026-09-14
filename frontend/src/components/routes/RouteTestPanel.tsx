@@ -23,14 +23,24 @@ interface RouteTestPanelProps {
   targetType?: string
 }
 
-// Extract human-readable text from a streamed chunk. Handles n8n-style NDJSON
+// Extract human-readable text from a streamed chunk. Handles OpenAI-style SSE
+// (data: {...} frames with choices[].delta.content), n8n-style NDJSON
 // ({type:'item', content:'...'}) and plain text, so the test panel shows the
 // assembled message rather than raw protocol frames.
 function extractStreamText(line: string): string {
-  const trimmed = line.trim()
+  let trimmed = line.trim()
   if (!trimmed) return ''
+  // SSE framing: strip the field prefix; comments/other fields carry no text
+  if (trimmed.startsWith('data:')) trimmed = trimmed.slice(5).trim()
+  else if (/^(event|id|retry):/.test(trimmed)) return ''
+  if (!trimmed || trimmed === '[DONE]') return ''
   try {
     const obj = JSON.parse(trimmed)
+    // OpenAI chat.completion chunks (streaming) and full responses
+    const choice = Array.isArray(obj.choices) ? obj.choices[0] : undefined
+    if (typeof choice?.delta?.content === 'string') return choice.delta.content
+    if (typeof choice?.message?.content === 'string') return choice.message.content
+    if (typeof choice?.text === 'string') return choice.text
     if (typeof obj.content === 'string') return obj.content
     if (typeof obj.delta === 'string') return obj.delta
     if (typeof obj.text === 'string') return obj.text
@@ -186,6 +196,7 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
   const [streamText, setStreamText] = useState('')
   const [streamRaw, setStreamRaw] = useState('')
   const [showStreamRaw, setShowStreamRaw] = useState(false)
+  const [wasStream, setWasStream] = useState(false)
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamError, setStreamError] = useState<string | null>(null)
   const [streamCopied, setStreamCopied] = useState(false)
@@ -275,6 +286,7 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
     setStreamText('')
     setStreamRaw('')
     setStreamError(null)
+    setShowStreamRaw(false)
     setResult(null)
     try {
       const res = await api.routes.testStream(routeId, params)
@@ -289,9 +301,16 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
         setStreamError('No response stream')
         return
       }
+      // The upstream decides whether this is actually a stream — a route can
+      // have streaming enabled and still answer a non-stream request with one
+      // JSON document. Detect it so the default view matches the content.
+      const contentType = res.headers.get('content-type') || ''
+      const isEventStream = contentType.includes('text/event-stream') || contentType.includes('ndjson')
+      setWasStream(isEventStream)
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
+      let collectedText = ''
       // eslint-disable-next-line no-constant-condition
       while (true) {
         const { done, value } = await reader.read()
@@ -304,13 +323,22 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
         buffer = lines.pop() ?? ''
         for (const line of lines) {
           const text = extractStreamText(line)
-          if (text) setStreamText((prev) => prev + text)
+          if (text) {
+            collectedText += text
+            setStreamText((prev) => prev + text)
+          }
         }
       }
       if (buffer.trim()) {
         const text = extractStreamText(buffer)
-        if (text) setStreamText((prev) => prev + text)
+        if (text) {
+          collectedText += text
+          setStreamText((prev) => prev + text)
+        }
       }
+      // Default view: assembled text for real streams, raw (pretty-printed)
+      // otherwise — and never an empty text view when raw has content.
+      setShowStreamRaw(!isEventStream || collectedText === '')
     } catch (err) {
       setStreamError((err as Error).message)
     } finally {
@@ -583,7 +611,9 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
           <div className="flex items-center justify-between px-4 py-2.5 bg-muted/30 border-b border-border/50">
             <div className="flex items-center gap-2">
               {isStreaming && <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-500" />}
-              <span className="text-sm font-medium">{isStreaming ? 'Streaming response' : 'Streamed response'}</span>
+              <span className="text-sm font-medium">
+                {isStreaming ? 'Streaming response' : wasStream ? 'Streamed response' : 'Response (not streamed)'}
+              </span>
               {streamError && <span className="text-xs text-destructive">Error: {streamError}</span>}
             </div>
             <div className="flex items-center gap-2">
@@ -591,7 +621,7 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
                 onClick={() => setShowStreamRaw((v) => !v)}
                 className="text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
-                {showStreamRaw ? 'Show text' : 'Show raw (unstreamed)'}
+                {showStreamRaw ? 'Show text' : 'Show raw'}
               </button>
               <Button
                 variant="ghost"
@@ -609,7 +639,8 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
           </div>
           <div className="p-4 max-h-96 overflow-auto">
             {showStreamRaw ? (
-              <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all">{streamRaw || '—'}</pre>
+              // Pretty-prints a single JSON document; SSE/NDJSON frames pass through as-is
+              <pre className="text-xs font-mono text-foreground whitespace-pre-wrap break-all">{streamRaw ? formatJsonForDisplay(streamRaw) : '—'}</pre>
             ) : (
               <p className="text-sm text-foreground whitespace-pre-wrap break-words">{streamText || (isStreaming ? '' : '—')}</p>
             )}
