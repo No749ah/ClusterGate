@@ -918,7 +918,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   </Field>
                   {authType === 'API_KEY' ? (
                     <p className="text-xs text-muted-foreground">
-                      Keys are managed in the <span className="font-medium text-foreground">API Keys</span> tab after saving. Clients send the <code className="text-foreground">X-API-Key</code> header.
+                      Keys are managed in the <span className="font-medium text-foreground">API Keys</span> tab after saving. Clients send the <code className="text-foreground">X-API-Key</code> header or <code className="text-foreground">Authorization: Bearer</code> (OpenAI-SDK compatible).
                     </p>
                   ) : authType === 'BASIC' ? (
                     <>

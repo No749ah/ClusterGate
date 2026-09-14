@@ -131,9 +131,11 @@ export async function proxyRequest(
     res.setHeader('X-RateLimit-Reset', String(result.resetAt))
   }
 
-  // Enforce ClusterGate-level authentication
+  // Enforce ClusterGate-level authentication. The header that carried a
+  // managed API key is stripped from the forwarded request below.
+  let consumedAuthHeader: string | null = null
   if ((route as any).requireAuth && (route as any).authType !== 'NONE') {
-    await validateRouteAuth(route, req)
+    consumedAuthHeader = await validateRouteAuth(route, req)
   }
 
   // ---- Acquire the request body: buffer when the route needs it (webhook
@@ -229,7 +231,7 @@ export async function proxyRequest(
 
   for (const [key, value] of Object.entries(req.headers)) {
     const lowerKey = key.toLowerCase()
-    if (!HOP_BY_HOP_HEADERS.has(lowerKey) && typeof value === 'string') {
+    if (!HOP_BY_HOP_HEADERS.has(lowerKey) && lowerKey !== consumedAuthHeader && typeof value === 'string') {
       forwardHeaders[key] = value
     }
   }
@@ -606,25 +608,42 @@ function safeEqual(a: string, b: string): boolean {
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
-async function validateRouteAuth(route: Route, req: Request): Promise<void> {
+/**
+ * Enforce the route's client-facing auth. Returns the lowercased name of the
+ * header that carried a ClusterGate-managed API key so the proxy can strip it
+ * before forwarding (the key is a gateway credential — it must never reach the
+ * upstream); null for the static BASIC/BEARER schemes, whose passthrough
+ * behavior is unchanged.
+ */
+export async function validateRouteAuth(route: Route, req: Request): Promise<string | null> {
   const authType = (route as any).authType as string
   const authValue = decryptSecret((route as any).authValue)
 
   // API key auth is satisfied by route-scoped generated keys (hashed, with
-  // expiry + usage tracking + scope) — not the legacy static value.
+  // expiry + usage tracking + scope) — not the legacy static value. The key is
+  // accepted from X-API-Key or as Authorization: Bearer, so OpenAI-compatible
+  // clients (which only speak Bearer) work without custom headers.
   if (authType === 'API_KEY') {
-    const apiKey = req.get('X-API-Key')
+    let apiKey = req.get('X-API-Key')
+    let consumedHeader = 'x-api-key'
     if (!apiKey) {
-      throw AppError.unauthorized('API key required — provide it via the X-API-Key header')
+      const authHeader = req.get('Authorization')
+      if (authHeader?.startsWith('Bearer ')) {
+        apiKey = authHeader.slice(7)
+        consumedHeader = 'authorization'
+      }
+    }
+    if (!apiKey) {
+      throw AppError.unauthorized('API key required — provide it via the X-API-Key header or as Authorization: Bearer')
     }
     const key = await verifyApiKey(apiKey, route.id, req.ip || req.socket?.remoteAddress)
     if (!key) {
-      throw AppError.unauthorized('Invalid API key — generate one for this route and send it via the X-API-Key header')
+      throw AppError.unauthorized('Invalid API key — generate one for this route and send it via X-API-Key or Authorization: Bearer')
     }
     if (key.scope === 'READ' && !SAFE_METHODS.has(req.method)) {
       throw AppError.forbidden('This API key is read-only and cannot perform write requests')
     }
-    return
+    return consumedHeader
   }
 
   if (!authValue) {
@@ -657,6 +676,7 @@ async function validateRouteAuth(route: Route, req: Request): Promise<void> {
     default:
       throw AppError.internal(`Unknown auth type: ${authType}`)
   }
+  return null
 }
 
 export function isIpAllowed(clientIp: string, allowlist: string[]): boolean {
