@@ -3,8 +3,11 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
+import { requireRouteView, requireRouteManage } from '../middleware/routeAccess'
 import * as lbService from '../services/loadBalancerService'
-import { canViewRouteById } from '../services/orgAccessService'
+import { prisma } from '../lib/prisma'
+import { AppError } from '../lib/errors'
+import { validateTargetUrlSync } from '../lib/security'
 
 const router = Router()
 attachRouteParamResolver(router, 'routeId')
@@ -14,31 +17,32 @@ attachRouteParamResolver(router, 'routeId')
  * /api/routes/{routeId}/targets:
  *   get:
  *     tags: [Targets]
- *     summary: List load-balancer targets for a route
+ *     summary: List load-balancing targets for a route
  *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
- *     responses: { 200: { description: List of targets } }
+ *     responses: { 200: { description: Targets } }
  *   post:
  *     tags: [Targets]
- *     summary: Add a target (admin/operator)
- *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
+ *     summary: Add a target (admin/operator with manage rights on the route)
  *     requestBody:
  *       required: true
- *       content: { application/json: { schema: { type: object, required: [url], properties: { url: { type: string, format: uri }, weight: { type: integer }, priority: { type: integer } } } } }
- *     responses: { 201: { description: Created } }
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required: [url]
+ *             properties:
+ *               url: { type: string, format: uri }
+ *               weight: { type: integer, minimum: 1, maximum: 100, default: 100 }
+ *               priority: { type: integer, minimum: 0, default: 0 }
+ *     responses: { 201: { description: Target created } }
  * /api/routes/{routeId}/targets/{targetId}:
  *   put:
  *     tags: [Targets]
- *     summary: Update a target (admin/operator)
- *     parameters:
- *       - { in: path, name: routeId, required: true, schema: { type: string } }
- *       - { in: path, name: targetId, required: true, schema: { type: string } }
+ *     summary: Update a target
  *     responses: { 200: { description: Updated } }
  *   delete:
  *     tags: [Targets]
  *     summary: Delete a target (admin)
- *     parameters:
- *       - { in: path, name: routeId, required: true, schema: { type: string } }
- *       - { in: path, name: targetId, required: true, schema: { type: string } }
  *     responses: { 200: { description: Deleted } }
  */
 
@@ -48,13 +52,23 @@ const targetSchema = z.object({
   priority: z.number().int().min(0).default(0),
 })
 
+// Targets receive the route's injected upstream credentials, so a target URL
+// is as sensitive as the route's own target: SSRF-checked and only editable
+// by someone who may manage the route.
+function assertTargetUrl(url: string | undefined) {
+  if (url) validateTargetUrlSync(url)
+}
+
+// A target id from the URL must belong to the route in the URL — otherwise a
+// caller with manage rights on one route could edit targets of another.
+async function assertTargetBelongsToRoute(targetId: string, routeId: string) {
+  const target = await prisma.routeTarget.findFirst({ where: { id: targetId, routeId }, select: { id: true } })
+  if (!target) throw AppError.notFound('Target')
+}
+
 // GET /api/routes/:routeId/targets
-router.get('/:routeId/targets', authenticate, async (req, res, next) => {
+router.get('/:routeId/targets', authenticate, requireRouteView('routeId'), async (req, res, next) => {
   try {
-    // Org-scoped read access — 404 so route existence isn't leaked cross-tenant
-    if (!(await canViewRouteById(req.user!.userId, req.user!.role, req.params.routeId))) {
-      return res.status(404).json({ success: false, error: { message: 'Route not found' } })
-    }
     const targets = await lbService.getTargets(req.params.routeId)
     res.json({ success: true, data: targets })
   } catch (err) {
@@ -63,9 +77,10 @@ router.get('/:routeId/targets', authenticate, async (req, res, next) => {
 })
 
 // POST /api/routes/:routeId/targets
-router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const data = targetSchema.parse(req.body)
+    assertTargetUrl(data.url)
     const target = await lbService.addTarget(req.params.routeId, data)
 
     res.status(201).json({ success: true, data: target })
@@ -75,9 +90,11 @@ router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERA
 })
 
 // PUT /api/routes/:routeId/targets/:targetId
-router.put('/:routeId/targets/:targetId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.put('/:routeId/targets/:targetId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const data = targetSchema.partial().parse(req.body)
+    assertTargetUrl(data.url)
+    await assertTargetBelongsToRoute(req.params.targetId, req.params.routeId)
     const target = await lbService.updateTarget(req.params.targetId, data)
     res.json({ success: true, data: target })
   } catch (err) {
@@ -86,8 +103,9 @@ router.put('/:routeId/targets/:targetId', authenticate, authorize([Role.ADMIN, R
 })
 
 // DELETE /api/routes/:routeId/targets/:targetId
-router.delete('/:routeId/targets/:targetId', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.delete('/:routeId/targets/:targetId', authenticate, authorize([Role.ADMIN]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
+    await assertTargetBelongsToRoute(req.params.targetId, req.params.routeId)
     await lbService.deleteTarget(req.params.targetId)
     res.json({ success: true, message: 'Target deleted' })
   } catch (err) {

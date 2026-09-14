@@ -3,8 +3,10 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
+import { requireRouteView, requireRouteManage } from '../middleware/routeAccess'
 import * as transformService from '../services/transformService'
-import { canViewRouteById } from '../services/orgAccessService'
+import { prisma } from '../lib/prisma'
+import { AppError } from '../lib/errors'
 
 const router = Router()
 attachRouteParamResolver(router, 'routeId')
@@ -19,7 +21,7 @@ attachRouteParamResolver(router, 'routeId')
  *     responses: { 200: { description: List of transform rules } }
  *   post:
  *     tags: [Transforms]
- *     summary: Create a transform rule (admin/operator)
+ *     summary: Create a transform rule (admin/operator with manage rights on the route)
  *     parameters: [{ in: path, name: routeId, required: true, schema: { type: string } }]
  *     requestBody:
  *       required: true
@@ -52,13 +54,16 @@ const transformRuleSchema = z.object({
   condition: z.record(z.any()).nullable().optional(),
 })
 
+// A rule id from the URL must belong to the route in the URL — otherwise a
+// caller with manage rights on one route could edit rules of another.
+async function assertRuleBelongsToRoute(ruleId: string, routeId: string) {
+  const rule = await prisma.transformRule.findFirst({ where: { id: ruleId, routeId }, select: { id: true } })
+  if (!rule) throw AppError.notFound('Transform rule')
+}
+
 // GET /api/routes/:routeId/transforms
-router.get('/:routeId/transforms', authenticate, async (req, res, next) => {
+router.get('/:routeId/transforms', authenticate, requireRouteView('routeId'), async (req, res, next) => {
   try {
-    // Org-scoped read access — 404 so route existence isn't leaked cross-tenant
-    if (!(await canViewRouteById(req.user!.userId, req.user!.role, req.params.routeId))) {
-      return res.status(404).json({ success: false, error: { message: 'Route not found' } })
-    }
     const rules = await transformService.getTransformRules(req.params.routeId)
     res.json({ success: true, data: rules })
   } catch (err) {
@@ -67,7 +72,7 @@ router.get('/:routeId/transforms', authenticate, async (req, res, next) => {
 })
 
 // POST /api/routes/:routeId/transforms
-router.post('/:routeId/transforms', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/:routeId/transforms', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const data = transformRuleSchema.parse(req.body)
     const rule = await transformService.createTransformRule(req.params.routeId, data)
@@ -78,9 +83,10 @@ router.post('/:routeId/transforms', authenticate, authorize([Role.ADMIN, Role.OP
 })
 
 // PUT /api/routes/:routeId/transforms/:ruleId
-router.put('/:routeId/transforms/:ruleId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.put('/:routeId/transforms/:ruleId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const data = transformRuleSchema.partial().parse(req.body)
+    await assertRuleBelongsToRoute(req.params.ruleId, req.params.routeId)
     const rule = await transformService.updateTransformRule(req.params.ruleId, data as any)
     res.json({ success: true, data: rule })
   } catch (err) {
@@ -89,8 +95,9 @@ router.put('/:routeId/transforms/:ruleId', authenticate, authorize([Role.ADMIN, 
 })
 
 // DELETE /api/routes/:routeId/transforms/:ruleId
-router.delete('/:routeId/transforms/:ruleId', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.delete('/:routeId/transforms/:ruleId', authenticate, authorize([Role.ADMIN]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
+    await assertRuleBelongsToRoute(req.params.ruleId, req.params.routeId)
     await transformService.deleteTransformRule(req.params.ruleId)
     res.json({ success: true, message: 'Transform rule deleted' })
   } catch (err) {

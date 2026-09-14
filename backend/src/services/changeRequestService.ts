@@ -11,12 +11,26 @@ export interface CRPolicy {
 }
 
 export const changeRequestService = {
-  async list(filters?: { status?: ChangeRequestStatus; routeId?: string; requestedById?: string; page?: number; pageSize?: number }) {
-    const { status, routeId, requestedById, page = 1, pageSize = 20 } = filters ?? {}
+  async list(filters?: {
+    status?: ChangeRequestStatus
+    routeId?: string
+    requestedById?: string
+    page?: number
+    pageSize?: number
+    /** Tenant scope for non-admins: CRs on routes of these orgs, or the caller's own */
+    scope?: { organizationIds: string[]; userId: string }
+  }) {
+    const { status, routeId, requestedById, page = 1, pageSize = 20, scope } = filters ?? {}
     const where: any = {}
     if (status) where.status = status
     if (routeId) where.routeId = routeId
     if (requestedById) where.requestedById = requestedById
+    if (scope) {
+      where.OR = [
+        { route: { organizationId: { in: scope.organizationIds } } },
+        { requestedById: scope.userId },
+      ]
+    }
 
     const [data, total] = await Promise.all([
       prisma.changeRequest.findMany({
@@ -274,8 +288,15 @@ export const changeRequestService = {
     return policy.required
   },
 
-  async pendingCount() {
-    return prisma.changeRequest.count({ where: { status: 'PENDING' } })
+  async pendingCount(scope?: { organizationIds: string[]; userId: string }) {
+    return prisma.changeRequest.count({
+      where: {
+        status: 'PENDING',
+        ...(scope
+          ? { OR: [{ route: { organizationId: { in: scope.organizationIds } } }, { requestedById: scope.userId }] }
+          : {}),
+      },
+    })
   },
 
   // Delete a resolved (non-pending) change request. Pending ones must be

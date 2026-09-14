@@ -425,8 +425,11 @@ class ApiClient {
     list: (routeId: string) =>
       this.get<ApiResponse<ApiKey[]>>(`/api/routes/${routeId}/api-keys`),
 
-    create: (routeId: string, data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL' }) =>
+    create: (routeId: string, data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL'; routeIds?: string[] }) =>
       this.post<ApiResponse<ApiKey & { key: string }>>(`/api/routes/${routeId}/api-keys`, data),
+
+    detachFromRoute: (routeId: string, keyId: string) =>
+      this.delete<ApiResponse<null>>(`/api/routes/${routeId}/api-keys/${keyId}/share`),
 
     revoke: (routeId: string, keyId: string) =>
       this.post<ApiResponse<null>>(`/api/routes/${routeId}/api-keys/${keyId}/revoke`),

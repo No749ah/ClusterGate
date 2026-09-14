@@ -3,9 +3,42 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
+import { requireRouteManage } from '../middleware/routeAccess'
 import * as routeGroupService from '../services/routeGroupService'
+import { getUserOrgIds, isOrgMember, canManageOrgRoutes } from '../services/orgAccessService'
+import { prisma } from '../lib/prisma'
+import { AppError } from '../lib/errors'
+import type { Request } from 'express'
 
 const router = Router()
+
+// Route groups are tenant-scoped through their team's organization. Groups
+// carry change-request bypass/approver policies and config defaults, so
+// touching one is a management action on that org; groups without a team are
+// admin-only. Denials are 404s so group existence isn't leaked.
+async function assertGroupAccess(req: Request, groupId: string, manage: boolean) {
+  if (req.user!.role === 'ADMIN') return
+  const group = await prisma.routeGroup.findUnique({
+    where: { id: groupId },
+    select: { team: { select: { organizationId: true } } },
+  })
+  const orgId = group?.team?.organizationId
+  if (!orgId) throw AppError.notFound('Route group')
+  const ok = manage
+    ? await canManageOrgRoutes(req.user!.userId, req.user!.role, orgId)
+    : await isOrgMember(req.user!.userId, req.user!.role, orgId)
+  if (!ok) throw AppError.notFound('Route group')
+}
+
+// A team assigned to a group must belong to an org the caller manages
+async function assertTeamManageable(req: Request, teamId: string | null | undefined) {
+  if (req.user!.role === 'ADMIN') return
+  if (!teamId) throw AppError.forbidden('A team is required so the group belongs to an organization')
+  const team = await prisma.team.findUnique({ where: { id: teamId }, select: { organizationId: true } })
+  if (!team || !(await canManageOrgRoutes(req.user!.userId, req.user!.role, team.organizationId))) {
+    throw AppError.notFound('Team')
+  }
+}
 attachRouteParamResolver(router, 'routeId')
 
 // Accept either a cuid id or a URL slug as :id on every handler below.
@@ -94,6 +127,7 @@ router.get('/', authenticate, async (req, res, next) => {
     const groups = await routeGroupService.getRouteGroups({
       teamId: teamId as string,
       search: search as string,
+      organizationIds: req.user!.role === 'ADMIN' ? undefined : await getUserOrgIds(req.user!.userId),
     })
     res.json({ success: true, data: groups })
   } catch (err) {
@@ -104,6 +138,7 @@ router.get('/', authenticate, async (req, res, next) => {
 // Get route group by ID
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
+    await assertGroupAccess(req, req.params.id, false)
     const group = await routeGroupService.getRouteGroupById(req.params.id)
     res.json({ success: true, data: group })
   } catch (err) {
@@ -115,6 +150,7 @@ router.get('/:id', authenticate, async (req, res, next) => {
 router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     const data = routeGroupSchema.parse(req.body)
+    await assertTeamManageable(req, data.teamId)
     const group = await routeGroupService.createRouteGroup(data)
     res.status(201).json({ success: true, data: group })
   } catch (err) {
@@ -125,7 +161,10 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
 // Update route group
 router.put('/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
+    await assertGroupAccess(req, req.params.id, true)
     const data = routeGroupSchema.partial().parse(req.body)
+    // Re-homing a group to another team must not escape the caller's orgs
+    if (data.teamId !== undefined) await assertTeamManageable(req, data.teamId)
     const group = await routeGroupService.updateRouteGroup(req.params.id, data as any)
     res.json({ success: true, data: group })
   } catch (err) {
@@ -143,9 +182,10 @@ router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, ne
   }
 })
 
-// Assign route to group
-router.post('/:id/routes/:routeId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+// Assign route to group — needs manage rights on both the route and the group
+router.post('/:id/routes/:routeId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
+    await assertGroupAccess(req, req.params.id, true)
     const route = await routeGroupService.assignRouteToGroup(req.params.routeId, req.params.id)
     res.json({ success: true, data: route })
   } catch (err) {
@@ -154,8 +194,9 @@ router.post('/:id/routes/:routeId', authenticate, authorize([Role.ADMIN, Role.OP
 })
 
 // Remove route from group
-router.delete('/:id/routes/:routeId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.delete('/:id/routes/:routeId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
+    await assertGroupAccess(req, req.params.id, true)
     const route = await routeGroupService.assignRouteToGroup(req.params.routeId, null)
     res.json({ success: true, data: route })
   } catch (err) {

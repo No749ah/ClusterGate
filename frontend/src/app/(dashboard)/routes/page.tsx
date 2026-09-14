@@ -28,6 +28,8 @@ import {
   Layers,
   Upload,
   Archive,
+  KeyRound,
+  Loader2,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkUpdate, useBulkDelete } from '@/hooks/useRoutes'
@@ -57,7 +59,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { useConfirm } from '@/components/ui/confirm-dialog'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'
 import { formatRelativeTime, copyToClipboard } from '@/lib/utils'
 import { useProxyOrigin } from '@/hooks/useProxyOrigin'
 import { routeUrl, routeEdit } from '@/lib/urls'
@@ -147,6 +149,15 @@ export default function RoutesPage() {
   }
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [shortcutsOpen, setShortcutsOpen] = useState(false)
+  // Group key: one API key valid for every selected route
+  const [groupKeyOpen, setGroupKeyOpen] = useState(false)
+  const [groupKeyName, setGroupKeyName] = useState('')
+  const [groupKeyExpiry, setGroupKeyExpiry] = useState('180')
+  const [groupKeyScope, setGroupKeyScope] = useState<'READ' | 'FULL'>('FULL')
+  const [groupKeyOwner, setGroupKeyOwner] = useState('')
+  const [groupKeyPending, setGroupKeyPending] = useState(false)
+  const [groupKeyResult, setGroupKeyResult] = useState<{ key: string; count: number } | null>(null)
+  const [groupKeyCopied, setGroupKeyCopied] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -328,6 +339,38 @@ export default function RoutesPage() {
 
   const bulkPending = bulkPublish.isPending || bulkDeactivate.isPending || bulkUpdate.isPending || bulkDelete.isPending
 
+  const openGroupKeyDialog = () => {
+    setGroupKeyOwner(Array.from(selectedIds)[0] ?? '')
+    setGroupKeyName('')
+    setGroupKeyResult(null)
+    setGroupKeyOpen(true)
+  }
+
+  // The key is created on the chosen owner route (where it is managed) and
+  // shared with every other selected route.
+  async function generateGroupKey() {
+    const ids = Array.from(selectedIds)
+    const ownerId = ids.includes(groupKeyOwner) ? groupKeyOwner : ids[0]
+    if (!ownerId) return
+    setGroupKeyPending(true)
+    try {
+      const res = await api.apiKeys.create(ownerId, {
+        name: groupKeyName.trim(),
+        expiresAt: groupKeyExpiry !== '0' ? new Date(Date.now() + parseInt(groupKeyExpiry) * 86400000).toISOString() : undefined,
+        scope: groupKeyScope,
+        routeIds: ids.filter((id) => id !== ownerId),
+      })
+      setGroupKeyResult({ key: res.data.key, count: ids.length })
+      queryClient.invalidateQueries({ queryKey: ['apiKeys'] })
+      toast.success(`Group key created for ${ids.length} routes`)
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to create group key')
+    } finally {
+      setGroupKeyPending(false)
+    }
+  }
+  const selectedRouteName = (id: string) => (allRoutesData?.data ?? routes).find((r) => r.id === id)?.name ?? routes.find((r) => r.id === id)?.name ?? id
+
   return (
     <div className="space-y-6">
       {/* Header — sticks to the top of the viewport while scrolling long lists */}
@@ -433,6 +476,12 @@ export default function RoutesPage() {
               <Copy className="w-3.5 h-3.5 mr-1.5" />
               Copy
             </Button>
+            {selectedIds.size >= 2 && (
+              <Button size="sm" variant="outline" onClick={openGroupKeyDialog} disabled={bulkPending} title="One API key valid for all selected routes">
+                <KeyRound className="w-3.5 h-3.5 mr-1.5" />
+                Group key
+              </Button>
+            )}
             <Button
               size="sm"
               variant="destructive"
@@ -452,6 +501,112 @@ export default function RoutesPage() {
           </div>
         </div>
       )}
+
+      {/* Group key dialog — one API key for all selected routes */}
+      <Dialog open={groupKeyOpen} onOpenChange={(open) => { setGroupKeyOpen(open); if (!open) setGroupKeyResult(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Generate group key</DialogTitle>
+            <DialogDescription>
+              One API key that authenticates on all {selectedIds.size} selected routes.
+            </DialogDescription>
+          </DialogHeader>
+          {groupKeyResult ? (
+            <div className="space-y-3">
+              <div className="p-3 rounded-lg border border-green-500/30 bg-green-500/5">
+                <p className="text-xs font-medium text-green-500 mb-2">
+                  Key created — valid for {groupKeyResult.count} routes. Copy it now, it won&apos;t be shown again!
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 text-xs font-mono bg-muted px-2 py-1.5 rounded break-all">{groupKeyResult.key}</code>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={async () => {
+                      await copyToClipboard(groupKeyResult.key)
+                      setGroupKeyCopied(true)
+                      toast.success('API key copied — store it safely')
+                      setTimeout(() => setGroupKeyCopied(false), 2000)
+                    }}
+                  >
+                    {groupKeyCopied ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
+                  </Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The key is managed on <span className="text-foreground">{selectedRouteName(groupKeyOwner)}</span> (API Keys tab) and shows up as shared on the other routes.
+              </p>
+              <DialogFooter>
+                <Button onClick={() => { setGroupKeyOpen(false); setGroupKeyResult(null); setSelectedIds(new Set()) }}>Done</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <>
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Key Name</label>
+                  <Input value={groupKeyName} onChange={(e) => setGroupKeyName(e.target.value)} placeholder="Customer XY" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Expires</label>
+                    <Select value={groupKeyExpiry} onValueChange={setGroupKeyExpiry}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="7">7 days</SelectItem>
+                        <SelectItem value="30">30 days</SelectItem>
+                        <SelectItem value="90">90 days</SelectItem>
+                        <SelectItem value="180">6 months</SelectItem>
+                        <SelectItem value="365">1 year</SelectItem>
+                        <SelectItem value="0">Never</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-sm font-medium">Scope</label>
+                    <Select value={groupKeyScope} onValueChange={(v) => setGroupKeyScope(v as 'READ' | 'FULL')}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="FULL">Full (all methods)</SelectItem>
+                        <SelectItem value="READ">Read-only (GET/HEAD)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-sm font-medium">Managed on</label>
+                  <Select value={groupKeyOwner} onValueChange={setGroupKeyOwner}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Array.from(selectedIds).map((id) => (
+                        <SelectItem key={id} value={id}>{selectedRouteName(id)}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Revoke, regenerate and route changes happen on this route&apos;s API Keys tab; the key works on all {selectedIds.size} routes.
+                  </p>
+                </div>
+                <div className="rounded-md border border-border/50 divide-y divide-border/50 max-h-36 overflow-y-auto">
+                  {Array.from(selectedIds).map((id) => (
+                    <div key={id} className="px-2.5 py-1.5 text-sm flex items-center gap-2">
+                      <KeyRound className="w-3.5 h-3.5 text-muted-foreground" />
+                      <span className="truncate">{selectedRouteName(id)}</span>
+                      {id === groupKeyOwner && <Badge variant="outline" className="ml-auto text-[10px]">manages key</Badge>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setGroupKeyOpen(false)}>Cancel</Button>
+                <Button onClick={generateGroupKey} disabled={!groupKeyName.trim() || groupKeyPending}>
+                  {groupKeyPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Generating...</> : `Generate for ${selectedIds.size} routes`}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

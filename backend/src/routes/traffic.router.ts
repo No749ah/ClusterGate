@@ -3,9 +3,19 @@ import { authenticate, authorize } from '../middleware/authenticate'
 import { Role } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { getConfig, updateConfig, sanitizeText } from '../services/sanitizerService'
+import { getUserOrgIds } from '../services/orgAccessService'
 import { z } from 'zod'
+import type { Request } from 'express'
 
 const router = Router()
+
+// Request logs carry client IPs, paths and geo data — non-admins only get
+// the traffic of routes in their own organizations.
+async function trafficScope(req: Request) {
+  if (req.user!.role === 'ADMIN') return {}
+  const orgIds = await getUserOrgIds(req.user!.userId)
+  return { route: { organizationId: { in: orgIds } } }
+}
 
 // ============================================================================
 // Live Traffic SSE
@@ -26,7 +36,8 @@ const router = Router()
  *             schema:
  *               type: string
  */
-router.get('/live', authenticate, (req, res) => {
+router.get('/live', authenticate, async (req, res) => {
+  const scope = await trafficScope(req)
   res.setHeader('Content-Type', 'text/event-stream')
   res.setHeader('Cache-Control', 'no-cache')
   res.setHeader('Connection', 'keep-alive')
@@ -38,7 +49,7 @@ router.get('/live', authenticate, (req, res) => {
     try {
       const since = new Date(Date.now() - 3000) // last 3 seconds
       const logs = await prisma.requestLog.findMany({
-        where: { createdAt: { gte: since } },
+        where: { createdAt: { gte: since }, ...scope },
         select: {
           id: true,
           method: true,
@@ -102,36 +113,31 @@ router.get('/map', authenticate, async (req, res, next) => {
   try {
     const hours = parseInt(String(req.query.hours)) || 24
     const since = new Date(Date.now() - hours * 60 * 60 * 1000)
+    const scope = await trafficScope(req)
 
-    // Get traffic grouped by country with coordinates
-    const traffic = await prisma.$queryRaw<
-      { geoCountry: string; geoLatitude: number; geoLongitude: number; count: bigint; avgDuration: number }[]
-    >`
-      SELECT "geoCountry", AVG("geoLatitude") as "geoLatitude", AVG("geoLongitude") as "geoLongitude",
-             COUNT(*) as count, AVG("duration") as "avgDuration"
-      FROM "request_logs"
-      WHERE "geoCountry" IS NOT NULL AND "createdAt" >= ${since}
-      GROUP BY "geoCountry"
-      ORDER BY count DESC
-      LIMIT 100
-    `
+    // Traffic grouped by country with averaged coordinates
+    const traffic = await prisma.requestLog.groupBy({
+      by: ['geoCountry'],
+      where: { geoCountry: { not: null }, createdAt: { gte: since }, ...scope },
+      _count: { _all: true },
+      _avg: { geoLatitude: true, geoLongitude: true, duration: true },
+      orderBy: { _count: { geoCountry: 'desc' } },
+      take: 100,
+    })
 
-    // Get top cities
-    const cities = await prisma.$queryRaw<
-      { geoCity: string; geoCountry: string; geoLatitude: number; geoLongitude: number; count: bigint }[]
-    >`
-      SELECT "geoCity", "geoCountry", AVG("geoLatitude") as "geoLatitude", AVG("geoLongitude") as "geoLongitude",
-             COUNT(*) as count
-      FROM "request_logs"
-      WHERE "geoCity" IS NOT NULL AND "geoCountry" IS NOT NULL AND "createdAt" >= ${since}
-      GROUP BY "geoCity", "geoCountry"
-      ORDER BY count DESC
-      LIMIT 50
-    `
+    // Top cities
+    const cities = await prisma.requestLog.groupBy({
+      by: ['geoCity', 'geoCountry'],
+      where: { geoCity: { not: null }, geoCountry: { not: null }, createdAt: { gte: since }, ...scope },
+      _count: { _all: true },
+      _avg: { geoLatitude: true, geoLongitude: true },
+      orderBy: { _count: { geoCity: 'desc' } },
+      take: 50,
+    })
 
     // Total requests in period
     const total = await prisma.requestLog.count({
-      where: { createdAt: { gte: since } },
+      where: { createdAt: { gte: since }, ...scope },
     })
 
     res.json({
@@ -139,17 +145,17 @@ router.get('/map', authenticate, async (req, res, next) => {
       data: {
         countries: traffic.map((t) => ({
           country: t.geoCountry,
-          lat: Number(t.geoLatitude),
-          lng: Number(t.geoLongitude),
-          count: Number(t.count),
-          avgDuration: Math.round(Number(t.avgDuration)),
+          lat: Number(t._avg.geoLatitude ?? 0),
+          lng: Number(t._avg.geoLongitude ?? 0),
+          count: t._count._all,
+          avgDuration: Math.round(Number(t._avg.duration ?? 0)),
         })),
         cities: cities.map((c) => ({
           city: c.geoCity,
           country: c.geoCountry,
-          lat: Number(c.geoLatitude),
-          lng: Number(c.geoLongitude),
-          count: Number(c.count),
+          lat: Number(c._avg.geoLatitude ?? 0),
+          lng: Number(c._avg.geoLongitude ?? 0),
+          count: c._count._all,
         })),
         total,
         hours,

@@ -6,9 +6,20 @@ import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
 import { changeRequestService } from '../services/changeRequestService'
 import { achievementService } from '../services/achievementService'
 import { prisma } from '../lib/prisma'
+import { requireRouteView } from '../middleware/routeAccess'
+import { getUserOrgIds, canViewRouteById, isOrgMember } from '../services/orgAccessService'
+import { AppError } from '../lib/errors'
+import type { Request } from 'express'
 
 const router = Router()
 attachRouteParamResolver(router, 'routeId')
+
+// Change requests carry full route configs and diffs, so non-admins only see
+// the ones on routes of their organizations (plus their own submissions).
+async function scopeFor(req: Request) {
+  if (req.user!.role === 'ADMIN') return undefined
+  return { organizationIds: await getUserOrgIds(req.user!.userId), userId: req.user!.userId }
+}
 
 /**
  * @openapi
@@ -68,6 +79,7 @@ router.get('/', authenticate, async (req, res, next) => {
       requestedById: requestedById as string,
       page: parseInt(String(page)) || 1,
       pageSize: Math.min(parseInt(String(pageSize)) || 20, 100),
+      scope: await scopeFor(req),
     })
     res.json({ success: true, ...result })
   } catch (err) {
@@ -76,9 +88,9 @@ router.get('/', authenticate, async (req, res, next) => {
 })
 
 // Get pending count
-router.get('/pending-count', authenticate, async (_req, res, next) => {
+router.get('/pending-count', authenticate, async (req, res, next) => {
   try {
-    const count = await changeRequestService.pendingCount()
+    const count = await changeRequestService.pendingCount(await scopeFor(req))
     res.json({ success: true, data: { count } })
   } catch (err) {
     next(err)
@@ -86,7 +98,7 @@ router.get('/pending-count', authenticate, async (_req, res, next) => {
 })
 
 // Check if change request required for a route
-router.get('/check/:routeId', authenticate, async (req, res, next) => {
+router.get('/check/:routeId', authenticate, requireRouteView('routeId'), async (req, res, next) => {
   try {
     const required = await changeRequestService.isChangeRequestRequired(req.params.routeId)
     res.json({ success: true, data: { required } })
@@ -96,7 +108,7 @@ router.get('/check/:routeId', authenticate, async (req, res, next) => {
 })
 
 // Get full CR policy for a route (includes user's permissions)
-router.get('/policy/:routeId', authenticate, async (req, res, next) => {
+router.get('/policy/:routeId', authenticate, requireRouteView('routeId'), async (req, res, next) => {
   try {
     const policy = await changeRequestService.getPolicy(req.params.routeId)
     const canBypass = await changeRequestService.canBypass(req.params.routeId, req.user!.userId, req.user!.role)
@@ -129,7 +141,12 @@ router.get('/policy/:routeId', authenticate, async (req, res, next) => {
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const cr = await changeRequestService.getById(req.params.id)
-    if (!cr) {
+    const visible =
+      !!cr &&
+      (req.user!.role === 'ADMIN' ||
+        cr.requestedById === req.user!.userId ||
+        (!!cr.routeId && (await canViewRouteById(req.user!.userId, req.user!.role, cr.routeId))))
+    if (!visible) {
       return res.status(404).json({ success: false, error: { message: 'Change request not found' } })
     }
     res.json({ success: true, data: cr })
@@ -149,6 +166,17 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
       payload: z.record(z.any()),
       diff: z.record(z.any()).optional(),
     }).parse(req.body)
+
+    // Proposals must target a route the caller can see, or (for new routes)
+    // an organization the caller belongs to.
+    if (data.routeId) {
+      if (!(await canViewRouteById(req.user!.userId, req.user!.role, data.routeId))) throw AppError.notFound('Route')
+    } else if (req.user!.role !== 'ADMIN') {
+      const orgId = (data.payload as any)?.organizationId
+      if (typeof orgId !== 'string' || !(await isOrgMember(req.user!.userId, req.user!.role, orgId))) {
+        throw AppError.forbidden('Change requests for new routes must target an organization you belong to')
+      }
+    }
 
     const cr = await changeRequestService.create({
       ...data,

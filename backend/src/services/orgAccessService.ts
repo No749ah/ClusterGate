@@ -46,6 +46,15 @@ export async function canDeleteOrgRoutes(userId: string, systemRole: string, org
 }
 
 /**
+ * Check if user is a member of an organization (any org role) or a system admin.
+ */
+export async function isOrgMember(userId: string, systemRole: string, organizationId: string): Promise<boolean> {
+  if (systemRole === 'ADMIN') return true
+  const orgRole = await getUserOrgRole(userId, organizationId)
+  return orgRole !== null
+}
+
+/**
  * Check if user can view a route (member of route's org, or system admin, or route has no org).
  */
 export async function canViewRoute(userId: string, systemRole: string, routeOrganizationId: string | null): Promise<boolean> {
