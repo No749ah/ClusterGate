@@ -28,9 +28,11 @@ export async function resolveGroupId(idOrSlug: string): Promise<string | null> {
   return bySlug?.id ?? null
 }
 
-export async function getRouteGroups(filters?: { teamId?: string; search?: string }) {
+export async function getRouteGroups(filters?: { teamId?: string; search?: string; organizationIds?: string[] }) {
   const where: any = {}
   if (filters?.teamId) where.teamId = filters.teamId
+  // Non-admins only see groups owned by a team of one of their organizations
+  if (filters?.organizationIds) where.team = { organizationId: { in: filters.organizationIds } }
   if (filters?.search) {
     where.OR = [
       { name: { contains: filters.search, mode: 'insensitive' } },
@@ -53,7 +55,7 @@ export async function getRouteGroupById(idOrSlug: string) {
   const group = await prisma.routeGroup.findUnique({
     where,
     include: {
-      team: { select: { id: true, name: true } },
+      team: { select: { id: true, name: true, organizationId: true } },
       routes: {
         where: { deletedAt: null },
         select: { id: true, name: true, publicPath: true, status: true, isActive: true },

@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
+import { requireRouteManage, canManageAllRoutes } from '../middleware/routeAccess'
+import { AppError } from '../lib/errors'
 import * as apiKeyService from '../services/apiKeyService'
 import { createAuditLog } from '../services/auditService'
 import { achievementService } from '../services/achievementService'
@@ -64,7 +66,7 @@ attachRouteParamResolver(router, 'routeId')
  *       403:
  *         description: Insufficient permissions
  */
-router.get('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.get('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const keys = await apiKeyService.getApiKeys(req.params.routeId)
     res.json({ success: true, data: keys })
@@ -130,7 +132,7 @@ router.get('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERA
  *       400:
  *         description: Validation error
  */
-router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const { name, expiresAt, scope, routeIds } = z.object({
       name: z.string().min(1, 'Name is required').max(100),
@@ -139,6 +141,11 @@ router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPER
       // Additional routes the key is valid for from the start (group keys)
       routeIds: z.array(z.string()).max(100).optional(),
     }).parse(req.body)
+
+    // A key may only be shared into routes the caller could manage directly
+    if (routeIds?.length && !(await canManageAllRoutes(req.user!.userId, req.user!.role, routeIds))) {
+      throw AppError.notFound('Route')
+    }
 
     const key = await apiKeyService.createApiKey(
       req.params.routeId,
@@ -198,7 +205,7 @@ router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPER
  *       404:
  *         description: API key not found
  */
-router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.ADMIN]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     await apiKeyService.revokeApiKey(req.params.keyId, req.params.routeId)
     createAuditLog({
@@ -247,9 +254,12 @@ router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.AD
  *       200: { description: "{ id, sharedRoutes: [{ id, name, publicPath }] }" }
  *       404: { description: API key not found }
  */
-router.put('/:routeId/api-keys/:keyId/routes', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.put('/:routeId/api-keys/:keyId/routes', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const { routeIds } = z.object({ routeIds: z.array(z.string()).max(100) }).parse(req.body)
+    if (routeIds.length && !(await canManageAllRoutes(req.user!.userId, req.user!.role, routeIds))) {
+      throw AppError.notFound('Route')
+    }
     const result = await apiKeyService.setApiKeyRoutes(req.params.keyId, req.params.routeId, routeIds)
     createAuditLog({
       userId: req.user!.userId,
@@ -286,7 +296,7 @@ router.put('/:routeId/api-keys/:keyId/routes', authenticate, authorize([Role.ADM
  *       200: { description: Key detached from this route }
  *       404: { description: Key is not shared with this route }
  */
-router.delete('/:routeId/api-keys/:keyId/share', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+router.delete('/:routeId/api-keys/:keyId/share', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     await apiKeyService.detachApiKeyFromRoute(req.params.keyId, req.params.routeId)
     createAuditLog({
@@ -339,7 +349,7 @@ router.delete('/:routeId/api-keys/:keyId/share', authenticate, authorize([Role.A
  *       404:
  *         description: API key not found
  */
-router.delete('/:routeId/api-keys/:keyId', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
+router.delete('/:routeId/api-keys/:keyId', authenticate, authorize([Role.ADMIN]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     await apiKeyService.deleteApiKey(req.params.keyId, req.params.routeId)
     createAuditLog({

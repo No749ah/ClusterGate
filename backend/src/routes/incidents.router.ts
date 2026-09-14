@@ -4,8 +4,23 @@ import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { incidentService } from '../services/incidentService'
 import { achievementService } from '../services/achievementService'
+import { getUserOrgIds, canViewRouteById, canManageRoute } from '../services/orgAccessService'
+import { prisma } from '../lib/prisma'
+import { AppError } from '../lib/errors'
+import type { Request } from 'express'
 
 const router = Router()
+
+// Incidents are tenant-scoped through their route. Non-admins only see and
+// change incidents on routes of their organizations; incidents without a
+// route are admin-only. Denials are 404s so incident existence isn't leaked.
+async function assertIncidentManage(req: Request, incidentId: string) {
+  if (req.user!.role === 'ADMIN') return
+  const incident = await prisma.incident.findUnique({ where: { id: incidentId }, select: { routeId: true } })
+  if (!incident?.routeId || !(await canManageRoute(req.user!.userId, req.user!.role, incident.routeId))) {
+    throw AppError.notFound('Incident')
+  }
+}
 
 /**
  * @openapi
@@ -46,6 +61,7 @@ router.get('/', authenticate, async (req, res, next) => {
       routeId: routeId as string,
       page: parseInt(String(page)) || 1,
       pageSize: Math.min(parseInt(String(pageSize)) || 20, 100),
+      organizationIds: req.user!.role === 'ADMIN' ? undefined : await getUserOrgIds(req.user!.userId),
     })
     res.json({ success: true, ...result })
   } catch (err) {
@@ -75,7 +91,11 @@ router.get('/', authenticate, async (req, res, next) => {
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const incident = await incidentService.getById(req.params.id)
-    if (!incident) {
+    const visible =
+      !!incident &&
+      (req.user!.role === 'ADMIN' ||
+        (!!incident.routeId && (await canViewRouteById(req.user!.userId, req.user!.role, incident.routeId))))
+    if (!visible) {
       return res.status(404).json({ success: false, error: { message: 'Incident not found' } })
     }
     res.json({ success: true, data: incident })
@@ -122,6 +142,12 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
       routeId: z.string().optional(),
     }).parse(req.body)
 
+    if (req.user!.role !== 'ADMIN') {
+      if (!data.routeId || !(await canManageRoute(req.user!.userId, req.user!.role, data.routeId))) {
+        throw AppError.notFound('Route')
+      }
+    }
+
     const incident = await incidentService.create(data)
     res.status(201).json({ success: true, data: incident })
   } catch (err) {
@@ -163,6 +189,7 @@ router.patch('/:id/status', authenticate, authorize([Role.ADMIN, Role.OPERATOR])
       status: z.enum(['ACTIVE', 'INVESTIGATING', 'RESOLVED', 'DISMISSED']),
     }).parse(req.body)
 
+    await assertIncidentManage(req, req.params.id)
     const incident = await incidentService.updateStatus(req.params.id, status, req.user!.userId)
 
     // Achievement: first incident resolved
@@ -218,6 +245,7 @@ router.post('/:id/events', authenticate, authorize([Role.ADMIN, Role.OPERATOR]),
       metadata: z.record(z.any()).optional(),
     }).parse(req.body)
 
+    await assertIncidentManage(req, req.params.id)
     const event = await incidentService.addEvent(req.params.id, {
       ...data,
       createdById: req.user!.userId,
@@ -247,6 +275,7 @@ router.post('/:id/events', authenticate, authorize([Role.ADMIN, Role.OPERATOR]),
  */
 router.patch('/:id/dismiss', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
+    await assertIncidentManage(req, req.params.id)
     const incident = await incidentService.updateStatus(req.params.id, 'DISMISSED' as any, req.user!.userId)
     res.json({ success: true, data: incident })
   } catch (err) {

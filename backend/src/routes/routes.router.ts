@@ -9,7 +9,8 @@ import { proxyRequest } from '../services/proxyService'
 import { createAuditLog } from '../services/auditService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
-import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync, isTlsProtocolMismatch, safeLookup } from '../lib/security'
+import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync, isTlsProtocolMismatch, safeLookup, testPathAllowed } from '../lib/security'
+import { requireRouteManage } from '../middleware/routeAccess'
 import axios, { AxiosError } from 'axios'
 import https from 'https'
 import http from 'http'
@@ -581,9 +582,10 @@ router.put('/public-base-url', authenticate, authorize([Role.ADMIN]), async (req
  *       403:
  *         description: Insufficient permissions
  */
-router.get('/export', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (_req, res, next) => {
+router.get('/export', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
-    const routes = await routeService.exportRoutes()
+    const organizationIds = req.user!.role === 'ADMIN' ? undefined : await getUserOrgIds(req.user!.userId)
+    const routes = await routeService.exportRoutes(organizationIds)
     res.setHeader('Content-Disposition', 'attachment; filename="clustergate-routes.json"')
     res.json({ success: true, data: routes, exportedAt: new Date().toISOString() })
   } catch (err) {
@@ -1366,7 +1368,12 @@ router.post('/:id/duplicate', authenticate, async (req, res, next) => {
  *       404:
  *         description: Route not found
  */
-router.post('/:id/test', authenticate, async (req, res, next) => {
+// A test run executes a real request against the upstream with the route's
+// injected credentials and may skip the route's client auth — so it is gated
+// like editing the route (system ADMIN or org OWNER/ADMIN), constrained to what
+// the live proxy would accept (allowed methods, paths under the public path)
+// and audit-logged.
+router.post('/:id/test', authenticate, requireRouteManage('id'), async (req, res, next) => {
   try {
     const route = await routeService.getRouteById(req.params.id)
 
@@ -1380,7 +1387,32 @@ router.post('/:id/test', authenticate, async (req, res, next) => {
       })
     }
 
-    const { method = 'GET', path = route.publicPath, headers = {}, body, skipAuth } = req.body
+    const { method: rawMethod = 'GET', path = route.publicPath, headers = {}, body, skipAuth } = req.body
+    const method = String(rawMethod).toUpperCase()
+
+    if (route.methods.length > 0 && !route.methods.includes(method)) {
+      return res.json({
+        success: true,
+        data: { status: 405, duration: 0, error: `Method ${method} is not allowed for this route`, headers: {} },
+      })
+    }
+    if (!testPathAllowed(route.publicPath, path)) {
+      const base = route.publicPath.endsWith('/*') ? route.publicPath.slice(0, -2) : route.publicPath
+      return res.json({
+        success: true,
+        data: { status: 400, duration: 0, error: `Test path must be under ${base} and contain no traversal segments`, headers: {} },
+      })
+    }
+
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'route.test',
+      resource: 'route',
+      resourceId: route.id,
+      details: { method, path, skipAuth: skipAuth === true, stream: !!(route as any).streamResponse },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
 
     // If skipAuth is requested, temporarily disable auth enforcement for this test
     if (skipAuth === true) {
@@ -1396,7 +1428,7 @@ router.post('/:id/test', authenticate, async (req, res, next) => {
 
     // Build a mock request-like object for the proxy
     const mockReq = {
-      method: method.toUpperCase(),
+      method,
       path,
       hostname: 'localhost',
       ip: req.ip,

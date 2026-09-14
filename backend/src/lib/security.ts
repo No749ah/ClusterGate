@@ -123,6 +123,20 @@ export async function validateTargetUrl(targetUrl: string): Promise<void> {
  * Quick synchronous check for URL scheme and cloud metadata endpoints.
  * Used in health checks and other places that need a fast check.
  */
+/**
+ * Test-panel paths must stay under the route's public path — the live proxy
+ * only ever forwards paths that match the route, and a test run must not be
+ * able to reach anything a real request couldn't. Rejects traversal and
+ * encoded-separator tricks that an upstream might normalize back into `..`.
+ */
+export function testPathAllowed(publicPath: string, path: unknown): boolean {
+  if (typeof path !== 'string' || !path.startsWith('/')) return false
+  if (/(^|\/)\.\.(\/|$)/.test(path) || /\\|%2e|%2f|%5c/i.test(path) || path.includes('//')) return false
+  const base = publicPath.endsWith('/*') ? publicPath.slice(0, -2) : publicPath
+  const pathOnly = path.split('?')[0]
+  return pathOnly === base || pathOnly.startsWith(base + '/')
+}
+
 export function validateTargetUrlSync(targetUrl: string): void {
   let parsed: URL
   try {

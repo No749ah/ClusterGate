@@ -547,12 +547,13 @@ export async function restoreRouteVersion(routeId: string, versionId: string, us
   return updateRoute(routeId, restoreData as Prisma.RouteUncheckedUpdateInput, userId)
 }
 
-export async function exportRoutes() {
+export async function exportRoutes(organizationIds?: string[]) {
   // Mirror every saveable, non-secret config field so an exported route can be
   // re-imported and behave identically. Secret values (authValue,
-  // upstreamAuthValue, webhookSecret) are deliberately omitted.
+  // upstreamAuthValue, webhookSecret) are deliberately omitted. Non-admins
+  // only get the routes of organizations they belong to.
   const routes = await prisma.route.findMany({
-    where: { deletedAt: null },
+    where: { deletedAt: null, ...(organizationIds ? { organizationId: { in: organizationIds } } : {}) },
     select: {
       name: true,
       description: true,

@@ -5,8 +5,22 @@ import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as orgService from '../services/organizationService'
 import { achievementService } from '../services/achievementService'
+import { isOrgMember, canManageOrgRoutes } from '../services/orgAccessService'
+import { AppError } from '../lib/errors'
 
 const router = Router()
+
+// Tenant guards. Membership data (names, emails, roles) is only visible to
+// members; changing who is in an org — and with which role — is reserved for
+// the org's OWNER/ADMIN or a system ADMIN. Denials are 404s so org existence
+// isn't leaked. Without the second guard any system OPERATOR could add
+// themselves as ADMIN to every organization and manage all tenants' routes.
+async function assertOrgMember(req: Request, orgId: string) {
+  if (!(await isOrgMember(req.user!.userId, req.user!.role, orgId))) throw AppError.notFound('Organization')
+}
+async function assertOrgAdmin(req: Request, orgId: string) {
+  if (!(await canManageOrgRoutes(req.user!.userId, req.user!.role, orgId))) throw AppError.notFound('Organization')
+}
 
 // Accept either a cuid id or the URL-friendly slug. We rewrite the param so
 // downstream handlers can keep doing { id: req.params.id } lookups.
@@ -152,6 +166,7 @@ router.get('/', authenticate, async (req, res, next) => {
 router.get('/:id', authenticate, async (req, res, next) => {
   try {
     const org = await orgService.getOrganizationById(req.params.id)
+    await assertOrgMember(req, org.id)
     res.json({ success: true, data: org })
   } catch (err) {
     next(err)
@@ -201,6 +216,7 @@ router.delete('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, ne
 // Add member
 router.post('/:id/members', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
+    await assertOrgAdmin(req, req.params.id)
     const { userId, role } = z.object({
       userId: z.string(),
       role: z.enum(['OWNER', 'ADMIN', 'MEMBER']).default('MEMBER'),
@@ -231,6 +247,7 @@ router.post('/:id/members', authenticate, authorize([Role.ADMIN, Role.OPERATOR])
 // Update member role
 router.put('/:id/members/:userId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
+    await assertOrgAdmin(req, req.params.id)
     const { role } = z.object({
       role: z.enum(['OWNER', 'ADMIN', 'MEMBER']),
     }).parse(req.body)
@@ -270,6 +287,7 @@ router.delete('/:id/members/:userId', authenticate, authorize([Role.ADMIN]), asy
 // List teams for organization
 router.get('/:id/teams', authenticate, async (req, res, next) => {
   try {
+    await assertOrgMember(req, req.params.id)
     const teams = await orgService.getTeams(req.params.id)
     res.json({ success: true, data: teams })
   } catch (err) {
@@ -280,7 +298,11 @@ router.get('/:id/teams', authenticate, async (req, res, next) => {
 // Get team by ID
 router.get('/:orgId/teams/:teamId', authenticate, async (req, res, next) => {
   try {
+    await assertOrgMember(req, req.params.orgId)
     const team = await orgService.getTeamById(req.params.teamId)
+    // The team must actually belong to the org in the URL — the membership
+    // check above is only meaningful for that org.
+    if (!team || (team as any).organizationId !== req.params.orgId) throw AppError.notFound('Team')
     res.json({ success: true, data: team })
   } catch (err) {
     next(err)

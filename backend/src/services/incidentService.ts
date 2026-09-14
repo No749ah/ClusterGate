@@ -3,11 +3,13 @@ import { PrismaClient, IncidentStatus, IncidentSeverity } from '@prisma/client'
 const prisma = new PrismaClient()
 
 export const incidentService = {
-  async list(filters?: { status?: IncidentStatus; routeId?: string; page?: number; pageSize?: number }) {
-    const { status, routeId, page = 1, pageSize = 20 } = filters ?? {}
+  async list(filters?: { status?: IncidentStatus; routeId?: string; page?: number; pageSize?: number; organizationIds?: string[] }) {
+    const { status, routeId, page = 1, pageSize = 20, organizationIds } = filters ?? {}
     const where: any = {}
     if (status) where.status = status
     if (routeId) where.routeId = routeId
+    // Non-admins only see incidents on routes of their organizations
+    if (organizationIds) where.route = { organizationId: { in: organizationIds } }
 
     const [data, total] = await Promise.all([
       prisma.incident.findMany({
