@@ -132,24 +132,27 @@ router.get('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERA
  */
 router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
-    const { name, expiresAt, scope } = z.object({
+    const { name, expiresAt, scope, routeIds } = z.object({
       name: z.string().min(1, 'Name is required').max(100),
       expiresAt: z.string().datetime().optional(),
       scope: z.enum(['READ', 'FULL']).default('FULL'),
+      // Additional routes the key is valid for from the start (group keys)
+      routeIds: z.array(z.string()).max(100).optional(),
     }).parse(req.body)
 
     const key = await apiKeyService.createApiKey(
       req.params.routeId,
       name,
       expiresAt ? new Date(expiresAt) : undefined,
-      scope
+      scope,
+      routeIds ?? []
     )
     createAuditLog({
       userId: req.user!.userId,
       action: 'apikey.create',
       resource: 'route',
       resourceId: req.params.routeId,
-      details: { keyId: key.id, name, expiresAt: expiresAt ?? null },
+      details: { keyId: key.id, name, expiresAt: expiresAt ?? null, sharedRouteIds: key.sharedRoutes.map((r) => r.id) },
       ip: req.ip || req.socket.remoteAddress,
       userAgent: req.get('user-agent'),
     })
@@ -258,6 +261,44 @@ router.put('/:routeId/api-keys/:keyId/routes', authenticate, authorize([Role.ADM
       userAgent: req.get('user-agent'),
     })
     res.json({ success: true, data: result })
+  } catch (err) {
+    next(err)
+  }
+})
+
+/**
+ * @openapi
+ * /api/routes/{routeId}/api-keys/{keyId}/share:
+ *   delete:
+ *     tags: [API Keys]
+ *     summary: Detach a shared key from this route
+ *     description: Removes this route from a key that another route shared with it. The key itself stays intact on its owner route. Requires ADMIN or OPERATOR role.
+ *     parameters:
+ *       - in: path
+ *         name: routeId
+ *         required: true
+ *         schema: { type: string }
+ *       - in: path
+ *         name: keyId
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Key detached from this route }
+ *       404: { description: Key is not shared with this route }
+ */
+router.delete('/:routeId/api-keys/:keyId/share', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
+  try {
+    await apiKeyService.detachApiKeyFromRoute(req.params.keyId, req.params.routeId)
+    createAuditLog({
+      userId: req.user!.userId,
+      action: 'apikey.routes.detach',
+      resource: 'route',
+      resourceId: req.params.routeId,
+      details: { keyId: req.params.keyId },
+      ip: req.ip || req.socket.remoteAddress,
+      userAgent: req.get('user-agent'),
+    })
+    res.json({ success: true, message: 'Key detached from this route' })
   } catch (err) {
     next(err)
   }

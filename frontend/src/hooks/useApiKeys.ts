@@ -14,7 +14,7 @@ export function useCreateApiKey(routeId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL' }) =>
+    mutationFn: (data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL'; routeIds?: string[] }) =>
       api.apiKeys.create(routeId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiKeys', routeId] })
@@ -53,6 +53,21 @@ export function useSetApiKeyRoutes(routeId: string) {
     },
     onError: (err: any) => {
       toast.error(err.message || 'Failed to update key routes')
+    },
+  })
+}
+
+export function useDetachApiKey(routeId: string) {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (keyId: string) => api.apiKeys.detachFromRoute(routeId, keyId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['apiKeys', routeId] })
+      toast.success('Key removed from this route')
+    },
+    onError: (err: any) => {
+      toast.error(err.message || 'Failed to remove key from this route')
     },
   })
 }

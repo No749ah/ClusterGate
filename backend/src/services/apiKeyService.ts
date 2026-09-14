@@ -65,33 +65,54 @@ async function pollRevokeEpoch() {
 const epochTimer = setInterval(() => { pollRevokeEpoch().catch(() => {}) }, 10_000)
 if (typeof epochTimer.unref === 'function') epochTimer.unref()
 
+const routeRef = { select: { id: true, name: true, publicPath: true } } as const
+
+const apiKeyListSelect = {
+  id: true,
+  routeId: true,
+  name: true,
+  keyHint: true,
+  isActive: true,
+  scope: true,
+  lastUsedAt: true,
+  lastUsedIp: true,
+  usageCount: true,
+  expiresAt: true,
+  createdAt: true,
+  route: routeRef,
+  sharedRoutes: { select: { route: routeRef } },
+} as const
+
+/**
+ * Keys relevant to a route: the ones it owns plus the ones other routes
+ * shared with it. `isShared` marks the latter — they are managed (revoked,
+ * deleted, re-shared) on their owner route and can only be detached here.
+ */
 export async function getApiKeys(routeId: string) {
   const route = await prisma.route.findUnique({ where: { id: routeId, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
 
   const keys = await prisma.apiKey.findMany({
-    where: { routeId },
+    where: { OR: [{ routeId }, { sharedRoutes: { some: { routeId } } }] },
     orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      name: true,
-      keyHint: true,
-      isActive: true,
-      scope: true,
-      lastUsedAt: true,
-      lastUsedIp: true,
-      usageCount: true,
-      expiresAt: true,
-      createdAt: true,
-      sharedRoutes: {
-        select: { route: { select: { id: true, name: true, publicPath: true } } },
-      },
-    },
+    select: apiKeyListSelect,
   })
-  return keys.map(({ sharedRoutes, ...key }) => ({
+  return keys.map(({ route: ownerRoute, sharedRoutes, routeId: ownerId, ...key }) => ({
     ...key,
+    ownerRoute,
+    isShared: ownerId !== routeId,
     sharedRoutes: sharedRoutes.map((s) => s.route),
   }))
+}
+
+// Routes a key may additionally be valid for: existing, not deleted, never the owner
+async function resolveShareTargets(ownerRouteId: string, routeIds: string[]) {
+  const targetIds = [...new Set(routeIds)].filter((id) => id !== ownerRouteId)
+  if (targetIds.length > 0) {
+    const found = await prisma.route.count({ where: { id: { in: targetIds }, deletedAt: null } })
+    if (found !== targetIds.length) throw AppError.badRequest('One or more routes do not exist')
+  }
+  return targetIds
 }
 
 /**
@@ -103,11 +124,7 @@ export async function setApiKeyRoutes(keyId: string, ownerRouteId: string, route
   const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } })
   if (!apiKey || apiKey.routeId !== ownerRouteId) throw AppError.notFound('API Key')
 
-  const targetIds = [...new Set(routeIds)].filter((id) => id !== ownerRouteId)
-  if (targetIds.length > 0) {
-    const found = await prisma.route.count({ where: { id: { in: targetIds }, deletedAt: null } })
-    if (found !== targetIds.length) throw AppError.badRequest('One or more routes do not exist')
-  }
+  const targetIds = await resolveShareTargets(ownerRouteId, routeIds)
 
   await prisma.$transaction([
     prisma.apiKeyRoute.deleteMany({ where: { apiKeyId: keyId } }),
@@ -122,25 +139,50 @@ export async function setApiKeyRoutes(keyId: string, ownerRouteId: string, route
 
   const shared = await prisma.apiKeyRoute.findMany({
     where: { apiKeyId: keyId },
-    select: { route: { select: { id: true, name: true, publicPath: true } } },
+    select: { route: routeRef },
   })
   return { id: keyId, sharedRoutes: shared.map((s) => s.route) }
 }
 
-export async function createApiKey(routeId: string, name: string, expiresAt?: Date, scope: 'READ' | 'FULL' = 'FULL') {
+/**
+ * Detach a shared key from one of its additional routes. Callable from that
+ * route (not only the owner) so a route's operator can drop access they don't
+ * want, without touching the key elsewhere.
+ */
+export async function detachApiKeyFromRoute(keyId: string, routeId: string) {
+  const { count } = await prisma.apiKeyRoute.deleteMany({ where: { apiKeyId: keyId, routeId } })
+  if (count === 0) throw AppError.notFound('Shared API Key')
+  invalidateCache()
+  bumpRevokeEpoch().catch(() => {})
+}
+
+export async function createApiKey(
+  routeId: string,
+  name: string,
+  expiresAt?: Date,
+  scope: 'READ' | 'FULL' = 'FULL',
+  routeIds: string[] = []
+) {
   const route = await prisma.route.findUnique({ where: { id: routeId, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
+  const targetIds = await resolveShareTargets(routeId, routeIds)
 
   const rawKey = `cgk_${randomBytes(32).toString('hex')}`
   const keyHash = hashKey(rawKey)
   const keyHint = `${rawKey.slice(0, 3)}…${rawKey.slice(-2)}`
 
   const apiKey = await prisma.apiKey.create({
-    data: { routeId, name, keyHash, keyHint, expiresAt, scope },
-    select: { id: true, name: true, isActive: true, scope: true, expiresAt: true, createdAt: true },
+    data: {
+      routeId, name, keyHash, keyHint, expiresAt, scope,
+      sharedRoutes: { create: targetIds.map((id) => ({ routeId: id })) },
+    },
+    select: {
+      id: true, name: true, isActive: true, scope: true, expiresAt: true, createdAt: true,
+      sharedRoutes: { select: { route: routeRef } },
+    },
   })
 
-  return { ...apiKey, key: rawKey }
+  return { ...apiKey, sharedRoutes: apiKey.sharedRoutes.map((s) => s.route), key: rawKey }
 }
 
 export async function revokeApiKey(keyId: string, routeId: string) {

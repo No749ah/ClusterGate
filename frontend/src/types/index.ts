@@ -178,6 +178,10 @@ export interface ApiKey {
   createdAt: string
   /** Additional routes this key is valid for (beyond its owning route) */
   sharedRoutes?: { id: string; name: string; publicPath: string }[]
+  /** The route that owns (manages) this key */
+  ownerRoute?: { id: string; name: string; publicPath: string }
+  /** True when listed on a route that is not the owner — i.e. shared into this route */
+  isShared?: boolean
 }
 
 export interface HealthCheck {
