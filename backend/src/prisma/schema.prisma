@@ -372,6 +372,7 @@ model Route {
   versions       RouteVersion[]
   requestLogs    RequestLog[]
   apiKeys        ApiKey[]
+  sharedApiKeys  ApiKeyRoute[]
   healthChecks   HealthCheck[]
   notifications  Notification[]
   targets        RouteTarget[]
@@ -471,23 +472,37 @@ model RequestLog {
 }
 
 model ApiKey {
-  id         String    @id @default(cuid())
-  routeId    String
-  route      Route     @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  name       String
-  keyHash    String    @unique
-  keyHint    String?
-  isActive   Boolean   @default(true)
-  scope      KeyScope  @default(FULL)
-  lastUsedAt DateTime?
-  lastUsedIp String?
-  usageCount Int       @default(0)
-  expiresAt  DateTime?
-  createdAt  DateTime  @default(now())
+  id           String        @id @default(cuid())
+  routeId      String
+  route        Route         @relation(fields: [routeId], references: [id], onDelete: Cascade)
+  name         String
+  keyHash      String        @unique
+  keyHint      String?
+  isActive     Boolean       @default(true)
+  scope        KeyScope      @default(FULL)
+  lastUsedAt   DateTime?
+  lastUsedIp   String?
+  usageCount   Int           @default(0)
+  expiresAt    DateTime?
+  createdAt    DateTime      @default(now())
+  sharedRoutes ApiKeyRoute[]
 
   @@index([routeId])
   @@index([keyHash])
   @@map("api_keys")
+}
+
+// Additional routes an API key is valid for, beyond its owning route — lets
+// one client credential cover several endpoints (e.g. agent + documents).
+model ApiKeyRoute {
+  apiKeyId String
+  apiKey   ApiKey @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  routeId  String
+  route    Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  @@id([apiKeyId, routeId])
+  @@index([routeId])
+  @@map("api_key_routes")
 }
 
 model AuditLog {

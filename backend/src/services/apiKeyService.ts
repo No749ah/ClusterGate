@@ -69,7 +69,7 @@ export async function getApiKeys(routeId: string) {
   const route = await prisma.route.findUnique({ where: { id: routeId, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
 
-  return prisma.apiKey.findMany({
+  const keys = await prisma.apiKey.findMany({
     where: { routeId },
     orderBy: { createdAt: 'desc' },
     select: {
@@ -83,8 +83,48 @@ export async function getApiKeys(routeId: string) {
       usageCount: true,
       expiresAt: true,
       createdAt: true,
+      sharedRoutes: {
+        select: { route: { select: { id: true, name: true, publicPath: true } } },
+      },
     },
   })
+  return keys.map(({ sharedRoutes, ...key }) => ({
+    ...key,
+    sharedRoutes: sharedRoutes.map((s) => s.route),
+  }))
+}
+
+/**
+ * Replace the set of additional routes a key is valid for. The key stays owned
+ * by (and manageable from) its original route; routeIds must be existing,
+ * non-deleted routes and never include the owning route itself.
+ */
+export async function setApiKeyRoutes(keyId: string, ownerRouteId: string, routeIds: string[]) {
+  const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } })
+  if (!apiKey || apiKey.routeId !== ownerRouteId) throw AppError.notFound('API Key')
+
+  const targetIds = [...new Set(routeIds)].filter((id) => id !== ownerRouteId)
+  if (targetIds.length > 0) {
+    const found = await prisma.route.count({ where: { id: { in: targetIds }, deletedAt: null } })
+    if (found !== targetIds.length) throw AppError.badRequest('One or more routes do not exist')
+  }
+
+  await prisma.$transaction([
+    prisma.apiKeyRoute.deleteMany({ where: { apiKeyId: keyId } }),
+    ...(targetIds.length > 0
+      ? [prisma.apiKeyRoute.createMany({ data: targetIds.map((routeId) => ({ apiKeyId: keyId, routeId })) })]
+      : []),
+  ])
+
+  // Detached routes must stop accepting the key on every replica promptly
+  invalidateCache()
+  bumpRevokeEpoch().catch(() => {})
+
+  const shared = await prisma.apiKeyRoute.findMany({
+    where: { apiKeyId: keyId },
+    select: { route: { select: { id: true, name: true, publicPath: true } } },
+  })
+  return { id: keyId, sharedRoutes: shared.map((s) => s.route) }
 }
 
 export async function createApiKey(routeId: string, name: string, expiresAt?: Date, scope: 'READ' | 'FULL' = 'FULL') {
@@ -138,12 +178,15 @@ export async function verifyApiKey(
     return { id: cached.id, scope: cached.scope }
   }
 
+  // A key is valid for its owning route and for any route it was shared with
   const apiKey = await prisma.apiKey.findFirst({
     where: {
       keyHash,
-      routeId,
       isActive: true,
-      OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      AND: [
+        { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        { OR: [{ routeId }, { sharedRoutes: { some: { routeId } } }] },
+      ],
     },
     select: { id: true, scope: true, expiresAt: true },
   })
