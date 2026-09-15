@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { Role } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import { attachRouteParamResolver } from '../middleware/resolveRouteParam'
-import { requireRouteManage, canManageAllRoutes } from '../middleware/routeAccess'
+import { requireRouteManage, canManageAllRoutes, canManageAllFolders } from '../middleware/routeAccess'
 import { AppError } from '../lib/errors'
 import * as apiKeyService from '../services/apiKeyService'
 import { createAuditLog } from '../services/auditService'
@@ -134,17 +134,22 @@ router.get('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERA
  */
 router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
-    const { name, expiresAt, scope, routeIds } = z.object({
+    const { name, expiresAt, scope, routeIds, folderIds } = z.object({
       name: z.string().min(1, 'Name is required').max(100),
       expiresAt: z.string().datetime().optional(),
       scope: z.enum(['READ', 'FULL']).default('FULL'),
       // Additional routes the key is valid for from the start (group keys)
       routeIds: z.array(z.string()).max(100).optional(),
+      // Folders the key is bound to — covers every route in them, dynamically
+      folderIds: z.array(z.string()).max(100).optional(),
     }).parse(req.body)
 
-    // A key may only be shared into routes the caller could manage directly
+    // A key may only be shared into routes/folders the caller could manage directly
     if (routeIds?.length && !(await canManageAllRoutes(req.user!.userId, req.user!.role, routeIds))) {
       throw AppError.notFound('Route')
+    }
+    if (folderIds?.length && !(await canManageAllFolders(req.user!.userId, req.user!.role, folderIds))) {
+      throw AppError.notFound('Folder')
     }
 
     const key = await apiKeyService.createApiKey(
@@ -152,14 +157,19 @@ router.post('/:routeId/api-keys', authenticate, authorize([Role.ADMIN, Role.OPER
       name,
       expiresAt ? new Date(expiresAt) : undefined,
       scope,
-      routeIds ?? []
+      routeIds ?? [],
+      folderIds ?? []
     )
     createAuditLog({
       userId: req.user!.userId,
       action: 'apikey.create',
       resource: 'route',
       resourceId: req.params.routeId,
-      details: { keyId: key.id, name, expiresAt: expiresAt ?? null, sharedRouteIds: key.sharedRoutes.map((r) => r.id) },
+      details: {
+        keyId: key.id, name, expiresAt: expiresAt ?? null,
+        sharedRouteIds: key.sharedRoutes.map((r) => r.id),
+        sharedFolderIds: key.sharedFolders.map((f) => f.id),
+      },
       ip: req.ip || req.socket.remoteAddress,
       userAgent: req.get('user-agent'),
     })
@@ -256,17 +266,27 @@ router.post('/:routeId/api-keys/:keyId/revoke', authenticate, authorize([Role.AD
  */
 router.put('/:routeId/api-keys/:keyId/routes', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
-    const { routeIds } = z.object({ routeIds: z.array(z.string()).max(100) }).parse(req.body)
+    const { routeIds, folderIds } = z.object({
+      routeIds: z.array(z.string()).max(100),
+      folderIds: z.array(z.string()).max(100).optional(),
+    }).parse(req.body)
     if (routeIds.length && !(await canManageAllRoutes(req.user!.userId, req.user!.role, routeIds))) {
       throw AppError.notFound('Route')
     }
-    const result = await apiKeyService.setApiKeyRoutes(req.params.keyId, req.params.routeId, routeIds)
+    if (folderIds?.length && !(await canManageAllFolders(req.user!.userId, req.user!.role, folderIds))) {
+      throw AppError.notFound('Folder')
+    }
+    const result = await apiKeyService.setApiKeyRoutes(req.params.keyId, req.params.routeId, routeIds, folderIds ?? [])
     createAuditLog({
       userId: req.user!.userId,
       action: 'apikey.routes.set',
       resource: 'route',
       resourceId: req.params.routeId,
-      details: { keyId: req.params.keyId, sharedRouteIds: result.sharedRoutes.map((r) => r.id) },
+      details: {
+        keyId: req.params.keyId,
+        sharedRouteIds: result.sharedRoutes.map((r) => r.id),
+        sharedFolderIds: result.sharedFolders.map((f) => f.id),
+      },
       ip: req.ip || req.socket.remoteAddress,
       userAgent: req.get('user-agent'),
     })

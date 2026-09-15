@@ -301,27 +301,27 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
         setStreamError('No response stream')
         return
       }
-      // The upstream decides whether this is actually a stream — a route can
-      // have streaming enabled and still answer a non-stream request with one
-      // JSON document. Detect it so the default view matches the content.
+      // Streams don't announce themselves reliably: n8n agents stream NDJSON
+      // as application/json or text/plain, LLM proxies use text/event-stream.
+      // So start in the text view (that is what a stream needs live), flip to
+      // raw only if nothing readable arrives, and decide at the end by content:
+      // a body that is one single JSON document was not a stream.
       const contentType = res.headers.get('content-type') || ''
       const isEventStream = contentType.includes('text/event-stream') || contentType.includes('ndjson')
-      setWasStream(isEventStream)
-      // Pick the view up front so the right one is live while data arrives:
-      // assembled text for real streams, raw for single documents.
-      setShowStreamRaw(!isEventStream)
+      setWasStream(true)
+      setShowStreamRaw(false)
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
       let buffer = ''
       let collectedText = ''
-      let rawLength = 0
+      let rawAll = ''
       // eslint-disable-next-line no-constant-condition
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
         const chunk = decoder.decode(value, { stream: true })
         buffer += chunk
-        rawLength += chunk.length
+        rawAll += chunk
         setStreamRaw((prev) => prev + chunk)
         // Process complete lines for readable text extraction
         const lines = buffer.split('\n')
@@ -336,7 +336,7 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
         // A stream whose frames we can't extract text from (unknown format)
         // would leave the text view blank while it runs — flip to raw live
         // instead of only after completion.
-        if (isEventStream && collectedText === '' && rawLength > 1024) {
+        if (collectedText === '' && rawAll.length > 1024) {
           setShowStreamRaw(true)
         }
       }
@@ -347,9 +347,14 @@ export function RouteTestPanel({ routeId, defaultPath = '/', methods, requireAut
           setStreamText((prev) => prev + text)
         }
       }
-      // Default view: assembled text for real streams, raw (pretty-printed)
-      // otherwise — and never an empty text view when raw has content.
-      setShowStreamRaw(!isEventStream || collectedText === '')
+      let singleDocument = false
+      if (!isEventStream) {
+        try { JSON.parse(rawAll); singleDocument = true } catch { /* NDJSON / SSE / plain text */ }
+      }
+      setWasStream(!singleDocument)
+      // Final view: assembled text for anything that streamed readable content,
+      // raw (pretty-printed) for a single JSON document or unreadable frames.
+      setShowStreamRaw(singleDocument || collectedText === '')
     } catch (err) {
       setStreamError((err as Error).message)
     } finally {

@@ -34,10 +34,17 @@ describe('verifyApiKey', () => {
     findFirst.mockResolvedValue({ id: 'k9', scope: 'FULL', expiresAt: null })
     await verifyApiKey('cgk_shared_key', 'route-shared')
     const where = findFirst.mock.calls[0][0].where
-    // Route match must be an OR of ownership and the shared-routes join
+    // Route match must be an OR of ownership, the shared-routes join and
+    // folder binding (key bound to a folder that contains the route)
     expect(where.AND).toEqual(
       expect.arrayContaining([
-        { OR: [{ routeId: 'route-shared' }, { sharedRoutes: { some: { routeId: 'route-shared' } } }] },
+        {
+          OR: [
+            { routeId: 'route-shared' },
+            { sharedRoutes: { some: { routeId: 'route-shared' } } },
+            { sharedFolders: { some: { folder: { routes: { some: { id: 'route-shared' } } } } } },
+          ],
+        },
       ])
     )
   })

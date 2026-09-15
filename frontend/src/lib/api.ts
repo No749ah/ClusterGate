@@ -12,6 +12,7 @@ import {
   HealthCheck,
   AuditLog,
   ApiKey,
+  RouteFolder,
   Notification,
   RouteTarget,
   TransformRule,
@@ -425,7 +426,7 @@ class ApiClient {
     list: (routeId: string) =>
       this.get<ApiResponse<ApiKey[]>>(`/api/routes/${routeId}/api-keys`),
 
-    create: (routeId: string, data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL'; routeIds?: string[] }) =>
+    create: (routeId: string, data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL'; routeIds?: string[]; folderIds?: string[] }) =>
       this.post<ApiResponse<ApiKey & { key: string }>>(`/api/routes/${routeId}/api-keys`, data),
 
     detachFromRoute: (routeId: string, keyId: string) =>
@@ -437,11 +438,35 @@ class ApiClient {
     delete: (routeId: string, keyId: string) =>
       this.delete<ApiResponse<null>>(`/api/routes/${routeId}/api-keys/${keyId}`),
 
-    setRoutes: (routeId: string, keyId: string, routeIds: string[]) =>
-      this.put<ApiResponse<{ id: string; sharedRoutes: { id: string; name: string; publicPath: string }[] }>>(
+    setRoutes: (routeId: string, keyId: string, routeIds: string[], folderIds: string[] = []) =>
+      this.put<ApiResponse<{ id: string; sharedRoutes: { id: string; name: string; publicPath: string }[]; sharedFolders: { id: string; name: string }[] }>>(
         `/api/routes/${routeId}/api-keys/${keyId}/routes`,
-        { routeIds }
+        { routeIds, folderIds }
       ),
+  }
+
+  // ============================================================================
+  // Route Folders
+  // ============================================================================
+
+  folders = {
+    list: () =>
+      this.get<ApiResponse<RouteFolder[]>>('/api/folders'),
+
+    create: (data: { name: string; organizationId?: string | null }) =>
+      this.post<ApiResponse<RouteFolder>>('/api/folders', data),
+
+    update: (id: string, data: { name?: string; sortOrder?: number }) =>
+      this.put<ApiResponse<RouteFolder>>(`/api/folders/${id}`, data),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/folders/${id}`),
+
+    assignRoutes: (id: string, routeIds: string[]) =>
+      this.post<ApiResponse<{ count: number }>>(`/api/folders/${id}/routes`, { routeIds }),
+
+    removeRoute: (id: string, routeId: string) =>
+      this.delete<ApiResponse<null>>(`/api/folders/${id}/routes/${routeId}`),
   }
 
   // ============================================================================

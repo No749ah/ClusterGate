@@ -40,6 +40,17 @@ export interface RewriteRule {
   to: string
 }
 
+export interface RouteFolder {
+  id: string
+  name: string
+  organizationId: string | null
+  sortOrder: number
+  routeCount: number
+  keyCount: number
+  createdAt: string
+  updatedAt: string
+}
+
 export interface Route {
   id: string
   slug: string | null
@@ -113,8 +124,9 @@ export interface Route {
   // Load Balancing
   lbStrategy: LBStrategy
 
-  // Group & Org
+  // Group, Folder & Org
   routeGroupId: string | null
+  folderId?: string | null
   organizationId: string | null
 
   deletedAt: string | null
@@ -178,6 +190,8 @@ export interface ApiKey {
   createdAt: string
   /** Additional routes this key is valid for (beyond its owning route) */
   sharedRoutes?: { id: string; name: string; publicPath: string }[]
+  /** Folders this key is bound to — valid for every route inside, dynamically */
+  sharedFolders?: { id: string; name: string }[]
   /** The route that owns (manages) this key */
   ownerRoute?: { id: string; name: string; publicPath: string }
   /** True when listed on a route that is not the owner — i.e. shared into this route */

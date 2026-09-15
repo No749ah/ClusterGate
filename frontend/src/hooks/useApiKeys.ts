@@ -14,7 +14,7 @@ export function useCreateApiKey(routeId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: (data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL'; routeIds?: string[] }) =>
+    mutationFn: (data: { name: string; expiresAt?: string; scope?: 'READ' | 'FULL'; routeIds?: string[]; folderIds?: string[] }) =>
       api.apiKeys.create(routeId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiKeys', routeId] })
@@ -45,8 +45,8 @@ export function useSetApiKeyRoutes(routeId: string) {
   const queryClient = useQueryClient()
 
   return useMutation({
-    mutationFn: ({ keyId, routeIds }: { keyId: string; routeIds: string[] }) =>
-      api.apiKeys.setRoutes(routeId, keyId, routeIds),
+    mutationFn: ({ keyId, routeIds, folderIds }: { keyId: string; routeIds: string[]; folderIds?: string[] }) =>
+      api.apiKeys.setRoutes(routeId, keyId, routeIds, folderIds ?? []),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['apiKeys', routeId] })
       toast.success('Key routes updated')

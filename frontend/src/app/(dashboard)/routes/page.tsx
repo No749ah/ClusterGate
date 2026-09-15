@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, Fragment } from 'react'
 import { usePageSize } from '@/hooks/usePageSize'
 import { Pagination } from '@/components/ui/pagination'
 import { toast } from 'sonner'
@@ -30,10 +30,18 @@ import {
   Archive,
   KeyRound,
   Loader2,
+  Folder,
+  FolderPlus,
+  FolderOpen,
+  ChevronRight,
+  ChevronDown,
+  GripVertical,
+  Pencil,
 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useRoutes, usePublishRoute, useDeactivateRoute, useDuplicateRoute, useDeleteRoute, useBulkPublish, useBulkDeactivate, useBulkUpdate, useBulkDelete } from '@/hooks/useRoutes'
 import { useAuth } from '@/hooks/useAuth'
+import { useFolders, useCreateFolder, useUpdateFolder, useDeleteFolder, useAssignRoutesToFolder, useRemoveRouteFromFolder } from '@/hooks/useFolders'
 import { api } from '@/lib/api'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
 import { EnvironmentBadge } from '@/components/routes/EnvironmentBadge'
@@ -64,7 +72,7 @@ import { formatRelativeTime, copyToClipboard } from '@/lib/utils'
 import { useProxyOrigin } from '@/hooks/useProxyOrigin'
 import { routeUrl, routeEdit } from '@/lib/urls'
 import { toExportConfig, prepareForPaste, parseConfigs, buildCurl, downloadJson } from '@/lib/routeExport'
-import { Route, RouteStatus, Environment } from '@/types'
+import { Route, RouteStatus, Environment, RouteFolder } from '@/types'
 
 const HTTP_METHOD_COLORS: Record<string, string> = {
   GET: 'text-green-500 bg-green-500/10 border-green-500/20',
@@ -158,6 +166,15 @@ export default function RoutesPage() {
   const [groupKeyPending, setGroupKeyPending] = useState(false)
   const [groupKeyResult, setGroupKeyResult] = useState<{ key: string; count: number } | null>(null)
   const [groupKeyCopied, setGroupKeyCopied] = useState(false)
+  // Folders: organisation of routes in the list + drag & drop targets
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false)
+  const [folderEditing, setFolderEditing] = useState<RouteFolder | null>(null)
+  const [folderNameInput, setFolderNameInput] = useState('')
+  const [folderOrgInput, setFolderOrgInput] = useState('__none__')
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(new Set())
+  const [dragOver, setDragOver] = useState<string | null>(null)
+  const [dragging, setDragging] = useState(false)
+  const dragIdsRef = useRef<string[]>([])
   const searchRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -172,6 +189,13 @@ export default function RoutesPage() {
     queryFn: () => api.routeGroups.list(),
   })
   const groups = groupsData?.data ?? []
+
+  const { data: foldersData } = useFolders()
+  const createFolder = useCreateFolder()
+  const updateFolder = useUpdateFolder()
+  const deleteFolder = useDeleteFolder()
+  const assignRoutes = useAssignRoutesToFolder()
+  const removeRoute = useRemoveRouteFromFolder()
 
   // Fetch all routes (no tag filter) to extract unique tags for the filter dropdown
   const { data: allRoutesData } = useRoutes({ pageSize: 200 })
@@ -337,6 +361,131 @@ export default function RoutesPage() {
     if (tag) applyBulk({ addTags: [tag] })
   }
 
+  // ---- Folders -------------------------------------------------------------
+  const isAdmin = user?.role === 'ADMIN'
+  const allFolders: RouteFolder[] = foldersData?.data ?? []
+  // With an org filter active only that org's folders (and global ones) are drop targets
+  const folders = orgFilter === 'ALL' ? allFolders : allFolders.filter((f) => !f.organizationId || f.organizationId === orgFilter)
+  const folderById = new Map(folders.map((f) => [f.id, f]))
+  const UNSORTED = '__unsorted__'
+  // The current page grouped into folder sections; routes whose folder is not
+  // visible (other org filter) fall back to "Unsorted".
+  const sections: { id: string; folder: RouteFolder | null; routes: Route[] }[] = folders.length === 0
+    ? []
+    : [
+        ...folders.map((f) => ({ id: f.id, folder: f, routes: routes.filter((r) => r.folderId === f.id) })),
+        { id: UNSORTED, folder: null, routes: routes.filter((r) => !r.folderId || !folderById.has(r.folderId)) },
+      ]
+  const orgName = (id: string | null | undefined) => userOrgs.find((o: any) => o.id === id)?.name ?? null
+
+  function toggleCollapsed(id: string) {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  function toggleSection(sectionRoutes: Route[]) {
+    const all = sectionRoutes.length > 0 && sectionRoutes.every((r) => selectedIds.has(r.id))
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      for (const r of sectionRoutes) {
+        if (all) next.delete(r.id)
+        else next.add(r.id)
+      }
+      return next
+    })
+  }
+
+  const lookupRoute = (id: string) => routes.find((r) => r.id === id) ?? (allRoutesData?.data ?? []).find((r) => r.id === id)
+
+  // Move routes into a folder (or out of any folder when folderId is null).
+  async function moveRoutesToFolder(folderId: string | null, ids: string[]) {
+    if (ids.length === 0) return
+    try {
+      if (folderId) {
+        const toMove = ids.filter((id) => lookupRoute(id)?.folderId !== folderId)
+        if (toMove.length === 0) return
+        await assignRoutes.mutateAsync({ folderId, routeIds: toMove })
+        toast.success(`Moved ${toMove.length} route${toMove.length === 1 ? '' : 's'} to "${folderById.get(folderId)?.name ?? 'folder'}"`)
+      } else {
+        const toRemove = ids.map(lookupRoute).filter((r): r is Route => !!r?.folderId)
+        if (toRemove.length === 0) return
+        await Promise.all(toRemove.map((r) => removeRoute.mutateAsync({ folderId: r.folderId!, routeId: r.id })))
+        toast.success(`Removed ${toRemove.length} route${toRemove.length === 1 ? '' : 's'} from folder`)
+      }
+      setSelectedIds(new Set())
+    } catch {
+      // error toast comes from the mutation hook
+    }
+  }
+
+  // HTML5 drag & drop: dragging a selected row carries the whole selection.
+  function onRowDragStart(e: React.DragEvent<HTMLTableRowElement>, route: Route) {
+    const ids = selectedIds.has(route.id) ? Array.from(selectedIds) : [route.id]
+    dragIdsRef.current = ids
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', ids.join(','))
+    setDragging(true)
+  }
+  function onRowDragEnd() {
+    dragIdsRef.current = []
+    setDragging(false)
+    setDragOver(null)
+  }
+  function dropTargetProps(target: string) {
+    return {
+      onDragOver: (e: React.DragEvent) => {
+        if (dragIdsRef.current.length === 0) return
+        e.preventDefault()
+        e.dataTransfer.dropEffect = 'move'
+        if (dragOver !== target) setDragOver(target)
+      },
+      onDragLeave: () => setDragOver((cur) => (cur === target ? null : cur)),
+      onDrop: (e: React.DragEvent) => {
+        e.preventDefault()
+        const ids = dragIdsRef.current
+        onRowDragEnd()
+        moveRoutesToFolder(target === UNSORTED ? null : target, ids)
+      },
+    }
+  }
+
+  function openFolderDialog(folder?: RouteFolder) {
+    setFolderEditing(folder ?? null)
+    setFolderNameInput(folder?.name ?? '')
+    setFolderOrgInput(folder?.organizationId ?? (orgFilter !== 'ALL' ? orgFilter : (!isAdmin && userOrgs[0]?.id) || '__none__'))
+    setFolderDialogOpen(true)
+  }
+
+  async function submitFolder() {
+    const name = folderNameInput.trim()
+    if (!name) return
+    try {
+      if (folderEditing) {
+        await updateFolder.mutateAsync({ id: folderEditing.id, name })
+      } else {
+        await createFolder.mutateAsync({ name, organizationId: folderOrgInput === '__none__' ? null : folderOrgInput })
+      }
+      setFolderDialogOpen(false)
+    } catch {
+      // toast from hook
+    }
+  }
+
+  async function handleDeleteFolder(folder: RouteFolder) {
+    const ok = await confirm({
+      title: 'Delete folder',
+      description: `Delete "${folder.name}"? Its ${folder.routeCount} route(s) stay and become unsorted.${folder.keyCount > 0 ? ` ${folder.keyCount} API key(s) bound to this folder lose access to these routes.` : ''}`,
+      confirmLabel: 'Delete folder',
+      variant: 'destructive',
+    })
+    if (ok) deleteFolder.mutate(folder.id)
+  }
+  const folderPending = createFolder.isPending || updateFolder.isPending
+
   const bulkPending = bulkPublish.isPending || bulkDeactivate.isPending || bulkUpdate.isPending || bulkDelete.isPending
 
   const openGroupKeyDialog = () => {
@@ -371,6 +520,47 @@ export default function RoutesPage() {
   }
   const selectedRouteName = (id: string) => (allRoutesData?.data ?? routes).find((r) => r.id === id)?.name ?? routes.find((r) => r.id === id)?.name ?? id
 
+  const renderRow = (route: Route) => (
+    <RouteRow
+      key={route.id}
+      route={route}
+      selected={selectedIds.has(route.id)}
+      onToggle={() => toggleOne(route.id)}
+      onPublish={() => publish.mutate(route.id)}
+      onDeactivate={() => deactivate.mutate(route.id)}
+      onDuplicate={() => duplicate.mutate(route.id)}
+      onDelete={async () => {
+        if (route.isActive) {
+          toast.error('Deactivate this route before deleting it')
+          return
+        }
+        if (route.protected) {
+          const ok = await confirm({
+            title: 'Delete protected route',
+            description: `"${route.name}" is protected (production). This action cannot be undone.`,
+            confirmLabel: 'Delete',
+            variant: 'destructive',
+            requireText: route.name,
+          })
+          if (ok) deleteRoute.mutate({ id: route.id, confirm: route.name })
+          return
+        }
+        const ok = await confirm({
+          title: 'Delete Route',
+          description: `Are you sure you want to delete "${route.name}"? This action cannot be undone.`,
+          confirmLabel: 'Delete',
+          variant: 'destructive',
+        })
+        if (ok) deleteRoute.mutate(route.id)
+      }}
+      isLoading={publish.isPending || deactivate.isPending}
+      draggable={canEdit && folders.length > 0}
+      isDragSource={dragging && dragIdsRef.current.includes(route.id)}
+      onDragStart={(e) => onRowDragStart(e, route)}
+      onDragEnd={onRowDragEnd}
+    />
+  )
+
   return (
     <div className="space-y-6">
       {/* Header — sticks to the top of the viewport while scrolling long lists */}
@@ -401,6 +591,12 @@ export default function RoutesPage() {
                 <Archive className="w-4 h-4 mr-2" />
                 Archived
               </Link>
+            </Button>
+          )}
+          {canEdit && (
+            <Button variant="outline" onClick={() => openFolderDialog()} title="Group routes into folders — folders can also be bound to API keys">
+              <FolderPlus className="w-4 h-4 mr-2" />
+              New folder
             </Button>
           )}
           <Button asChild>
@@ -464,6 +660,20 @@ export default function RoutesPage() {
                   <SelectItem value="__none__">No group</SelectItem>
                   {groups.map((g: any) => (
                     <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {allFolders.length > 0 && (
+              <Select value="" onValueChange={(v) => moveRoutesToFolder(v === '__none__' ? null : v, Array.from(selectedIds))}>
+                <SelectTrigger className="h-8 w-[150px]" disabled={bulkPending || assignRoutes.isPending || removeRoute.isPending}>
+                  <Folder className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                  <SelectValue placeholder="Move to folder" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">No folder</SelectItem>
+                  {allFolders.map((f) => (
+                    <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -608,6 +818,58 @@ export default function RoutesPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Folder create / rename dialog */}
+      <Dialog open={folderDialogOpen} onOpenChange={setFolderDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{folderEditing ? 'Rename folder' : 'New folder'}</DialogTitle>
+            <DialogDescription>
+              {folderEditing
+                ? 'Folders only organise routes; renaming does not affect routes or keys.'
+                : 'Group routes in the list. Drag routes onto a folder to move them. API keys can be bound to a folder and then work for every route in it — including routes added later.'}
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => { e.preventDefault(); submitFolder() }}
+          >
+            <div className="space-y-1.5">
+              <label className="text-sm font-medium">Folder name</label>
+              <Input value={folderNameInput} onChange={(e) => setFolderNameInput(e.target.value)} placeholder="Customer XY" autoFocus />
+            </div>
+            {!folderEditing && (userOrgs.length > 0 || isAdmin) && (
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium">Organization</label>
+                <Select value={folderOrgInput} onValueChange={setFolderOrgInput}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {isAdmin && <SelectItem value="__none__">No organization (global)</SelectItem>}
+                    {userOrgs.map((org: any) => (
+                      <SelectItem key={org.id} value={org.id}>{org.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Only routes of this organization can be placed in the folder.
+                </p>
+              </div>
+            )}
+            {!folderEditing && !isAdmin && userOrgs.length === 0 && (
+              <p className="text-xs text-destructive">You need to be a member of an organization to create folders.</p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setFolderDialogOpen(false)}>Cancel</Button>
+              <Button
+                type="submit"
+                disabled={!folderNameInput.trim() || folderPending || (!folderEditing && !isAdmin && folderOrgInput === '__none__')}
+              >
+                {folderPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Saving...</> : folderEditing ? 'Save' : 'Create folder'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
@@ -687,7 +949,7 @@ export default function RoutesPage() {
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b border-border/50">
               <tr>
-                <th className="px-3 py-3 text-left w-10">
+                <th className="px-3 py-3 text-left w-14">
                   <Checkbox
                     checked={allSelected}
                     onCheckedChange={toggleAll}
@@ -762,44 +1024,89 @@ export default function RoutesPage() {
                   </td>
                 </tr>
               ) : (
-                routes.map((route) => (
-                  <RouteRow
-                    key={route.id}
-                    route={route}
-                    selected={selectedIds.has(route.id)}
-                    onToggle={() => toggleOne(route.id)}
-                    onPublish={() => publish.mutate(route.id)}
-                    onDeactivate={() => deactivate.mutate(route.id)}
-                    onDuplicate={() => duplicate.mutate(route.id)}
-                    onDelete={async () => {
-                      if (route.isActive) {
-                        toast.error('Deactivate this route before deleting it')
-                        return
-                      }
-                      if (route.protected) {
-                        const ok = await confirm({
-                          title: 'Delete protected route',
-                          description: `"${route.name}" is protected (production). This action cannot be undone.`,
-                          confirmLabel: 'Delete',
-                          variant: 'destructive',
-                          requireText: route.name,
-                        })
-                        if (ok) deleteRoute.mutate({ id: route.id, confirm: route.name })
-                        return
-                      }
-                      const ok = await confirm({
-                        title: 'Delete Route',
-                        description: `Are you sure you want to delete "${route.name}"? This action cannot be undone.`,
-                        confirmLabel: 'Delete',
-                        variant: 'destructive',
-                      })
-                      if (ok) deleteRoute.mutate(route.id)
-                    }}
-                    isLoading={publish.isPending || deactivate.isPending}
-                  />
-                ))
+                (folders.length === 0 ? routes : []).map(renderRow)
               )}
+              {!isLoading && routes.length > 0 && sections.map((section) => {
+                const collapsed = collapsedFolders.has(section.id)
+                const sectionAll = section.routes.length > 0 && section.routes.every((r) => selectedIds.has(r.id))
+                const sectionSome = !sectionAll && section.routes.some((r) => selectedIds.has(r.id))
+                const folder = section.folder
+                const isOver = dragOver === section.id
+                return (
+                  <Fragment key={section.id}>
+                    <tr
+                      {...(canEdit ? dropTargetProps(section.id) : {})}
+                      className={`bg-muted/40 border-y border-border/50 transition-colors ${isOver ? 'bg-primary/10 ring-2 ring-inset ring-primary/50' : ''}`}
+                    >
+                      <td className="px-3 py-2">
+                        <Checkbox
+                          checked={sectionAll ? true : sectionSome ? 'indeterminate' : false}
+                          onCheckedChange={() => toggleSection(section.routes)}
+                          disabled={section.routes.length === 0}
+                          aria-label={`Select all routes in ${folder?.name ?? 'Unsorted'}`}
+                        />
+                      </td>
+                      <td colSpan={8} className="px-4 py-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <button
+                            type="button"
+                            onClick={() => toggleCollapsed(section.id)}
+                            className="text-muted-foreground hover:text-foreground"
+                            aria-label={collapsed ? 'Expand' : 'Collapse'}
+                          >
+                            {collapsed ? <ChevronRight className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                          </button>
+                          {folder
+                            ? <Folder className="w-4 h-4 text-primary shrink-0" />
+                            : <FolderOpen className="w-4 h-4 text-muted-foreground shrink-0" />}
+                          <span className="font-medium text-foreground truncate">{folder?.name ?? 'Unsorted'}</span>
+                          <Badge variant="secondary" className="text-[10px] py-0 px-1.5">
+                            {section.routes.length}{folder && folder.routeCount !== section.routes.length ? ` / ${folder.routeCount}` : ''}
+                          </Badge>
+                          {folder && folder.keyCount > 0 && (
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 gap-1" title="API keys bound to this folder work for every route in it">
+                              <KeyRound className="w-3 h-3" />
+                              {folder.keyCount} key{folder.keyCount === 1 ? '' : 's'}
+                            </Badge>
+                          )}
+                          {folder?.organizationId && orgName(folder.organizationId) && (
+                            <Badge variant="outline" className="text-[10px] py-0 px-1.5 max-w-[150px] truncate">
+                              {orgName(folder.organizationId)}
+                            </Badge>
+                          )}
+                          {dragging && canEdit && (
+                            <span className={`text-xs ml-1 ${isOver ? 'text-primary font-medium' : 'text-muted-foreground'}`}>
+                              {folder ? 'Drop to move here' : 'Drop to remove from folder'}
+                            </span>
+                          )}
+                          {folder && canEdit && (
+                            <div className="ml-auto flex items-center gap-1">
+                              <Button variant="ghost" size="icon-sm" onClick={() => openFolderDialog(folder)} title="Rename folder">
+                                <Pencil className="w-3.5 h-3.5" />
+                              </Button>
+                              <Button variant="ghost" size="icon-sm" onClick={() => handleDeleteFolder(folder)} title="Delete folder (routes stay)">
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {!collapsed && section.routes.map(renderRow)}
+                    {!collapsed && section.routes.length === 0 && (
+                      <tr {...(canEdit ? dropTargetProps(section.id) : {})} className={isOver ? 'bg-primary/10' : ''}>
+                        <td colSpan={9} className="px-4 py-3 pl-14 text-xs text-muted-foreground italic">
+                          {folder && folder.routeCount > 0
+                            ? `${folder.routeCount} route${folder.routeCount === 1 ? '' : 's'} in this folder ${folder.routeCount === 1 ? 'is' : 'are'} on another page or filtered out.`
+                            : canEdit ? 'Empty — drag routes here or use "Move to folder" in the selection toolbar.' : 'Empty folder.'}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
             </tbody>
+
           </table>
         </div>
 
@@ -830,6 +1137,7 @@ export default function RoutesPage() {
               ['Ctrl/⌘ K', 'Show this dialog'],
               ['Delete', 'Delete selected'],
               ['Esc', 'Clear selection / close dialog'],
+              ['Drag', 'Drop rows onto a folder to move them (selection moves together)'],
             ].map(([key, label]) => (
               <div key={key} className="flex items-center justify-between gap-3 py-1">
                 <span className="text-muted-foreground">{label}</span>
@@ -882,6 +1190,10 @@ function RouteRow({
   onDuplicate,
   onDelete,
   isLoading,
+  draggable = false,
+  isDragSource = false,
+  onDragStart,
+  onDragEnd,
 }: {
   route: Route
   selected: boolean
@@ -891,23 +1203,41 @@ function RouteRow({
   onDuplicate: () => void
   onDelete: () => void
   isLoading: boolean
+  draggable?: boolean
+  isDragSource?: boolean
+  onDragStart?: (e: React.DragEvent<HTMLTableRowElement>) => void
+  onDragEnd?: () => void
 }) {
   const health = route.healthChecks?.[0]
   const proxyOrigin = useProxyOrigin()
 
   return (
-    <tr className="hover:bg-muted/20 transition-colors group">
+    <tr
+      className={`hover:bg-muted/20 transition-colors group ${isDragSource ? 'opacity-40' : ''}`}
+      draggable={draggable}
+      onDragStart={draggable ? onDragStart : undefined}
+      onDragEnd={draggable ? onDragEnd : undefined}
+    >
       <td className="px-3 py-3">
-        <Checkbox
-          checked={selected}
-          onCheckedChange={onToggle}
-          aria-label={`Select ${route.name}`}
-        />
+        <div className="flex items-center gap-1">
+          {draggable && (
+            <GripVertical
+              className="w-3.5 h-3.5 text-muted-foreground/60 cursor-grab opacity-0 group-hover:opacity-100 transition-opacity"
+              aria-hidden
+            />
+          )}
+          <Checkbox
+            checked={selected}
+            onCheckedChange={onToggle}
+            aria-label={`Select ${route.name}`}
+          />
+        </div>
       </td>
       <td className="px-4 py-3">
         <div>
           <Link
             href={routeUrl(route)}
+            draggable={false}
             className="font-medium text-foreground hover:text-primary transition-colors"
           >
             {route.name}
