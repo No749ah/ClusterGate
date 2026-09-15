@@ -106,7 +106,7 @@ const options: swaggerJsdoc.Options = {
             targetUrl: { type: 'string', format: 'uri' },
             methods: { type: 'array', items: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] }, minItems: 1 },
             tags: { type: 'array', items: { type: 'string' } },
-            timeout: { type: 'integer', minimum: 1000, maximum: 120000, default: 30000 },
+            timeout: { type: 'integer', minimum: 1000, maximum: 120000, default: 120000 },
             retryCount: { type: 'integer', minimum: 0, maximum: 5, default: 0 },
             retryDelay: { type: 'integer', minimum: 100, maximum: 10000, default: 1000 },
             stripPrefix: { type: 'boolean', default: false },

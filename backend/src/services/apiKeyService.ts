@@ -41,6 +41,16 @@ function invalidateCache() {
   validCache.clear()
 }
 
+/**
+ * Drop cached key validations on every replica. Called when the set of routes
+ * a key covers changes indirectly — e.g. a route moves between folders that
+ * keys are bound to — so access is withdrawn promptly, not after the TTL.
+ */
+export function invalidateApiKeyCaches() {
+  invalidateCache()
+  bumpRevokeEpoch().catch(() => {})
+}
+
 // Cross-replica invalidation: revokes bump a DB epoch; every pod polls it and
 // clears its local cache when it changes, so a revoked key stops working on all
 // pods within the poll interval (rather than only after the per-entry TTL).
@@ -66,6 +76,19 @@ const epochTimer = setInterval(() => { pollRevokeEpoch().catch(() => {}) }, 10_0
 if (typeof epochTimer.unref === 'function') epochTimer.unref()
 
 const routeRef = { select: { id: true, name: true, publicPath: true } } as const
+const folderRef = { select: { id: true, name: true } } as const
+
+// A key covers a route when it owns it, was shared with it, or is bound to
+// the folder the route currently sits in.
+function keyCoversRoute(routeId: string) {
+  return {
+    OR: [
+      { routeId },
+      { sharedRoutes: { some: { routeId } } },
+      { sharedFolders: { some: { folder: { routes: { some: { id: routeId } } } } } },
+    ],
+  }
+}
 
 const apiKeyListSelect = {
   id: true,
@@ -81,28 +104,41 @@ const apiKeyListSelect = {
   createdAt: true,
   route: routeRef,
   sharedRoutes: { select: { route: routeRef } },
+  sharedFolders: { select: { folder: folderRef } },
 } as const
 
 /**
  * Keys relevant to a route: the ones it owns plus the ones other routes
- * shared with it. `isShared` marks the latter — they are managed (revoked,
- * deleted, re-shared) on their owner route and can only be detached here.
+ * shared with it (directly or via a folder). `isShared` marks the latter —
+ * they are managed (revoked, deleted, re-shared) on their owner route and can
+ * only be detached here.
  */
 export async function getApiKeys(routeId: string) {
   const route = await prisma.route.findUnique({ where: { id: routeId, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
 
   const keys = await prisma.apiKey.findMany({
-    where: { OR: [{ routeId }, { sharedRoutes: { some: { routeId } } }] },
+    where: keyCoversRoute(routeId),
     orderBy: { createdAt: 'desc' },
     select: apiKeyListSelect,
   })
-  return keys.map(({ route: ownerRoute, sharedRoutes, routeId: ownerId, ...key }) => ({
+  return keys.map(({ route: ownerRoute, sharedRoutes, sharedFolders, routeId: ownerId, ...key }) => ({
     ...key,
     ownerRoute,
     isShared: ownerId !== routeId,
     sharedRoutes: sharedRoutes.map((s) => s.route),
+    sharedFolders: sharedFolders.map((s) => s.folder),
   }))
+}
+
+// Folders a key may be bound to: must exist
+async function resolveShareFolders(folderIds: string[]) {
+  const ids = [...new Set(folderIds)]
+  if (ids.length > 0) {
+    const found = await prisma.routeFolder.count({ where: { id: { in: ids } } })
+    if (found !== ids.length) throw AppError.badRequest('One or more folders do not exist')
+  }
+  return ids
 }
 
 // Routes a key may additionally be valid for: existing, not deleted, never the owner
@@ -120,28 +156,33 @@ async function resolveShareTargets(ownerRouteId: string, routeIds: string[]) {
  * by (and manageable from) its original route; routeIds must be existing,
  * non-deleted routes and never include the owning route itself.
  */
-export async function setApiKeyRoutes(keyId: string, ownerRouteId: string, routeIds: string[]) {
+export async function setApiKeyRoutes(keyId: string, ownerRouteId: string, routeIds: string[], folderIds: string[] = []) {
   const apiKey = await prisma.apiKey.findUnique({ where: { id: keyId } })
   if (!apiKey || apiKey.routeId !== ownerRouteId) throw AppError.notFound('API Key')
 
   const targetIds = await resolveShareTargets(ownerRouteId, routeIds)
+  const folderTargetIds = await resolveShareFolders(folderIds)
 
   await prisma.$transaction([
     prisma.apiKeyRoute.deleteMany({ where: { apiKeyId: keyId } }),
+    prisma.apiKeyFolder.deleteMany({ where: { apiKeyId: keyId } }),
     ...(targetIds.length > 0
       ? [prisma.apiKeyRoute.createMany({ data: targetIds.map((routeId) => ({ apiKeyId: keyId, routeId })) })]
       : []),
+    ...(folderTargetIds.length > 0
+      ? [prisma.apiKeyFolder.createMany({ data: folderTargetIds.map((folderId) => ({ apiKeyId: keyId, folderId })) })]
+      : []),
   ])
 
-  // Detached routes must stop accepting the key on every replica promptly
+  // Detached routes/folders must stop accepting the key on every replica promptly
   invalidateCache()
   bumpRevokeEpoch().catch(() => {})
 
-  const shared = await prisma.apiKeyRoute.findMany({
-    where: { apiKeyId: keyId },
-    select: { route: routeRef },
-  })
-  return { id: keyId, sharedRoutes: shared.map((s) => s.route) }
+  const [shared, sharedFolders] = await Promise.all([
+    prisma.apiKeyRoute.findMany({ where: { apiKeyId: keyId }, select: { route: routeRef } }),
+    prisma.apiKeyFolder.findMany({ where: { apiKeyId: keyId }, select: { folder: folderRef } }),
+  ])
+  return { id: keyId, sharedRoutes: shared.map((s) => s.route), sharedFolders: sharedFolders.map((s) => s.folder) }
 }
 
 /**
@@ -161,11 +202,13 @@ export async function createApiKey(
   name: string,
   expiresAt?: Date,
   scope: 'READ' | 'FULL' = 'FULL',
-  routeIds: string[] = []
+  routeIds: string[] = [],
+  folderIds: string[] = []
 ) {
   const route = await prisma.route.findUnique({ where: { id: routeId, deletedAt: null } })
   if (!route) throw AppError.notFound('Route')
   const targetIds = await resolveShareTargets(routeId, routeIds)
+  const folderTargetIds = await resolveShareFolders(folderIds)
 
   const rawKey = `cgk_${randomBytes(32).toString('hex')}`
   const keyHash = hashKey(rawKey)
@@ -175,14 +218,21 @@ export async function createApiKey(
     data: {
       routeId, name, keyHash, keyHint, expiresAt, scope,
       sharedRoutes: { create: targetIds.map((id) => ({ routeId: id })) },
+      sharedFolders: { create: folderTargetIds.map((id) => ({ folderId: id })) },
     },
     select: {
       id: true, name: true, isActive: true, scope: true, expiresAt: true, createdAt: true,
       sharedRoutes: { select: { route: routeRef } },
+      sharedFolders: { select: { folder: folderRef } },
     },
   })
 
-  return { ...apiKey, sharedRoutes: apiKey.sharedRoutes.map((s) => s.route), key: rawKey }
+  return {
+    ...apiKey,
+    sharedRoutes: apiKey.sharedRoutes.map((s) => s.route),
+    sharedFolders: apiKey.sharedFolders.map((s) => s.folder),
+    key: rawKey,
+  }
 }
 
 export async function revokeApiKey(keyId: string, routeId: string) {
@@ -220,14 +270,15 @@ export async function verifyApiKey(
     return { id: cached.id, scope: cached.scope }
   }
 
-  // A key is valid for its owning route and for any route it was shared with
+  // A key is valid for its owning route, any route it was shared with, and
+  // every route inside a folder it is bound to
   const apiKey = await prisma.apiKey.findFirst({
     where: {
       keyHash,
       isActive: true,
       AND: [
         { OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-        { OR: [{ routeId }, { sharedRoutes: { some: { routeId } } }] },
+        keyCoversRoute(routeId),
       ],
     },
     select: { id: true, scope: true, expiresAt: true },

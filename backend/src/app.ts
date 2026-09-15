@@ -38,6 +38,7 @@ import systemRouter from './routes/system.router'
 import analyticsRouter from './routes/analytics.router'
 import backupRouter from './routes/backup.router'
 import routeGroupsRouter from './routes/routegroups.router'
+import foldersRouter from './routes/folders.router'
 import organizationsRouter from './routes/organizations.router'
 import transformsRouter from './routes/transforms.router'
 import targetsRouter from './routes/targets.router'
@@ -190,6 +191,7 @@ app.use('/api/system', systemRouter)
 app.use('/api/analytics', analyticsRouter)
 app.use('/api/backups', auditLogger, backupRouter)
 app.use('/api/route-groups', auditLogger, routeGroupsRouter)
+app.use('/api/folders', auditLogger, foldersRouter)
 app.use('/api/organizations', auditLogger, organizationsRouter)
 app.use('/api/routes', auditLogger, transformsRouter)
 app.use('/api/routes', auditLogger, targetsRouter)

@@ -176,11 +176,32 @@ model Organization {
   crBypassRoles         OrgRole[] @default([OWNER])
   crApproverRoles       OrgRole[] @default([OWNER, ADMIN])
 
-  teams       Team[]
-  memberships OrgMembership[]
-  routes      Route[]
+  teams        Team[]
+  memberships  OrgMembership[]
+  routes       Route[]
+  routeFolders RouteFolder[]
 
   @@map("organizations")
+}
+
+// Lightweight organizational folders for routes — no path semantics, no
+// inherited config (that's what RouteGroup is for). API keys can be bound to
+// a folder and are then valid for every route in it, including routes moved
+// in later.
+model RouteFolder {
+  id             String        @id @default(cuid())
+  name           String
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sortOrder      Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  routes  Route[]
+  apiKeys ApiKeyFolder[]
+
+  @@index([organizationId])
+  @@map("route_folders")
 }
 
 model OrgMembership {
@@ -285,7 +306,7 @@ model Route {
   version      Int         @default(1)
 
   // Proxy settings
-  timeout      Int         @default(30000)   // ms
+  timeout      Int         @default(120000)   // ms
   retryCount   Int         @default(0)
   retryDelay   Int         @default(1000)    // ms
 
@@ -365,6 +386,9 @@ model Route {
 
   routeGroupId String?
   routeGroup   RouteGroup?  @relation(fields: [routeGroupId], references: [id], onDelete: SetNull)
+
+  folderId     String?
+  folder       RouteFolder? @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   organizationId String?
   organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
@@ -483,13 +507,27 @@ model ApiKey {
   lastUsedAt   DateTime?
   lastUsedIp   String?
   usageCount   Int           @default(0)
-  expiresAt    DateTime?
-  createdAt    DateTime      @default(now())
-  sharedRoutes ApiKeyRoute[]
+  expiresAt     DateTime?
+  createdAt     DateTime       @default(now())
+  sharedRoutes  ApiKeyRoute[]
+  sharedFolders ApiKeyFolder[]
 
   @@index([routeId])
   @@index([keyHash])
   @@map("api_keys")
+}
+
+// Folders an API key is valid for: the key authenticates on every route in
+// the folder, dynamically — routes moved into the folder later are covered.
+model ApiKeyFolder {
+  apiKeyId String
+  apiKey   ApiKey      @relation(fields: [apiKeyId], references: [id], onDelete: Cascade)
+  folderId String
+  folder   RouteFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  @@id([apiKeyId, folderId])
+  @@index([folderId])
+  @@map("api_key_folders")
 }
 
 // Additional routes an API key is valid for, beyond its owning route — lets

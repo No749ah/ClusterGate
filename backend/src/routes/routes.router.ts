@@ -81,7 +81,7 @@ const routeBodySchema = z.object({
   targetUrl: z.string().url('Target URL must be a valid URL'),
   methods: z.array(z.enum(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'])).min(1),
   tags: z.array(z.string()).default([]),
-  timeout: z.number().int().min(1000).max(120000).default(30000),
+  timeout: z.number().int().min(1000).max(120000).default(120000),
   retryCount: z.number().int().min(0).max(5).default(0),
   retryDelay: z.number().int().min(100).max(10000).default(1000),
   stripPrefix: z.boolean().default(false),
