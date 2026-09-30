@@ -6,6 +6,7 @@ import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { isIpAllowed } from '../services/proxyService'
 import { timingSafeCompare } from '../lib/security'
+import { stripClusterGateCookies } from '../lib/cookies'
 
 const proxy = createProxyServer({
   ws: true,
@@ -107,6 +108,12 @@ export async function handleWebSocketUpgrade(req: IncomingMessage, socket: Socke
     const target = `${targetBase}${targetPath}`
 
     logger.info('WebSocket upgrade', { route: route.name, target })
+
+    // Never leak ClusterGate's own session/CSRF cookies to the upstream service
+    // (http-proxy copies req.headers verbatim into the upstream handshake)
+    const appCookies = stripClusterGateCookies(req.headers.cookie)
+    if (appCookies) req.headers.cookie = appCookies
+    else delete req.headers.cookie
 
     // Honor the route's sslVerify setting instead of a global secure:false
     proxy.ws(req, socket, head, { target, secure: (route as any).sslVerify !== false })

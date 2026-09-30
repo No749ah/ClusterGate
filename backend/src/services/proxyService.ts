@@ -20,6 +20,7 @@ import { applyRequestTransforms, applyResponseTransforms } from './transformServ
 import { lookupIp } from './geoipService'
 import { sanitizeText } from './sanitizerService'
 import { v4 as uuid } from 'uuid'
+import { stripClusterGateCookies } from '../lib/cookies'
 
 // Extended route type with relations loaded by proxyHandler
 type RouteWithRelations = Route & {
@@ -234,6 +235,13 @@ export async function proxyRequest(
     if (!HOP_BY_HOP_HEADERS.has(lowerKey) && lowerKey !== consumedAuthHeader && typeof value === 'string') {
       forwardHeaders[key] = value
     }
+  }
+
+  // Never leak ClusterGate's own session/CSRF cookies to the upstream service
+  if (forwardHeaders['cookie'] !== undefined) {
+    const appCookies = stripClusterGateCookies(forwardHeaders['cookie'])
+    if (appCookies) forwardHeaders['cookie'] = appCookies
+    else delete forwardHeaders['cookie']
   }
 
   // Add configured headers
