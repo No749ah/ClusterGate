@@ -44,6 +44,10 @@ const envSchema = z.object({
   // OpenTelemetry distributed tracing. Off by default; when enabled, spans are
   // exported over OTLP/HTTP to OTEL_EXPORTER_OTLP_ENDPOINT (e.g. a collector,
   // Tempo, Jaeger, Honeycomb). Trace/span IDs are also attached to logs.
+  // Cookie-authenticated API calls must carry the UI's client token, so
+  // JavaScript from apps exposed under /r/ on the same host cannot use the
+  // admin's session (see lib/clientToken.ts). Default on; 'false' disables.
+  API_CLIENT_TOKEN_REQUIRED: z.string().optional(),
   OTEL_ENABLED: z.coerce.boolean().default(false),
   OTEL_SERVICE_NAME: z.string().default('clustergate-backend'),
   OTEL_EXPORTER_OTLP_ENDPOINT: z.string().optional(),

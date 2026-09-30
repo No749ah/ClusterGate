@@ -50,6 +50,27 @@ export default function RootLayout({
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
         <meta name="apple-mobile-web-app-title" content="ClusterGate" />
+        {/* Take the client token handed over by /api/auth/resume out of the URL
+            fragment before anything else runs, so it never stays in the address
+            bar or history. See lib/api.ts. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function () {
+                try {
+                  var hash = window.location.hash;
+                  if (hash.indexOf('cg_ct=') === -1) return;
+                  var rest = [];
+                  hash.slice(1).split('&').forEach(function (part) {
+                    if (part.indexOf('cg_ct=') === 0) window.__cgClientToken = decodeURIComponent(part.slice(6));
+                    else if (part) rest.push(part);
+                  });
+                  window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search + (rest.length ? '#' + rest.join('&') : ''));
+                } catch (e) {}
+              })();
+            `,
+          }}
+        />
       </head>
       <body className={inter.className}>
         <script

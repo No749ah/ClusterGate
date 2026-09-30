@@ -3,7 +3,8 @@ import { z } from 'zod'
 import { login, getCurrentUser, changePassword, isSetupComplete, setupInitialAdmin } from '../services/authService'
 import { validateInvite, acceptInvite } from '../services/inviteService'
 import { generateSetup, verifyAndEnable, verifyToken as verify2FAToken, disable as disable2FA, startLoginChallenge } from '../services/twoFactorService'
-import { authenticate } from '../middleware/authenticate'
+import { authenticate, createAuthenticate } from '../middleware/authenticate'
+import { deriveClientToken, CLIENT_TOKEN_QUERY, safeResumeTarget, isTopLevelNavigation } from '../lib/clientToken'
 import { authLimiter } from '../middleware/rateLimiter'
 import { config } from '../config'
 import { signShortLivedToken, verifyShortLivedToken } from '../lib/jwt'
@@ -128,7 +129,7 @@ router.post('/setup', authLimiter, async (req: Request, res: Response, next: Nex
 
     res.json({
       success: true,
-      data: { user: result.user },
+      data: { user: result.user, clientToken: deriveClientToken(result.token) },
     })
   } catch (err) {
     next(err)
@@ -250,7 +251,7 @@ router.post('/accept-invite', authLimiter, async (req: Request, res: Response, n
       userAgent: req.get('user-agent'),
     })
 
-    res.json({ success: true, data: { user: result.user } })
+    res.json({ success: true, data: { user: result.user, clientToken: deriveClientToken(result.token) } })
   } catch (err) {
     next(err)
   }
@@ -359,7 +360,7 @@ router.post('/login', authLimiter, async (req: Request, res: Response, next: Nex
 
     res.json({
       success: true,
-      data: { user: result.user },
+      data: { user: result.user, clientToken: deriveClientToken(result.token) },
     })
   } catch (err) {
     // Log failed login attempt
@@ -507,7 +508,7 @@ router.post('/2fa/verify', authLimiter, async (req: Request, res: Response, next
 
     res.json({
       success: true,
-      data: { user },
+      data: { user, clientToken: deriveClientToken(token) },
     })
   } catch (err) {
     next(err)
@@ -743,6 +744,59 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
   } catch (err) {
     next(err)
   }
+})
+
+/**
+ * @openapi
+ * /api/auth/resume:
+ *   get:
+ *     tags: [Auth]
+ *     summary: Hand the UI its client token after a page load
+ *     description: >
+ *       Top-level browser navigation only (checked via Fetch Metadata). Redirects
+ *       to the given UI page with the client token in the URL fragment, or to
+ *       the login page when the session is gone. Scripts of apps exposed under
+ *       /r/ cannot read the result.
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: to
+ *         schema:
+ *           type: string
+ *     responses:
+ *       303:
+ *         description: Redirect back into the UI
+ *       400:
+ *         description: Not a top-level navigation
+ */
+const resumeAuthenticate = createAuthenticate({ skipClientToken: true })
+
+router.get('/resume', (req: Request, res: Response, next: NextFunction) => {
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Referrer-Policy', 'no-referrer')
+
+  // fetch()/XHR from any page reports another mode/dest; only a real
+  // navigation lands the token in a document that exposed apps cannot reach.
+  if (!isTopLevelNavigation(req)) {
+    return next(AppError.badRequest('Resume must be a top-level navigation'))
+  }
+
+  const target = safeResumeTarget(req.query.to ?? '/dashboard', config.allowedOrigins) ?? '/dashboard'
+  const loginUrl = (() => {
+    const redirect = target.startsWith('/') ? target : new URL(target).pathname
+    const path = `/login?redirect=${encodeURIComponent(redirect)}`
+    return target.startsWith('/') ? path : new URL(target).origin + path
+  })()
+
+  resumeAuthenticate(req, res, (err?: unknown) => {
+    if (err || !req.user || !req.cookies?.cg_session) {
+      // Clear whatever is left so the UI's login page doesn't bounce back.
+      res.clearCookie('cg_session', { path: '/' })
+      return res.redirect(303, loginUrl)
+    }
+    const token = deriveClientToken(req.cookies.cg_session)
+    res.redirect(303, `${target}#${CLIENT_TOKEN_QUERY}=${encodeURIComponent(token)}`)
+  })
 })
 
 /**

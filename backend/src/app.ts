@@ -16,7 +16,7 @@ import { getVersion } from './lib/version'
 import { prisma } from './lib/prisma'
 import { registry } from './lib/metrics'
 import { globalLimiter, proxyLimiter } from './middleware/rateLimiter'
-import { authenticate } from './middleware/authenticate'
+import { authenticate, createAuthenticate } from './middleware/authenticate'
 import { csrfProtection } from './middleware/csrf'
 import { requestLogger } from './middleware/requestLogger'
 import { auditLogger } from './middleware/auditLogger'
@@ -54,22 +54,38 @@ const app = express()
 // Security Middleware
 // ============================================================================
 
-app.use(
-  helmet({
-    // Strict CSP for an API that serves JSON, not pages — locks down any
-    // response a browser might render directly (error pages, docs JSON).
-    // The interactive Swagger UI gets its own relaxed policy below.
-    contentSecurityPolicy: {
-      directives: {
-        defaultSrc: ["'none'"],
-        frameAncestors: ["'none'"],
-        baseUri: ["'none'"],
-        formAction: ["'none'"],
-      },
+const apiHelmet = helmet({
+  // Strict CSP for an API that serves JSON, not pages — locks down any
+  // response a browser might render directly (error pages, docs JSON).
+  // The interactive Swagger UI gets its own relaxed policy below.
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'none'"],
+      formAction: ["'none'"],
     },
-    crossOriginEmbedderPolicy: false,
-  })
-)
+  },
+  crossOriginEmbedderPolicy: false,
+  // Cross-Origin-Opener-Policy stays at helmet's default (same-origin): an
+  // API response opened in a popup by an exposed app lands in a separate
+  // browsing context group the app cannot script.
+})
+
+// Proxied apps (/r/) render their own pages: the API's CSP would block their
+// scripts and styles, and a shared COOP would put them in the same browsing
+// context group as the UI. Their security headers come from the upstream
+// plus lib/proxySecurityHeaders.ts.
+const proxyHelmet = helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginResourcePolicy: false,
+})
+
+// Express mounts are case-insensitive, so /R/... reaches the proxy as well.
+const isProxyPath = (req: express.Request) => /^\/r(\/|$)/i.test(req.path)
+app.use((req, res, next) => (isProxyPath(req) ? proxyHelmet(req, res, next) : apiHelmet(req, res, next)))
 
 app.use(
   cors({
@@ -97,7 +113,6 @@ app.use(cookieParser())
 // Proxy routes (/r/*) get the raw body so non-JSON payloads (form-encoded,
 // text, binary, uploads) are forwarded to the target unchanged. The JSON /
 // urlencoded parsers only apply to the management API.
-const isProxyPath = (req: express.Request) => req.path === '/r' || req.path.startsWith('/r/')
 // Buffer proxy bodies by default. When streaming is enabled the proxy reads the
 // raw stream itself (buffering only when a route needs the full body).
 if (!config.PROXY_STREAM_REQUESTS) {
@@ -166,7 +181,9 @@ if (config.swaggerEnabled) {
       frameAncestors: ["'none'"],
     },
   })
-  app.get('/api/docs.json', authenticate, (_req, res) => {
+  // The Swagger UI page fetches the spec without the UI's client token; the
+  // spec documents the open-source API and holds no user data.
+  app.get('/api/docs.json', createAuthenticate({ skipClientToken: true }), (_req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.send(swaggerSpec)
   })

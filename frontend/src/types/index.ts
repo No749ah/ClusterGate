@@ -73,6 +73,7 @@ export interface Route {
   sslVerify: boolean
   streamResponse: boolean
   rewriteRedirects: boolean
+  sandbox?: boolean
   requestBodyLimit: string
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string
@@ -261,6 +262,7 @@ export interface RouteFormData {
   sslVerify: boolean
   streamResponse?: boolean
   rewriteRedirects?: boolean
+  sandbox?: boolean
   requestBodyLimit: string
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string | BasicAuthCredentials

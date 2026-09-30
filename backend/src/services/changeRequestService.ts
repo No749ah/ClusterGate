@@ -136,7 +136,7 @@ export const changeRequestService = {
               rateLimitEnabled, rateLimitMax, rateLimitWindow, stripPrefix, sslVerify,
               corsEnabled, corsOrigins, requireAuth, authType, authValue, tags,
               wsEnabled, circuitBreakerEnabled, cbFailureThreshold, cbRecoveryTimeout,
-              lbStrategy, maintenanceMode, maintenanceMessage } = payload
+              lbStrategy, maintenanceMode, maintenanceMessage, sandbox } = payload
 
       await prisma.route.update({
         where: { id: cr.routeId },
@@ -145,7 +145,7 @@ export const changeRequestService = {
           rateLimitEnabled, rateLimitMax, rateLimitWindow, stripPrefix, sslVerify,
           corsEnabled, corsOrigins, requireAuth, authType, authValue, tags,
           wsEnabled, circuitBreakerEnabled, cbFailureThreshold, cbRecoveryTimeout,
-          lbStrategy, maintenanceMode, maintenanceMessage,
+          lbStrategy, maintenanceMode, maintenanceMessage, sandbox,
         },
       })
     }
