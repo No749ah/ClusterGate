@@ -46,54 +46,78 @@ function RoutePicker({
   const toggleFolder = (id: string, on: boolean) =>
     onFolderIds(on ? [...new Set([...folderIds, id])] : folderIds.filter((x) => x !== id))
 
-  const others = routes.filter((r) => r.id !== routeId)
-  const unsorted = others.filter((r) => !r.folderId || !folders.some((f) => f.id === r.folderId))
+  const folderIdSet = new Set(folders.map((f) => f.id))
+  // Own route first inside its section so the folder counts add up
+  const ordered = [...routes].sort((a, b) => Number(b.id === routeId) - Number(a.id === routeId))
+  const unsorted = ordered.filter((r) => !r.folderId || !folderIdSet.has(r.folderId))
+  const hasOthers = routes.some((r) => r.id !== routeId)
 
-  const RouteLine = ({ r, viaFolder }: { r: Route; viaFolder: boolean }) => (
-    <label className={cn('flex items-center gap-2 px-2.5 py-1.5 text-sm cursor-pointer hover:bg-muted/30', viaFolder && 'opacity-60')}>
-      <Checkbox
-        checked={viaFolder || routeIds.includes(r.id)}
-        disabled={viaFolder}
-        onCheckedChange={(c) => toggleRoute(r.id, c === true)}
-      />
-      <span className="truncate">{r.name}</span>
-      <span className="ml-auto text-xs font-mono text-muted-foreground truncate">{r.publicPath}</span>
-    </label>
-  )
+  // Name and path stack on two lines so long names never push the path out of
+  // the box; every text node can shrink (min-w-0) and truncates with a tooltip.
+  const RouteLine = ({ r, viaFolder }: { r: Route; viaFolder: boolean }) => {
+    const self = r.id === routeId
+    const locked = self || viaFolder
+    return (
+      <label
+        className={cn(
+          'flex items-start gap-2.5 px-3 py-1.5 min-w-0',
+          locked ? 'cursor-default' : 'cursor-pointer hover:bg-muted/30',
+          viaFolder && !self && 'opacity-60'
+        )}
+        title={`${r.name} — ${r.publicPath}`}
+      >
+        <Checkbox
+          className="mt-0.5 shrink-0"
+          checked={locked || routeIds.includes(r.id)}
+          disabled={locked}
+          onCheckedChange={(c) => toggleRoute(r.id, c === true)}
+        />
+        <span className="flex-1 min-w-0">
+          <span className="flex items-center gap-1.5 min-w-0">
+            <span className="text-sm truncate">{r.name}</span>
+            {self && (
+              <Badge variant="outline" className="shrink-0 text-[10px] py-0 px-1.5 font-normal">this key&apos;s route</Badge>
+            )}
+          </span>
+          <span className="block text-xs font-mono text-muted-foreground truncate">{r.publicPath}</span>
+        </span>
+      </label>
+    )
+  }
 
   return (
-    <div className="max-h-64 overflow-y-auto rounded-md border border-border/50 divide-y divide-border/50">
+    <div className="max-h-72 overflow-y-auto overflow-x-hidden rounded-md border border-border/50 divide-y divide-border/50 min-w-0">
       {folders.map((f) => {
-        const inFolder = others.filter((r) => r.folderId === f.id)
+        const inFolder = ordered.filter((r) => r.folderId === f.id)
         const on = folderIds.includes(f.id)
         return (
-          <div key={f.id}>
-            <label className="flex items-center gap-2 px-2.5 py-1.5 text-sm cursor-pointer bg-muted/20 hover:bg-muted/40">
-              <Checkbox checked={on} onCheckedChange={(c) => toggleFolder(f.id, c === true)} />
-              <Folder className="w-3.5 h-3.5 text-primary" />
-              <span className="font-medium truncate">{f.name}</span>
-              <span className="ml-auto text-xs text-muted-foreground">
-                {f.routeCount} route{f.routeCount !== 1 ? 's' : ''}{on ? ' · whole folder' : ''}
+          <div key={f.id} className="min-w-0">
+            <label className="flex items-center gap-2.5 px-3 py-2 cursor-pointer bg-muted/20 hover:bg-muted/40 min-w-0">
+              <Checkbox className="shrink-0" checked={on} onCheckedChange={(c) => toggleFolder(f.id, c === true)} />
+              <Folder className="w-4 h-4 text-primary shrink-0" />
+              <span className="text-sm font-medium truncate min-w-0" title={f.name}>{f.name}</span>
+              <span className="ml-auto shrink-0 text-xs text-muted-foreground whitespace-nowrap">
+                {on ? 'whole folder' : `${f.routeCount} route${f.routeCount !== 1 ? 's' : ''}`}
               </span>
             </label>
-            {inFolder.map((r) => (
-              <div key={r.id} className="pl-5">
-                <RouteLine r={r} viaFolder={on} />
+            {inFolder.length > 0 && (
+              <div className="ml-5 border-l border-border/50">
+                {inFolder.map((r) => <RouteLine key={r.id} r={r} viaFolder={on} />)}
               </div>
-            ))}
+            )}
           </div>
         )
       })}
       {unsorted.length > 0 && (
-        <div>
+        <div className="min-w-0">
           {folders.length > 0 && (
-            <div className="px-2.5 py-1 text-[11px] uppercase tracking-wider text-muted-foreground bg-muted/10">Unsorted</div>
+            <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-muted-foreground bg-muted/10">Unsorted</div>
           )}
           {unsorted.map((r) => <RouteLine key={r.id} r={r} viaFolder={false} />)}
         </div>
       )}
-      {others.length === 0 && folders.length === 0 && (
-        <p className="px-2.5 py-2 text-xs text-muted-foreground italic">No other routes yet</p>
+      {!hasOthers && folders.length === 0 && (
+        <p className="px-3 py-2 text-xs text-muted-foreground italic">No other routes yet</p>
       )}
     </div>
   )
@@ -521,14 +545,14 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
 
       {/* Create dialog */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="sm:max-w-xl">
           <DialogHeader>
             <DialogTitle>Generate API Key</DialogTitle>
             <DialogDescription>
               Create a new API key for authenticating requests to this route.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-3">
+          <div className="space-y-3 min-w-0">
             <div className="space-y-1.5">
               <label className="text-sm font-medium">Key Name</label>
               <Input
@@ -564,7 +588,7 @@ export function ApiKeysPanel({ routeId }: ApiKeysPanelProps) {
               </div>
             </div>
             {(otherRoutes.length > 0 || folders.length > 0) && (
-              <div className="space-y-1.5">
+              <div className="space-y-1.5 min-w-0">
                 <label className="text-sm font-medium">Also valid for</label>
                 <p className="text-xs text-muted-foreground">
                   Tick a folder to cover every route in it — including routes moved in later — or tick routes individually.
