@@ -5,7 +5,7 @@ import type { Route } from '@/types'
 const EXPORT_FIELDS = [
   'name', 'description', 'publicPath', 'targetUrl', 'methods', 'status', 'tags', 'environment',
   'timeout', 'retryCount', 'retryDelay', 'stripPrefix', 'sslVerify', 'streamResponse',
-  'rewriteRedirects', 'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules',
+  'rewriteRedirects', 'sandbox', 'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules',
   'corsEnabled', 'corsOrigins', 'ipAllowlist', 'requireAuth', 'authType', 'upstreamAuthType',
   'upstreamAuthHeader', 'targetType', 'healthCheckMethod', 'healthCheckPath', 'healthCheckBody',
   'healthCheckInterval', 'maintenanceMode', 'maintenanceMessage',

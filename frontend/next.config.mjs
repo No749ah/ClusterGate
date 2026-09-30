@@ -22,6 +22,10 @@ const csp = [
 const securityHeaders = [
   { key: 'Content-Security-Policy', value: csp },
   { key: 'X-Frame-Options', value: 'DENY' },
+  // Apps exposed under /r/ may share this origin. COOP same-origin puts the UI
+  // in its own browsing context group (proxied pages never send it), so an
+  // exposed app cannot script a UI window it opens. Framing is denied above.
+  { key: 'Cross-Origin-Opener-Policy', value: 'same-origin' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   // Only meaningful over HTTPS; harmless when served over plain HTTP in dev.

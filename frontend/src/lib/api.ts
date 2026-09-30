@@ -31,8 +31,22 @@ import {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || ''
 
+// Same-origin isolation: apps exposed under /r/ may share this origin, so the
+// session cookie alone does not prove a call comes from the UI. The backend
+// also requires a client token that only reaches the UI: in the login
+// response, or via /api/auth/resume, which redirects back here with the token
+// in the URL fragment (picked up and removed by the inline script in
+// app/layout.tsx). It lives in memory only — never in cookies or storage that
+// other same-origin pages could read.
+const CLIENT_TOKEN_HEADER = 'X-CG-Client-Token'
+const CLIENT_TOKEN_PARAM = 'cg_ct'
+const RESUME_GUARD_KEY = 'cg_resume_at'
+const RESUME_GUARD_MS = 15_000
+
 class ApiClient {
   private baseUrl: string
+  private clientToken: string | null = null
+  private resuming = false
 
   constructor(baseUrl: string) {
     this.baseUrl = baseUrl
@@ -44,24 +58,77 @@ class ApiClient {
     return match ? match[1] : null
   }
 
+  private getClientToken(): string | null {
+    if (this.clientToken || typeof window === 'undefined') return this.clientToken
+    const w = window as unknown as { __cgClientToken?: string }
+    if (w.__cgClientToken) {
+      this.clientToken = w.__cgClientToken
+      delete w.__cgClientToken
+    }
+    return this.clientToken
+  }
+
+  setClientToken(token: string | null) {
+    this.clientToken = token
+  }
+
+  /** Headers every credentialed API call needs (CSRF + client token). */
+  private authHeaders(): Record<string, string> {
+    const csrf = this.getCsrfToken()
+    const clientToken = this.getClientToken()
+    return {
+      ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+      ...(clientToken ? { [CLIENT_TOKEN_HEADER]: clientToken } : {}),
+    }
+  }
+
+  /**
+   * Fetch a fresh client token through a top-level navigation. Falls back to
+   * the login page if a resume just happened and still did not help.
+   */
+  private resumeSession() {
+    if (typeof window === 'undefined' || this.resuming) return
+    this.resuming = true
+    let recent = false
+    try {
+      const last = Number(window.sessionStorage.getItem(RESUME_GUARD_KEY) || 0)
+      recent = Date.now() - last < RESUME_GUARD_MS
+      window.sessionStorage.setItem(RESUME_GUARD_KEY, String(Date.now()))
+    } catch {
+      // storage unavailable — no loop guard, resume anyway
+    }
+    if (recent) {
+      window.location.href = '/login'
+      return
+    }
+    const here = window.location.pathname + window.location.search
+    const apiOrigin = this.baseUrl ? new URL(this.baseUrl, window.location.href).origin : window.location.origin
+    const to = apiOrigin === window.location.origin ? here : window.location.origin + here
+    window.location.replace(`${this.baseUrl}/api/auth/resume?to=${encodeURIComponent(to)}`)
+  }
+
   private async request<T>(
     path: string,
     options: RequestInit = {}
   ): Promise<T> {
     const url = `${this.baseUrl}${path}`
-    const csrfToken = this.getCsrfToken()
 
     const response = await fetch(url, {
       ...options,
       credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
-        ...(csrfToken ? { 'X-CSRF-Token': csrfToken } : {}),
+        ...this.authHeaders(),
         ...options.headers,
       },
     })
 
     if (response.status === 401) {
+      const code = await response.clone().json().then((d) => d?.error?.code, () => undefined)
+      if (code === 'CLIENT_TOKEN_REQUIRED' && typeof window !== 'undefined') {
+        this.resumeSession()
+        throw new Error('Unauthorized')
+      }
       // Redirect to login, but not if already on login/setup pages
       if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
         window.location.href = '/login'
@@ -77,6 +144,11 @@ class ApiClient {
       const error = new Error(`Request failed with status ${response.status}`)
       ;(error as any).status = response.status
       throw error
+    }
+
+    // Login-type responses carry the client token for the new session.
+    if (path.startsWith('/api/auth/') && typeof data?.data?.clientToken === 'string') {
+      this.clientToken = data.data.clientToken
     }
 
     if (!response.ok) {
@@ -121,7 +193,7 @@ class ApiClient {
       this.post<ApiResponse<{ user: User }>>('/api/auth/login', { email, password }),
 
     logout: () =>
-      this.post<ApiResponse<null>>('/api/auth/logout'),
+      this.post<ApiResponse<null>>('/api/auth/logout').finally(() => this.setClientToken(null)),
 
     getMe: () =>
       this.get<ApiResponse<User>>('/api/auth/me'),
@@ -213,13 +285,12 @@ class ApiClient {
     // Streaming test: returns the raw Response so the caller can read the body
     // incrementally (used for routes with streamResponse enabled).
     testStream: (id: string, params: { method?: string; path?: string; headers?: Record<string, string>; body?: string; skipAuth?: boolean }) => {
-      const csrf = this.getCsrfToken()
       return fetch(`${this.baseUrl}/api/routes/${id}/test`, {
         method: 'POST',
         credentials: 'include',
         headers: {
           'Content-Type': 'application/json',
-          ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+          ...this.authHeaders(),
         },
         body: JSON.stringify(params),
       })
@@ -503,14 +574,13 @@ class ApiClient {
       }>>('/api/system/update-check'),
 
     update: (onEvent: (event: any) => void): Promise<void> => {
-      const csrf = this.getCsrfToken()
       return new Promise((resolve, reject) => {
         fetch(`${this.baseUrl}/api/system/update`, {
           method: 'POST',
           credentials: 'include',
           headers: {
             'Content-Type': 'application/json',
-            ...(csrf ? { 'X-CSRF-Token': csrf } : {}),
+            ...this.authHeaders(),
           },
         }).then(response => {
           if (!response.ok || !response.body) {
@@ -949,7 +1019,12 @@ class ApiClient {
     map: (hours = 24) =>
       this.get<ApiResponse<TrafficMapData>>(`/api/traffic/map?hours=${hours}`),
 
-    liveUrl: () => `${this.baseUrl}/api/traffic/live`,
+    // EventSource cannot send headers; the backend accepts the client token as
+    // a query parameter for SSE requests only.
+    liveUrl: () => {
+      const token = this.getClientToken()
+      return `${this.baseUrl}/api/traffic/live${token ? `?${CLIENT_TOKEN_PARAM}=${encodeURIComponent(token)}` : ''}`
+    },
   }
 
   // ============================================================================

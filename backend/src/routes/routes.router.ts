@@ -89,6 +89,7 @@ const routeBodySchema = z.object({
   sslVerify: z.boolean().default(true),
   streamResponse: z.boolean().default(false),
   rewriteRedirects: z.boolean().default(true),
+  sandbox: z.boolean().default(false),
   requestBodyLimit: z.string().default('10mb'),
   addHeaders: z.record(z.string()).default({}),
   removeHeaders: z.array(z.string()).default([]),

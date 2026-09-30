@@ -4,6 +4,14 @@ import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { validateSession } from '../services/sessionService'
 import { Role } from '@prisma/client'
+import {
+  CLIENT_TOKEN_HEADER,
+  CLIENT_TOKEN_QUERY,
+  clientTokenRequired,
+  countSessionCookies,
+  isTopLevelNavigation,
+  isValidClientToken,
+} from '../lib/clientToken'
 
 // Extend Express Request type
 declare global {
@@ -19,17 +27,57 @@ declare global {
   }
 }
 
+export interface AuthenticateOptions {
+  /**
+   * Skip the client-token check for cookie sessions. Only for endpoints whose
+   * response is safe to hand to any same-origin script (the resume redirect
+   * and the public OpenAPI spec).
+   */
+  skipClientToken?: boolean
+}
+
+/**
+ * Cookie sessions must prove the call comes from the ClusterGate UI and not
+ * from JavaScript of an app exposed under /r/ on the same origin.
+ */
+function hasClientProof(req: Request, sessionJwt: string): boolean {
+  if (isValidClientToken(sessionJwt, req.get(CLIENT_TOKEN_HEADER))) return true
+  if (isTopLevelNavigation(req)) return true
+  // EventSource cannot set headers; accept the token in the query for SSE only.
+  if (req.method === 'GET' && (req.get('accept') || '').includes('text/event-stream')) {
+    return isValidClientToken(sessionJwt, req.query?.[CLIENT_TOKEN_QUERY])
+  }
+  return false
+}
+
+export function createAuthenticate(options: AuthenticateOptions = {}) {
+  return (req: Request, res: Response, next: NextFunction) => authenticateRequest(req, res, next, options)
+}
+
 export async function authenticate(req: Request, res: Response, next: NextFunction) {
+  return authenticateRequest(req, res, next, {})
+}
+
+async function authenticateRequest(req: Request, res: Response, next: NextFunction, options: AuthenticateOptions) {
   try {
     // Try cookie first, then Authorization header
+    const cookieToken: string | undefined = req.cookies?.cg_session
     const token =
-      req.cookies?.cg_session ||
+      cookieToken ||
       (req.headers.authorization?.startsWith('Bearer ')
         ? req.headers.authorization.slice(7)
         : null)
 
     if (!token) {
       throw AppError.unauthorized()
+    }
+
+    if (cookieToken) {
+      // A second cg_session (e.g. one planted with a narrower Path by a
+      // same-origin page) would shadow the real one. Refuse the ambiguity.
+      if (countSessionCookies(req.headers.cookie) > 1) {
+        throw AppError.unauthorized('Ambiguous session cookie')
+      }
     }
 
     let payload: JWTPayload
@@ -66,6 +114,12 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
         res.clearCookie('cg_session', { path: '/' })
         throw AppError.unauthorized('Session has been revoked')
       }
+    }
+
+    // Checked last so a stale or revoked cookie still gets UNAUTHORIZED (and
+    // is cleared) instead of sending the UI into a resume round-trip.
+    if (cookieToken && !options.skipClientToken && clientTokenRequired() && !hasClientProof(req, cookieToken)) {
+      throw new AppError(401, 'CLIENT_TOKEN_REQUIRED', 'Missing or invalid client token')
     }
 
     req.user = {

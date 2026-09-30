@@ -260,6 +260,7 @@ Public Request
 | `PROXY_TIMEOUT`         | No       | `30000`   | Proxy timeout in ms                  |
 | `PROXY_BODY_LIMIT`      | No       | `50mb`    | Max proxied request body size (raw passthrough) |
 | `PROXY_STREAM_REQUESTS` | No       | `false`   | Stream request bodies unbuffered to the target (large uploads) |
+| `API_CLIENT_TOKEN_REQUIRED` | No   | `true`    | Require the UI client token on cookie-authenticated API calls, so apps exposed under `/r/` on the same host cannot use the admin session. Only set `false` for debugging |
 | `LOG_LEVEL`             | No       | `info`    | Winston log level                    |
 | `METRICS_ENABLED`       | No       | `true`    | Enable Prometheus metrics            |
 | `METRICS_SECRET`        | No       | —         | Secret for /metrics endpoint         |
@@ -629,6 +630,8 @@ ClusterGate supports TOTP-based two-factor authentication:
 - **Per-session management** — Each login is tracked as a session (device/user-agent, IP, created + last-seen). From **Account → Active Sessions** you can see every signed-in device and revoke one individually or "sign out all other sessions". The session id is carried in the JWT (`sid` claim) and validated on every request; expired/revoked sessions are pruned by a daily cron.
 - **Global revocation** — Password change, admin reset, and force-logout-all still invalidate *all* of a user's sessions via `tokenVersion`
 - **CSRF protection** — Double-submit cookie pattern (`cg_csrf` cookie + `X-CSRF-Token` header) on all state-changing requests
+- **Same-origin isolation** — UI, `/api` and exposed apps under `/r/` can share one host. Cookie-authenticated API calls additionally need a client token (`X-CG-Client-Token`) that only the UI ever holds: it comes from the login response or from `/api/auth/resume`, a top-level navigation (verified via `Sec-Fetch-*`) that redirects into the UI with the token in the URL fragment. The UI keeps it in memory only and runs with `Cross-Origin-Opener-Policy: same-origin` and no framing, so scripts of an exposed app can neither fetch the token nor reach into a UI window. Proxied responses never carry a COOP or `Service-Worker-Allowed` header and cannot set `cg_*` cookies. Bearer-token API clients are unaffected
+- **Per-route sandbox** — *Sandbox Pages* serves a route's pages with `Content-Security-Policy: sandbox …` (opaque origin), isolating them from ClusterGate and from other routes. Use it for untrusted apps; apps that need their own cookies, local storage, service workers or same-origin API calls will break under it
 - **Password policy** — Min 12 chars, uppercase, lowercase, number, special character (enforced on all forms)
 - **API versioning** — `X-API-Version: 1` header on all responses
 

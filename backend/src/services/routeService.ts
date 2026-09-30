@@ -574,6 +574,7 @@ export async function exportRoutes(organizationIds?: string[]) {
       sslVerify: true,
       streamResponse: true,
       rewriteRedirects: true,
+      sandbox: true,
       requestBodyLimit: true,
       addHeaders: true,
       removeHeaders: true,
