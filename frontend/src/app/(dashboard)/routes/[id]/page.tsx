@@ -19,6 +19,7 @@ import { usePinnedRoutes, togglePin } from '@/hooks/usePinnedRoutes'
 import { Pin } from 'lucide-react'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
+import { LogBody } from '@/components/logs/LogBody'
 import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
 import { HealthIndicator } from '@/components/routes/HealthIndicator'
@@ -722,9 +723,11 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
           {log.responseBody && (
             <div>
               <h4 className="text-sm font-medium mb-1">Response Body</h4>
-              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all max-h-[200px]">
-                {formatJsonSafe(log.responseBody)}
-              </pre>
+              <LogBody
+                body={log.responseBody}
+                headers={log.responseHeaders as Record<string, unknown> | null}
+                className="bg-muted rounded-md p-3 text-xs overflow-auto whitespace-pre-wrap break-all max-h-[300px]"
+              />
             </div>
           )}
 

@@ -12,6 +12,7 @@ import { api } from '@/lib/api'
 import { TestResult } from '@/types'
 import { cn, getStatusColor, formatDuration, copyToClipboard, formatJsonForDisplay } from '@/lib/utils'
 import { toast } from 'sonner'
+import { extractStreamText } from '@/lib/streamText'
 
 interface RouteTestPanelProps {
   routeId: string
@@ -21,33 +22,6 @@ interface RouteTestPanelProps {
   authType?: string
   streamResponse?: boolean
   targetType?: string
-}
-
-// Extract human-readable text from a streamed chunk. Handles OpenAI-style SSE
-// (data: {...} frames with choices[].delta.content), n8n-style NDJSON
-// ({type:'item', content:'...'}) and plain text, so the test panel shows the
-// assembled message rather than raw protocol frames.
-function extractStreamText(line: string): string {
-  let trimmed = line.trim()
-  if (!trimmed) return ''
-  // SSE framing: strip the field prefix; comments/other fields carry no text
-  if (trimmed.startsWith('data:')) trimmed = trimmed.slice(5).trim()
-  else if (/^(event|id|retry):/.test(trimmed)) return ''
-  if (!trimmed || trimmed === '[DONE]') return ''
-  try {
-    const obj = JSON.parse(trimmed)
-    // OpenAI chat.completion chunks (streaming) and full responses
-    const choice = Array.isArray(obj.choices) ? obj.choices[0] : undefined
-    if (typeof choice?.delta?.content === 'string') return choice.delta.content
-    if (typeof choice?.message?.content === 'string') return choice.message.content
-    if (typeof choice?.text === 'string') return choice.text
-    if (typeof obj.content === 'string') return obj.content
-    if (typeof obj.delta === 'string') return obj.delta
-    if (typeof obj.text === 'string') return obj.text
-    return ''
-  } catch {
-    return line
-  }
 }
 
 // A literal `/*` is a route pattern, not a valid request path. Strip the
