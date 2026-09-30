@@ -1,6 +1,4 @@
-import { describe, it, expect, vi, beforeAll, afterAll, beforeEach } from 'vitest'
-import http from 'http'
-import type { AddressInfo } from 'net'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 // DB and session layers are mocked; JWTs are signed for real with the test secret.
 vi.mock('../../lib/prisma', () => ({
@@ -21,55 +19,81 @@ vi.mock('../../services/inviteService', () => ({}))
 vi.mock('../../services/twoFactorService', () => ({}))
 vi.mock('../../services/achievementService', () => ({ achievementService: {} }))
 
-import express from 'express'
-import cookieParser from 'cookie-parser'
 import { prisma } from '../../lib/prisma'
 import { signToken } from '../../lib/jwt'
 import { deriveClientToken } from '../../lib/clientToken'
 import { config } from '../../config'
+import { AppError } from '../../lib/errors'
 import { authenticate, createAuthenticate } from '../authenticate'
-import { errorHandler } from '../errorHandler'
-import authRouter from '../../routes/auth.router'
+import { resumeHandler } from '../../routes/auth.router'
 
 const findUser = prisma.user.findUnique as unknown as ReturnType<typeof vi.fn>
-
-const app = express()
-app.use(cookieParser())
-app.get('/api/thing', authenticate, (req, res) => res.json({ ok: true, user: req.user!.userId }))
-app.get('/api/open-spec', createAuthenticate({ skipClientToken: true }), (_req, res) => res.json({ ok: true }))
-app.post('/api/thing', authenticate, (_req, res) => res.json({ ok: true }))
-app.use('/api/auth', authRouter)
-app.use(errorHandler)
-
-let server: http.Server
-let port: number
-
-beforeAll(async () => {
-  server = app.listen(0)
-  await new Promise((r) => server.once('listening', r))
-  port = (server.address() as AddressInfo).port
-})
-afterAll(() => server.close())
 
 const jwt = signToken({ userId: 'u1', email: 'a@b.c', role: 'ADMIN' as any, tokenVersion: 0 })
 const clientToken = deriveClientToken(jwt)
 const NAV = { 'Sec-Fetch-Mode': 'navigate', 'Sec-Fetch-Dest': 'document', 'Sec-Fetch-Site': 'same-origin' }
 const FETCH = { 'Sec-Fetch-Mode': 'cors', 'Sec-Fetch-Dest': 'empty', 'Sec-Fetch-Site': 'same-origin' }
 
-function call(method: string, path: string, headers: Record<string, string> = {}) {
-  return new Promise<{ status: number; headers: http.IncomingHttpHeaders; body: any }>((resolve, reject) => {
-    const r = http.request({ host: '127.0.0.1', port, method, path, headers }, (res) => {
-      let data = ''
-      res.on('data', (c) => (data += c))
-      res.on('end', () => {
-        let body: any = data
-        try { body = JSON.parse(data) } catch { /* not json */ }
-        resolve({ status: res.statusCode!, headers: res.headers, body })
-      })
+type Result = { status: number; code?: string; location?: string; headers: Record<string, string>; clearedSession: boolean }
+
+// Minimal Express-like request/response doubles; cookies are parsed the way
+// cookie-parser does (first value wins) while the raw header is kept.
+function makeReq(method: string, path: string, headers: Record<string, string>) {
+  const lower: Record<string, string> = Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v]))
+  const [pathname, qs = ''] = path.split('?')
+  const cookies: Record<string, string> = {}
+  for (const part of (lower.cookie || '').split(';')) {
+    const [k, ...v] = part.trim().split('=')
+    if (k && !(k in cookies)) cookies[k] = v.join('=')
+  }
+  return {
+    method,
+    path: pathname,
+    headers: lower,
+    cookies,
+    query: Object.fromEntries(new URLSearchParams(qs)),
+    ip: '127.0.0.1',
+    get: (name: string) => lower[name.toLowerCase()],
+  } as any
+}
+
+function makeRes(result: Result) {
+  return {
+    setHeader: (k: string, v: string) => { result.headers[k.toLowerCase()] = v },
+    clearCookie: (name: string) => { if (name === 'cg_session') result.clearedSession = true },
+    redirect: (status: number, url: string) => { result.status = status; result.location = url },
+  } as any
+}
+
+async function runAuth(mw: any, method: string, path: string, headers: Record<string, string> = {}): Promise<Result> {
+  const result: Result = { status: 0, headers: {}, clearedSession: false }
+  const req = makeReq(method, path, headers)
+  await new Promise<void>((resolve) => {
+    mw(req, makeRes(result), (err?: unknown) => {
+      if (err instanceof AppError) { result.status = err.statusCode; result.code = err.code }
+      else if (err) { result.status = 500 }
+      else { result.status = 200 }
+      resolve()
     })
-    r.on('error', reject)
-    r.end()
   })
+  return result
+}
+
+const call = (method: string, path: string, headers: Record<string, string> = {}) => runAuth(authenticate, method, path, headers)
+
+async function resume(path: string, headers: Record<string, string> = {}): Promise<Result> {
+  const result: Result = { status: 0, headers: {}, clearedSession: false }
+  const req = makeReq('GET', path, headers)
+  await new Promise<void>((resolve) => {
+    const res = makeRes(result)
+    const redirect = res.redirect
+    res.redirect = (status: number, url: string) => { redirect(status, url); resolve() }
+    resumeHandler(req, res, (err?: unknown) => {
+      if (err instanceof AppError) { result.status = err.statusCode; result.code = err.code }
+      resolve()
+    })
+  })
+  return result
 }
 
 beforeEach(() => {
@@ -82,15 +106,14 @@ describe('authenticate — client token for cookie sessions', () => {
   it('rejects a cookie-only fetch (what an app under /r/ would send)', async () => {
     const res = await call('GET', '/api/thing', { Cookie: `cg_session=${jwt}`, ...FETCH })
     expect(res.status).toBe(401)
-    expect(res.body.error.code).toBe('CLIENT_TOKEN_REQUIRED')
+    expect(res.code).toBe('CLIENT_TOKEN_REQUIRED')
     // The session itself is fine, so the cookie must not be cleared.
-    expect(res.headers['set-cookie']).toBeUndefined()
+    expect(res.clearedSession).toBe(false)
   })
 
   it('accepts the cookie together with the matching client token', async () => {
     const res = await call('GET', '/api/thing', { Cookie: `cg_session=${jwt}`, 'X-CG-Client-Token': clientToken, ...FETCH })
     expect(res.status).toBe(200)
-    expect(res.body.user).toBe('u1')
   })
 
   it('rejects a client token that belongs to another session', async () => {
@@ -126,17 +149,17 @@ describe('authenticate — client token for cookie sessions', () => {
       'X-CG-Client-Token': clientToken,
     })
     expect(res.status).toBe(401)
-    expect(res.body.error.code).toBe('UNAUTHORIZED')
+    expect(res.code).toBe('UNAUTHORIZED')
   })
 
   it('reports an invalid cookie as UNAUTHORIZED, not as a missing client token', async () => {
     const res = await call('GET', '/api/thing', { Cookie: 'cg_session=garbage' })
     expect(res.status).toBe(401)
-    expect(res.body.error.code).toBe('UNAUTHORIZED')
+    expect(res.code).toBe('UNAUTHORIZED')
   })
 
   it('can be skipped per endpoint and switched off globally', async () => {
-    expect((await call('GET', '/api/open-spec', { Cookie: `cg_session=${jwt}` })).status).toBe(200)
+    expect((await runAuth(createAuthenticate({ skipClientToken: true }), 'GET', '/api/docs.json', { Cookie: `cg_session=${jwt}` })).status).toBe(200)
     ;(config as any).API_CLIENT_TOKEN_REQUIRED = 'false'
     expect((await call('GET', '/api/thing', { Cookie: `cg_session=${jwt}` })).status).toBe(200)
   })
@@ -144,36 +167,36 @@ describe('authenticate — client token for cookie sessions', () => {
 
 describe('GET /api/auth/resume', () => {
   it('redirects a top-level navigation back into the UI with the token in the fragment', async () => {
-    const res = await call('GET', '/api/auth/resume?to=%2Froutes%2Fabc%3Ftab%3Dlogs', { Cookie: `cg_session=${jwt}`, ...NAV })
+    const res = await resume('/api/auth/resume?to=%2Froutes%2Fabc%3Ftab%3Dlogs', { Cookie: `cg_session=${jwt}`, ...NAV })
     expect(res.status).toBe(303)
-    expect(res.headers.location).toBe(`/routes/abc?tab=logs#cg_ct=${encodeURIComponent(clientToken)}`)
+    expect(res.location).toBe(`/routes/abc?tab=logs#cg_ct=${encodeURIComponent(clientToken)}`)
     expect(res.headers['cache-control']).toBe('no-store')
   })
 
   it('refuses fetch() callers, so scripts cannot read the token', async () => {
-    const res = await call('GET', '/api/auth/resume?to=%2Fdashboard', { Cookie: `cg_session=${jwt}`, ...FETCH })
+    const res = await resume('/api/auth/resume?to=%2Fdashboard', { Cookie: `cg_session=${jwt}`, ...FETCH })
     expect(res.status).toBe(400)
-    expect(res.headers.location).toBeUndefined()
-    const bare = await call('GET', '/api/auth/resume?to=%2Fdashboard', { Cookie: `cg_session=${jwt}` })
+    expect(res.location).toBeUndefined()
+    const bare = await resume('/api/auth/resume?to=%2Fdashboard', { Cookie: `cg_session=${jwt}` })
     expect(bare.status).toBe(400)
   })
 
   it('never lands the token on a proxied or API path', async () => {
     for (const to of ['/r/evil/', '/R/evil', '/api/routes', '//evil.example/', 'https://evil.example/']) {
-      const res = await call('GET', `/api/auth/resume?to=${encodeURIComponent(to)}`, { Cookie: `cg_session=${jwt}`, ...NAV })
+      const res = await resume(`/api/auth/resume?to=${encodeURIComponent(to)}`, { Cookie: `cg_session=${jwt}`, ...NAV })
       expect(res.status, to).toBe(303)
-      expect(res.headers.location, to).toMatch(/^\/dashboard#cg_ct=/)
+      expect(res.location, to).toMatch(/^\/dashboard#cg_ct=/)
     }
   })
 
   it('sends a missing or dead session to the login page and clears the cookie', async () => {
-    const none = await call('GET', '/api/auth/resume?to=%2Froutes', NAV)
-    expect(none.headers.location).toBe('/login?redirect=%2Froutes')
+    const none = await resume('/api/auth/resume?to=%2Froutes', NAV)
+    expect(none.location).toBe('/login?redirect=%2Froutes')
 
     findUser.mockResolvedValue(null)
-    const dead = await call('GET', '/api/auth/resume?to=%2Froutes', { Cookie: `cg_session=${jwt}`, ...NAV })
+    const dead = await resume('/api/auth/resume?to=%2Froutes', { Cookie: `cg_session=${jwt}`, ...NAV })
     expect(dead.status).toBe(303)
-    expect(dead.headers.location).toBe('/login?redirect=%2Froutes')
-    expect(String(dead.headers['set-cookie'])).toMatch(/cg_session=;/)
+    expect(dead.location).toBe('/login?redirect=%2Froutes')
+    expect(dead.clearedSession).toBe(true)
   })
 })

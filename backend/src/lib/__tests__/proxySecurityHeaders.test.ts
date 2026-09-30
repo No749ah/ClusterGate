@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { hardenProxyResponseHeaders, SANDBOX_CSP } from '../proxySecurityHeaders'
+import { hardenProxyResponseHeaders, clearApiSecurityHeaders, SANDBOX_CSP } from '../proxySecurityHeaders'
 
 describe('hardenProxyResponseHeaders', () => {
   it('drops Service-Worker-Allowed and Cross-Origin-Opener-Policy in any casing', () => {
@@ -43,5 +43,19 @@ describe('hardenProxyResponseHeaders', () => {
   it('keeps the upstream CSP next to the sandbox policy', () => {
     const h = hardenProxyResponseHeaders({ 'Content-Security-Policy': "default-src 'self'" }, { sandbox: true })
     expect(h['Content-Security-Policy']).toEqual(["default-src 'self'", SANDBOX_CSP])
+  })
+})
+
+describe('clearApiSecurityHeaders', () => {
+  it("removes the API's CSP, COOP and CORP but keeps other headers", () => {
+    const headers: Record<string, string> = {
+      'content-security-policy': "default-src 'none'",
+      'cross-origin-opener-policy': 'same-origin',
+      'cross-origin-resource-policy': 'same-origin',
+      'x-content-type-options': 'nosniff',
+    }
+    const res = { removeHeader: (k: string) => delete headers[k.toLowerCase()] } as any
+    clearApiSecurityHeaders(res)
+    expect(headers).toEqual({ 'x-content-type-options': 'nosniff' })
   })
 })

@@ -77,7 +77,13 @@ export function hardenProxyResponseHeaders(
   return headers
 }
 
-/** Remove any opener policy already set on the response (e.g. by middleware). */
-export function clearOpenerPolicy(res: Response): void {
-  res.removeHeader('Cross-Origin-Opener-Policy')
+// Set app-wide by helmet for the JSON API. On proxied pages the API's CSP
+// would block the app's own scripts and styles, and its COOP would put the
+// page in the UI's browsing context group; the upstream's own headers (if
+// any) are applied afterwards.
+const API_ONLY_HEADERS = ['Content-Security-Policy', 'Cross-Origin-Opener-Policy', 'Cross-Origin-Resource-Policy']
+
+/** Drop the API's page-level security headers before sending a proxied response. */
+export function clearApiSecurityHeaders(res: Response): void {
+  for (const name of API_ONLY_HEADERS) res.removeHeader(name)
 }

@@ -771,7 +771,7 @@ router.post('/logout', authenticate, async (req: Request, res: Response, next: N
  */
 const resumeAuthenticate = createAuthenticate({ skipClientToken: true })
 
-router.get('/resume', (req: Request, res: Response, next: NextFunction) => {
+export function resumeHandler(req: Request, res: Response, next: NextFunction) {
   res.setHeader('Cache-Control', 'no-store')
   res.setHeader('Referrer-Policy', 'no-referrer')
 
@@ -797,7 +797,9 @@ router.get('/resume', (req: Request, res: Response, next: NextFunction) => {
     const token = deriveClientToken(req.cookies.cg_session)
     res.redirect(303, `${target}#${CLIENT_TOKEN_QUERY}=${encodeURIComponent(token)}`)
   })
-})
+}
+
+router.get('/resume', resumeHandler)
 
 /**
  * @openapi

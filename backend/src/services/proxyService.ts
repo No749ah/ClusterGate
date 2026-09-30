@@ -20,7 +20,7 @@ import { applyRequestTransforms, applyResponseTransforms } from './transformServ
 import { lookupIp } from './geoipService'
 import { sanitizeText } from './sanitizerService'
 import { v4 as uuid } from 'uuid'
-import { hardenProxyResponseHeaders, clearOpenerPolicy } from '../lib/proxySecurityHeaders'
+import { hardenProxyResponseHeaders, clearApiSecurityHeaders } from '../lib/proxySecurityHeaders'
 
 // Extended route type with relations loaded by proxyHandler
 type RouteWithRelations = Route & {
@@ -366,7 +366,7 @@ export async function proxyRequest(
         maybeRewriteLocation(streamHeaders, responseStatus, basePathForRewrite, selectedTargetUrl, (route as any).rewriteRedirects !== false)
       }
       hardenProxyResponseHeaders(streamHeaders, { sandbox: (route as any).sandbox === true })
-      clearOpenerPolicy(res)
+      clearApiSecurityHeaders(res)
       for (const [key, value] of Object.entries(streamHeaders)) {
         res.setHeader(key, value)
       }
@@ -494,7 +494,7 @@ export async function proxyRequest(
 
     // Keep the upstream from reaching ClusterGate through the shared origin
     hardenProxyResponseHeaders(respHeaders, { sandbox: (route as any).sandbox === true })
-    clearOpenerPolicy(res)
+    clearApiSecurityHeaders(res)
 
     // Set response headers
     for (const [key, value] of Object.entries(respHeaders)) {
