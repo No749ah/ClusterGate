@@ -176,6 +176,14 @@ model Organization {
   crBypassRoles         OrgRole[] @default([OWNER])
   crApproverRoles       OrgRole[] @default([OWNER, ADMIN])
 
+  // Route target allowlist. When restrictTargets is on, routes in this org may
+  // only point at Kubernetes services in allowedTargetNamespaces or at hosts
+  // matching allowedTargetHosts (host, *.suffix, IP or CIDR). Editable by
+  // system admins only.
+  restrictTargets         Boolean  @default(false)
+  allowedTargetNamespaces String[] @default([])
+  allowedTargetHosts      String[] @default([])
+
   teams        Team[]
   memberships  OrgMembership[]
   routes       Route[]

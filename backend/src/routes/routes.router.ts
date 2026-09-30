@@ -9,7 +9,7 @@ import { proxyRequest } from '../services/proxyService'
 import { createAuditLog } from '../services/auditService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
-import { stripSensitiveRouteFields, safePageSize, validateTargetUrlSync, isTlsProtocolMismatch, safeLookup, testPathAllowed } from '../lib/security'
+import { stripSensitiveRouteFields, safePageSize, isTlsProtocolMismatch, safeLookup, testPathAllowed } from '../lib/security'
 import { requireRouteManage } from '../middleware/routeAccess'
 import axios, { AxiosError } from 'axios'
 import https from 'https'
@@ -19,6 +19,7 @@ import { achievementService } from '../services/achievementService'
 import { changeRequestService } from '../services/changeRequestService'
 import { getUserOrgIds, canViewRouteById, canManageRoute, canManageOrgRoutes, canDeleteRoute, canDeleteOrgRoutes } from '../services/orgAccessService'
 import { redactLogsForViewer } from '../services/logService'
+import { assertRouteTargetAllowed, assertTargetAllowedForUser } from '../services/targetPolicyService'
 
 const router = Router()
 
@@ -372,13 +373,14 @@ router.post('/test-connection', authenticate, authorize([Role.ADMIN, Role.OPERAT
       upstreamAuthValue: authValueInputSchema,
       upstreamAuthHeader: z.string().default('X-API-Key'),
       body: z.any().optional(),
+      organizationId: z.string().nullable().optional(),
     })
     const cfg = encodeBasicAuthInputs(schema.parse(req.body)) as Omit<z.infer<typeof schema>, 'upstreamAuthValue'> & { upstreamAuthValue?: string }
 
     try {
-      validateTargetUrlSync(cfg.targetUrl)
+      await assertTargetAllowedForUser(cfg.targetUrl, req.user!, cfg.organizationId)
     } catch (err) {
-      return res.json({ success: true, data: { ok: false, status: 403, error: `SSRF blocked: ${(err as Error).message}` } })
+      return res.json({ success: true, data: { ok: false, status: 403, error: `Target blocked: ${(err as Error).message}` } })
     }
 
     const headers: Record<string, string> = { 'content-type': 'application/json' }
@@ -1051,6 +1053,9 @@ router.put('/:id', authenticate, async (req, res, next) => {
     if (!canBypass) {
       // Get current route for diff computation
       const currentRoute = await routeService.getRouteById(req.params.id)
+
+      // Reject a disallowed target now rather than at approval time
+      if (data.targetUrl) await assertRouteTargetAllowed(data.targetUrl, currentRoute.organizationId)
       const diff: Record<string, any> = {}
       for (const [key, value] of Object.entries(data)) {
         const oldVal = (currentRoute as any)[key]
@@ -1378,13 +1383,14 @@ router.post('/:id/test', authenticate, requireRouteManage('id'), async (req, res
   try {
     const route = await routeService.getRouteById(req.params.id)
 
-    // SSRF protection — block test requests to private/internal URLs
+    // Target policy — the route's org allowlist may have been tightened since
+    // the route was saved, and the global denylist always applies
     try {
-      validateTargetUrlSync(route.targetUrl)
+      await assertRouteTargetAllowed(route.targetUrl, route.organizationId)
     } catch (err) {
       return res.json({
         success: true,
-        data: { status: 403, duration: 0, error: `SSRF blocked: ${(err as Error).message}`, headers: {} },
+        data: { status: 403, duration: 0, error: `Target blocked: ${(err as Error).message}`, headers: {} },
       })
     }
 

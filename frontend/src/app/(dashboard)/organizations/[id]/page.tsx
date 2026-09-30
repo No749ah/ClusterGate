@@ -15,10 +15,13 @@ import { formatRelativeTime } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
+import { TargetAllowlistCard, TargetAllowlistUpdate } from '@/components/organizations/TargetAllowlistCard'
 
 export default function OrganizationDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params)
   const confirm = useConfirm()
+  const { user } = useAuth()
   const queryClient = useQueryClient()
 
   // Add member state
@@ -55,7 +58,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
 
   // Mutations
   const updateOrgMutation = useMutation({
-    mutationFn: (data: Partial<{ name: string; description: string | null; isActive: boolean; changeRequestsEnabled: boolean; crBypassRoles: string[]; crApproverRoles: string[] }>) =>
+    mutationFn: (data: Partial<{ name: string; description: string | null; isActive: boolean; changeRequestsEnabled: boolean; crBypassRoles: string[]; crApproverRoles: string[] }> & TargetAllowlistUpdate) =>
       api.organizations.update(id, data as any),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['organization', id] })
@@ -384,6 +387,14 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
           </CardContent>
         </Card>
       )}
+
+      {/* Route target allowlist */}
+      <TargetAllowlistCard
+        org={org}
+        canEdit={user?.role === 'ADMIN'}
+        saving={updateOrgMutation.isPending}
+        onSave={(data) => updateOrgMutation.mutate(data)}
+      />
 
       {/* Tabs */}
       <Tabs defaultValue="members">

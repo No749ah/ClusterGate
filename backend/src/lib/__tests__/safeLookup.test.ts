@@ -8,6 +8,7 @@ vi.mock('dns', async (importOriginal) => {
 })
 
 import { safeLookup } from '../security'
+import { resetDefaultDenyList } from '../targetDenylist'
 
 function resolveWith(address: string, family: number) {
   // dns.lookup may be called as (hostname, cb) or (hostname, opts, cb); the
@@ -63,5 +64,26 @@ describe('safeLookup', () => {
     const { err, address } = await callSafeLookup('example.com')
     expect(err).toBeNull()
     expect(address).toBe('2606:4700:4700::1111')
+  })
+
+  it('blocks resolution to loopback (target denylist)', async () => {
+    resolveWith('127.0.0.1', 4)
+    const { err } = await callSafeLookup('rebind.attacker.example')
+    expect(err?.message).toMatch(/Blocked SSRF to 127\.0\.0\.1 \(loopback/)
+  })
+
+  it('blocks resolution to the Kubernetes API service IP (target denylist)', async () => {
+    const prev = process.env.KUBERNETES_SERVICE_HOST
+    process.env.KUBERNETES_SERVICE_HOST = '10.96.0.1'
+    resetDefaultDenyList()
+    try {
+      resolveWith('10.96.0.1', 4)
+      const { err } = await callSafeLookup('rebind.attacker.example')
+      expect(err?.message).toMatch(/Kubernetes API/)
+    } finally {
+      if (prev === undefined) delete process.env.KUBERNETES_SERVICE_HOST
+      else process.env.KUBERNETES_SERVICE_HOST = prev
+      resetDefaultDenyList()
+    }
   })
 })
