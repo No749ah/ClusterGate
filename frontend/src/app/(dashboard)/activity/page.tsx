@@ -20,7 +20,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { usePageSize } from '@/hooks/usePageSize'
 import { Pagination } from '@/components/ui/pagination'
-import { LogBody } from '@/components/logs/LogBody'
+import { LogBody } from '@/components/common/LogBody'
 
 export default function LogsPage() {
   const queryClient = useQueryClient()
