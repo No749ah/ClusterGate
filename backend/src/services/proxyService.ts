@@ -22,6 +22,12 @@ import { sanitizeText } from './sanitizerService'
 import { v4 as uuid } from 'uuid'
 import { hardenProxyResponseHeaders, clearApiSecurityHeaders } from '../lib/proxySecurityHeaders'
 import { stripClusterGateCookies } from '../lib/cookies'
+import { StreamCapture, CaptureEndState } from '../lib/streamCapture'
+
+// Max characters of a response body kept in the request log (buffered and streamed)
+const LOGGED_BODY_LIMIT = 5000
+// Shown in the log while a streamed response is still being captured
+const STREAMING_PLACEHOLDER = '[streaming…]'
 
 // Extended route type with relations loaded by proxyHandler
 type RouteWithRelations = Route & {
@@ -398,19 +404,45 @@ export async function proxyRequest(
       }
       proxyRequestsTotal.inc({ route_id: route.id, method: req.method, status: String(responseStatus) })
       proxyRequestDuration.observe({ route_id: route.id }, duration / 1000)
-      logRequest({
+      // Log right away so long-lived streams show up while they run; the body
+      // is filled in from the tee once the stream ends or the budget is spent.
+      const logIdPromise = logRequest({
         routeId: route.id, requestId, method: req.method, path: proxyPath,
         queryParams: req.query as Record<string, string>,
         requestHeaders: sanitizeHeaders(forwardHeaders),
         requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
-        responseStatus, responseHeaders: {}, responseBody: '[streamed]',
+        responseStatus, responseHeaders: sanitizeHeaders(streamHeaders), responseBody: STREAMING_PLACEHOLDER,
         duration, targetUrl: resolvedUrl, ip: req.ip, userAgent: req.get('user-agent'),
       })
 
+      const capture = new StreamCapture({
+        contentType: headerValue(resp.headers, 'content-type'),
+        contentEncoding: headerValue(resp.headers, 'content-encoding'),
+        limit: LOGGED_BODY_LIMIT,
+      })
+      let captureFlushed = false
+      const flushCapture = (state: CaptureEndState) => {
+        if (captureFlushed) return
+        captureFlushed = true
+        capture.finish(state)
+          .then(async (result) => {
+            const logId = await logIdPromise
+            if (logId) await updateLoggedResponseBody(logId, result.body)
+          })
+          .catch((err) => logger.warn('Failed to record streamed response body', { error: (err as Error).message }))
+      }
+
       await new Promise<void>((resolve, reject) => {
-        resp.data.on('end', resolve)
-        resp.data.on('error', reject)
-        res.on('close', resolve)
+        // Observe chunks alongside pipe(): same events, no extra buffering or
+        // backpressure — the client stream is not touched.
+        resp.data.on('data', (chunk: Buffer) => {
+          if (captureFlushed) return
+          capture.push(chunk)
+          if (capture.full) flushCapture('open')
+        })
+        resp.data.on('end', () => { flushCapture('complete'); resolve() })
+        resp.data.on('error', (e: Error) => { flushCapture('aborted'); reject(e) })
+        res.on('close', () => { flushCapture(resp.data.readableEnded ? 'complete' : 'aborted'); resolve() })
         resp.data.pipe(res)
       })
       return
@@ -512,7 +544,7 @@ export async function proxyRequest(
     res.setHeader('X-Request-ID', requestId)
     res.setHeader('X-ClusterGate-Duration', String(duration))
 
-    responseBody = responseBuffer.toString('utf8').slice(0, 10000) // Cap logged body
+    responseBody = responseBuffer.toString('utf8').slice(0, LOGGED_BODY_LIMIT) // Cap logged body
 
     proxyRequestsTotal.inc({
       route_id: route.id,
@@ -549,7 +581,7 @@ export async function proxyRequest(
       requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
       responseStatus,
       responseHeaders: sanitizeHeaders(respHeaders),
-      responseBody: responseBody?.slice(0, 5000),
+      responseBody,
       duration,
       targetUrl: resolvedUrl,
       ip: req.ip,
@@ -764,12 +796,12 @@ async function logRequest(data: {
   error?: string
   ip?: string
   userAgent?: string
-}) {
+}): Promise<string | null> {
   try {
     // GeoIP lookup
     const geo = lookupIp(data.ip)
 
-    await prisma.requestLog.create({
+    const created = await prisma.requestLog.create({
       data: {
         routeId: data.routeId,
         requestId: data.requestId,
@@ -791,8 +823,28 @@ async function logRequest(data: {
         geoLatitude: geo.latitude,
         geoLongitude: geo.longitude,
       },
+      select: { id: true },
     })
+    return created.id
   } catch (err) {
     logger.warn('Failed to log proxy request', { error: (err as Error).message })
+    return null
   }
+}
+
+// Fill in the body of a streamed response once the tee has it. Goes through
+// the same sanitizer as every other logged body.
+async function updateLoggedResponseBody(logId: string, body: string): Promise<void> {
+  await prisma.requestLog.update({
+    where: { id: logId },
+    data: { responseBody: sanitizeText(body) ?? body },
+  })
+}
+
+function headerValue(headers: Record<string, unknown> | undefined, name: string): string | undefined {
+  if (!headers) return undefined
+  const key = Object.keys(headers).find((k) => k.toLowerCase() === name)
+  const v = key ? headers[key] : undefined
+  if (Array.isArray(v)) return v.join(', ')
+  return typeof v === 'string' ? v : undefined
 }

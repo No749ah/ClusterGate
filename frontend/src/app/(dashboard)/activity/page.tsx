@@ -20,6 +20,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { usePageSize } from '@/hooks/usePageSize'
 import { Pagination } from '@/components/ui/pagination'
+import { LogBody } from '@/components/common/LogBody'
 
 export default function LogsPage() {
   const queryClient = useQueryClient()
@@ -414,8 +415,9 @@ export default function LogsPage() {
                 <RequestPanel
                   title="Response"
                   headers={resHeaders}
-                  body={selectedLog.responseBody?.slice(0, 5000)}
+                  body={selectedLog.responseBody}
                   error={selectedLog.error}
+                  formatted
                 />
               </div>
             )
@@ -450,11 +452,15 @@ function statusTone(status: number | null | undefined, error: string | null | un
 // Pretty pane for one side (Request or Response) of the detail modal.
 // Renders headers as a key:value list (much easier to scan than the old
 // JSON.stringify dump) plus an optional body block.
-function RequestPanel({ title, headers, body, error }: {
+const BODY_PRE_CLASS = 'font-mono text-[11px] text-foreground whitespace-pre-wrap break-all max-h-72 overflow-auto rounded border border-border/30 p-2 bg-background/40'
+
+function RequestPanel({ title, headers, body, error, formatted }: {
   title: string
   headers: Record<string, string>
   body?: string | null
   error?: string | null
+  /** Render through LogBody (streamed-body placeholders, SSE text view) */
+  formatted?: boolean
 }) {
   const headerEntries = Object.entries(headers ?? {})
   return (
@@ -481,8 +487,10 @@ function RequestPanel({ title, headers, body, error }: {
       )}
       <div className="px-3 py-2 border-t border-border/40 flex-1 min-h-0">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Body</p>
-        {body ? (
-          <pre className="font-mono text-[11px] text-foreground whitespace-pre-wrap break-all max-h-72 overflow-auto rounded border border-border/30 p-2 bg-background/40">{body}</pre>
+        {body && formatted ? (
+          <LogBody body={body} headers={headers} className={BODY_PRE_CLASS} />
+        ) : body ? (
+          <pre className={BODY_PRE_CLASS}>{body}</pre>
         ) : (
           <p className="text-xs text-muted-foreground italic">— no body</p>
         )}
