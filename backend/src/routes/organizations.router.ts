@@ -7,6 +7,8 @@ import * as orgService from '../services/organizationService'
 import { achievementService } from '../services/achievementService'
 import { isOrgMember, canManageOrgRoutes } from '../services/orgAccessService'
 import { AppError } from '../lib/errors'
+import { isValidNamespace, isValidHostEntry } from '../lib/targetPolicy'
+import { normalizeHost } from '../lib/targetDenylist'
 
 const router = Router()
 
@@ -59,7 +61,7 @@ router.param('orgId', (req, res, next, value) => resolveOrgParam(req, res, next,
  *     responses: { 200: { description: Organization } }
  *   put:
  *     tags: [Organizations]
- *     summary: Update an organization (admin)
+ *     summary: Update an organization (admin) — incl. change-request policy and route target allowlist (restrictTargets, allowedTargetNamespaces, allowedTargetHosts)
  *     parameters: [{ in: path, name: id, required: true, schema: { type: string } }]
  *     responses: { 200: { description: Updated } }
  *   delete:
@@ -184,6 +186,20 @@ router.post('/', authenticate, authorize([Role.ADMIN]), async (req, res, next) =
   }
 })
 
+// Route target allowlist entries — normalised (trimmed, lower-case, deduped)
+// before validation. Only system admins can change them (this PUT is
+// ADMIN-only): org owners are the ones the allowlist constrains.
+const namespaceListSchema = z
+  .array(z.string())
+  .max(200)
+  .transform((l) => [...new Set(l.map((s) => s.trim().toLowerCase()).filter(Boolean))])
+  .refine((l) => l.every(isValidNamespace), 'Namespaces must be valid Kubernetes namespace names')
+const hostListSchema = z
+  .array(z.string())
+  .max(200)
+  .transform((l) => [...new Set(l.map(normalizeHost).filter(Boolean))])
+  .refine((l) => l.every(isValidHostEntry), 'Hosts must be hostnames, *.wildcards, IPs or CIDRs')
+
 // Update organization
 router.put('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
@@ -191,6 +207,9 @@ router.put('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next)
       changeRequestsEnabled: z.boolean().optional(),
       crBypassRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
       crApproverRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
+      restrictTargets: z.boolean().optional(),
+      allowedTargetNamespaces: namespaceListSchema.optional(),
+      allowedTargetHosts: hostListSchema.optional(),
     }).parse(req.body)
     const org = await orgService.updateOrganization(req.params.id, data as any)
     res.json({ success: true, data: org })

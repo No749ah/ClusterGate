@@ -451,6 +451,9 @@ export interface Organization {
   changeRequestsEnabled: boolean
   crBypassRoles: OrgRole[]
   crApproverRoles: OrgRole[]
+  restrictTargets: boolean
+  allowedTargetNamespaces: string[]
+  allowedTargetHosts: string[]
   memberships?: OrgMembership[]
   teams?: Team[]
   _count?: { memberships: number; teams: number; routes: number }

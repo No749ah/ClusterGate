@@ -1,11 +1,12 @@
-import { IncomingMessage } from 'http'
+import http, { IncomingMessage } from 'http'
+import https from 'https'
 import { Socket } from 'net'
 import { URL } from 'url'
 import { createProxyServer } from 'http-proxy'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { isIpAllowed } from '../services/proxyService'
-import { timingSafeCompare } from '../lib/security'
+import { timingSafeCompare, safeLookup } from '../lib/security'
 import { stripClusterGateCookies } from '../lib/cookies'
 
 const proxy = createProxyServer({
@@ -13,6 +14,9 @@ const proxy = createProxyServer({
   changeOrigin: true,
   secure: false,
 })
+
+const wsAgent = new http.Agent({ lookup: safeLookup as any })
+const wssAgent = new https.Agent({ lookup: safeLookup as any })
 
 proxy.on('error', (err, _req, res) => {
   logger.error('WebSocket proxy error', { error: err.message })
@@ -116,7 +120,13 @@ export async function handleWebSocketUpgrade(req: IncomingMessage, socket: Socke
     else delete req.headers.cookie
 
     // Honor the route's sslVerify setting instead of a global secure:false
-    proxy.ws(req, socket, head, { target, secure: (route as any).sslVerify !== false })
+    // Resolve through safeLookup like the HTTP proxy, so the metadata guard
+    // and target denylist also hold for WebSocket upgrades.
+    proxy.ws(req, socket, head, {
+      target,
+      secure: (route as any).sslVerify !== false,
+      agent: target.startsWith('wss:') ? wssAgent : wsAgent,
+    })
   } catch (err) {
     logger.error('WS upgrade error', { error: (err as Error).message })
     socket.destroy()
