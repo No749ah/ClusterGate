@@ -3,10 +3,13 @@ import dns from 'dns/promises'
 import { lookup as dnsLookup, LookupAddress } from 'dns'
 import { timingSafeEqual, createHmac } from 'crypto'
 import safeRegex from 'safe-regex2'
+import { getDefaultDenyList } from './targetDenylist'
 
 // =============================================================================
-// SSRF Protection — Block cloud metadata endpoints only
-// Private/internal addresses are allowed since ClusterGate is an internal gateway
+// SSRF Protection — cloud metadata endpoints (see targetPolicy.ts for the
+// global denylist and per-organization target allowlists)
+// Private/internal ranges stay allowed by default since ClusterGate is an
+// internal gateway; organizations can narrow them with an allowlist.
 // =============================================================================
 
 const BLOCKED_HOSTNAMES = new Set([
@@ -184,6 +187,13 @@ export function safeLookup(
       // IPv6 link-local/ULA/IPv4-mapped) — never skip family 6 here.
       if (isMetadataIp(a.address)) {
         return cb(new Error(`Blocked SSRF to cloud metadata IP ${a.address}`), address, family)
+      }
+      // Global target denylist (loopback, Kubernetes API, ClusterGate's DB):
+      // enforced here too so a hostname that re-resolves after route
+      // validation still can't reach them.
+      const denied = getDefaultDenyList().matchIp(a.address)
+      if (denied) {
+        return cb(new Error(`Blocked SSRF to ${a.address} (${denied})`), address, family)
       }
     }
     cb(null, address, family)

@@ -176,6 +176,14 @@ model Organization {
   crBypassRoles         OrgRole[] @default([OWNER])
   crApproverRoles       OrgRole[] @default([OWNER, ADMIN])
 
+  // Route target allowlist. When restrictTargets is on, routes in this org may
+  // only point at Kubernetes services in allowedTargetNamespaces or at hosts
+  // matching allowedTargetHosts (host, *.suffix, IP or CIDR). Editable by
+  // system admins only.
+  restrictTargets         Boolean  @default(false)
+  allowedTargetNamespaces String[] @default([])
+  allowedTargetHosts      String[] @default([])
+
   teams        Team[]
   memberships  OrgMembership[]
   routes       Route[]
@@ -323,6 +331,10 @@ model Route {
   // browser stays under /r/<route>/... instead of escaping to the upstream's
   // host or absolute path. Default true; set false to pass redirects through.
   rewriteRedirects Boolean @default(true)
+  // Serve the upstream's pages with a CSP sandbox (opaque origin) so its
+  // scripts cannot touch the ClusterGate UI, API or other routes on the same
+  // host. Breaks apps that need their own cookies/storage; opt-in.
+  sandbox          Boolean @default(false)
 
   // Header rules
   addHeaders    Json        @default("{}")

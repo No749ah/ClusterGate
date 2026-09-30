@@ -345,6 +345,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
                 <InfoRow label="Strip Prefix" value={route.stripPrefix ? 'Yes' : 'No'} />
                 <InfoRow label="SSL Verify" value={route.sslVerify !== false ? 'Enabled' : 'Disabled'} />
                 <InfoRow label="Keep Redirects in Proxy" value={(route as any).rewriteRedirects !== false ? 'Yes' : 'No'} />
+                <InfoRow label="Sandbox Pages" value={(route as any).sandbox ? 'Yes' : 'No'} />
                 <InfoRow label="LB Strategy" value={route.lbStrategy?.replace('_', ' ') || 'Round Robin'} />
                 {route.routeGroup && (
                   <InfoRow label="Route Group" value={route.routeGroup.name} />
@@ -787,7 +788,7 @@ const DIFF_FIELDS = [
   'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
   'lbStrategy', 'webhookSecret', 'organizationId', 'routeGroupId',
   'rateLimitEnabled', 'rateLimitMax', 'rateLimitWindow',
-  'streamResponse', 'targetType', 'upstreamAuthType', 'upstreamAuthHeader',
+  'streamResponse', 'sandbox', 'targetType', 'upstreamAuthType', 'upstreamAuthHeader',
   'healthCheckMethod', 'healthCheckPath', 'healthCheckBody', 'healthCheckInterval',
   'protected',
 ] as const
@@ -879,6 +880,7 @@ function PipelineStrip({ route }: { route: any }) {
   if (route.transformRules?.length > 0) middlewares.push({ label: `${route.transformRules.length} transforms`, tone: 'purple' })
   if (route.streamResponse) middlewares.push({ label: 'Streaming', tone: 'purple' })
   if (route.wsEnabled) middlewares.push({ label: 'WebSocket', tone: 'purple' })
+  if (route.sandbox) middlewares.push({ label: 'Sandbox', tone: 'amber' })
 
   const toneClass = (tone: 'green' | 'amber' | 'blue' | 'purple') => ({
     green: 'text-green-500 border-green-500/30 bg-green-500/10',

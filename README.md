@@ -260,6 +260,7 @@ Public Request
 | `PROXY_TIMEOUT`         | No       | `30000`   | Proxy timeout in ms                  |
 | `PROXY_BODY_LIMIT`      | No       | `50mb`    | Max proxied request body size (raw passthrough) |
 | `PROXY_STREAM_REQUESTS` | No       | `false`   | Stream request bodies unbuffered to the target (large uploads) |
+| `API_CLIENT_TOKEN_REQUIRED` | No   | `true`    | Require the UI client token on cookie-authenticated API calls, so apps exposed under `/r/` on the same host cannot use the admin session. Only set `false` for debugging |
 | `LOG_LEVEL`             | No       | `info`    | Winston log level                    |
 | `METRICS_ENABLED`       | No       | `true`    | Enable Prometheus metrics            |
 | `METRICS_SECRET`        | No       | —         | Secret for /metrics endpoint         |
@@ -273,6 +274,9 @@ Public Request
 | `OTEL_ENABLED`          | No       | `false`   | Enable OpenTelemetry distributed tracing |
 | `OTEL_SERVICE_NAME`     | No       | `clustergate-backend` | Service name reported in traces |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | `http://localhost:4318` | OTLP/HTTP collector base URL (SDK appends `/v1/traces`) |
+| `TARGET_DENY_DEFAULTS`  | No       | `true`    | Block route targets on loopback, the Kubernetes API and ClusterGate's own database |
+| `TARGET_DENY_EXTRA`     | No       | —         | Extra blocked route targets (comma-sep hosts, `*.suffix`, IPs, CIDRs) |
+| `CLUSTER_DOMAIN`        | No       | `cluster.local` | Cluster DNS domain used to recognise `svc.namespace.svc.<domain>` targets |
 
 > Per-route rate limiting is backed by Postgres so limits are correct across replicas (HA). Route secrets (auth values, upstream credentials, webhook secrets) are encrypted at rest.
 
@@ -626,12 +630,21 @@ ClusterGate supports TOTP-based two-factor authentication:
 - **Per-session management** — Each login is tracked as a session (device/user-agent, IP, created + last-seen). From **Account → Active Sessions** you can see every signed-in device and revoke one individually or "sign out all other sessions". The session id is carried in the JWT (`sid` claim) and validated on every request; expired/revoked sessions are pruned by a daily cron.
 - **Global revocation** — Password change, admin reset, and force-logout-all still invalidate *all* of a user's sessions via `tokenVersion`
 - **CSRF protection** — Double-submit cookie pattern (`cg_csrf` cookie + `X-CSRF-Token` header) on all state-changing requests
+- **Same-origin isolation** — UI, `/api` and exposed apps under `/r/` can share one host. Cookie-authenticated API calls additionally need a client token (`X-CG-Client-Token`) that only the UI ever holds: it comes from the login response or from `/api/auth/resume`, a top-level navigation (verified via `Sec-Fetch-*`) that redirects into the UI with the token in the URL fragment. The UI keeps it in memory only and runs with `Cross-Origin-Opener-Policy: same-origin` and no framing, so scripts of an exposed app can neither fetch the token nor reach into a UI window. Proxied responses never carry a COOP or `Service-Worker-Allowed` header and cannot set `cg_*` cookies. Bearer-token API clients are unaffected
+- **Per-route sandbox** — *Sandbox Pages* serves a route's pages with `Content-Security-Policy: sandbox …` (opaque origin), isolating them from ClusterGate and from other routes. Use it for untrusted apps; apps that need their own cookies, local storage, service workers or same-origin API calls will break under it
 - **Password policy** — Min 12 chars, uppercase, lowercase, number, special character (enforced on all forms)
 - **API versioning** — `X-API-Version: 1` header on all responses
 
 ### Webhook Signature Verification
 
 Routes can require an HMAC-SHA256 signature on incoming requests. Set a **Webhook Secret** on the route (a "Generate" button creates a strong one), and ClusterGate validates the `X-Hub-Signature-256` (GitHub-style `sha256=<hmac>`) or `X-Webhook-Signature` header against the raw request body using a timing-safe comparison before proxying. Requests with a missing or invalid signature are rejected with `401`.
+
+### Route Target Restrictions
+
+Every route target (and every load-balancing target) is checked when a route is created or edited, when a change request is filed and applied, and on connection tests:
+
+- **Always blocked:** cloud metadata endpoints, loopback (`localhost`, `127.0.0.0/8`, `::1`, `0.0.0.0`), the Kubernetes API (`kubernetes.default.svc…` and `KUBERNETES_SERVICE_HOST`) and ClusterGate's own database (the `DATABASE_URL` host and its addresses). Hostnames are resolved and every address is checked, and the proxy re-checks resolved IPs on every connection (HTTP and WebSocket), so DNS rebinding can't get around it. Add more with `TARGET_DENY_EXTRA` (for example your API server's node IPs or `10.0.0.0/8`); `TARGET_DENY_DEFAULTS=false` turns the built-in rules off.
+- **Per organization:** a system admin can switch on *Allowed route targets* on an organization's page. Routes in that org may then only point at Kubernetes services in the listed namespaces (`svc.namespace.svc` or `svc.namespace.svc.cluster.local`) or at listed hosts (exact host, `*.example.com`, IP or CIDR; a hostname matches a CIDR only if all of its addresses are inside it). Moving a route into a restricted org re-checks its targets. Org owners can see the list but not change it. Existing routes keep running when the list is tightened; they are re-checked the next time their target is edited.
 
 ### Secrets at Rest
 

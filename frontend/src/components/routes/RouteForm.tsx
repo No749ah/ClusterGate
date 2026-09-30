@@ -30,6 +30,7 @@ const routeSchema = z.object({
   sslVerify: z.boolean().default(true),
   streamResponse: z.boolean().default(false),
   rewriteRedirects: z.boolean().default(true),
+  sandbox: z.boolean().default(false),
   requestBodyLimit: z.string().default('10mb'),
   addHeaders: z.array(z.object({ key: z.string(), value: z.string() })).default([]),
   removeHeaders: z.string().default(''),
@@ -129,6 +130,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       sslVerify: defaultValues?.sslVerify ?? true,
       streamResponse: defaultValues?.streamResponse ?? false,
       rewriteRedirects: (defaultValues as any)?.rewriteRedirects ?? true,
+      sandbox: (defaultValues as any)?.sandbox ?? false,
       requestBodyLimit: defaultValues?.requestBodyLimit ?? '10mb',
       addHeaders: Object.entries(defaultValues?.addHeaders ?? {}).map(([key, value]) => ({ key, value })),
       removeHeaders: defaultValues?.removeHeaders?.join(', ') ?? '',
@@ -229,6 +231,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         upstreamAuthType: upstreamType,
         upstreamAuthValue: upstreamValue,
         upstreamAuthHeader: form.getValues('upstreamAuthHeader'),
+        organizationId: form.getValues('organizationId') || undefined,
       })
       setConnResult(res.data)
     } catch (err) {
@@ -800,6 +803,12 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   description="Rewrite upstream Location headers so 3xx redirects stay under /r/… instead of bouncing to the upstream host."
                   checked={watch('rewriteRedirects') ?? true}
                   onCheckedChange={(v) => setValue('rewriteRedirects', v)}
+                />
+                <SwitchRow
+                  label="Sandbox Pages"
+                  description="Isolate this app's pages from ClusterGate and other routes on the same host. Use for untrusted apps; breaks apps that need their own cookies, local storage or same-origin API calls."
+                  checked={watch('sandbox') ?? false}
+                  onCheckedChange={(v) => setValue('sandbox', v)}
                 />
               </div>
             </Section>

@@ -73,6 +73,7 @@ export interface Route {
   sslVerify: boolean
   streamResponse: boolean
   rewriteRedirects: boolean
+  sandbox?: boolean
   requestBodyLimit: string
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string
@@ -261,6 +262,7 @@ export interface RouteFormData {
   sslVerify: boolean
   streamResponse?: boolean
   rewriteRedirects?: boolean
+  sandbox?: boolean
   requestBodyLimit: string
   upstreamAuthType?: 'NONE' | 'API_KEY' | 'BASIC' | 'BEARER'
   upstreamAuthValue?: string | BasicAuthCredentials
@@ -451,6 +453,9 @@ export interface Organization {
   changeRequestsEnabled: boolean
   crBypassRoles: OrgRole[]
   crApproverRoles: OrgRole[]
+  restrictTargets: boolean
+  allowedTargetNamespaces: string[]
+  allowedTargetHosts: string[]
   memberships?: OrgMembership[]
   teams?: Team[]
   _count?: { memberships: number; teams: number; routes: number }

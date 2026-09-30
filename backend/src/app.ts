@@ -16,7 +16,7 @@ import { getVersion } from './lib/version'
 import { prisma } from './lib/prisma'
 import { registry } from './lib/metrics'
 import { globalLimiter, proxyLimiter } from './middleware/rateLimiter'
-import { authenticate } from './middleware/authenticate'
+import { authenticate, createAuthenticate } from './middleware/authenticate'
 import { csrfProtection } from './middleware/csrf'
 import { requestLogger } from './middleware/requestLogger'
 import { auditLogger } from './middleware/auditLogger'
@@ -47,6 +47,7 @@ import changeRequestsRouter from './routes/changeRequests.router'
 import achievementsRouter from './routes/achievements.router'
 import trafficRouter from './routes/traffic.router'
 import { handleWebSocketUpgrade } from './proxy/wsHandler'
+import { refreshDatabaseAddresses } from './lib/targetDenylist'
 
 const app = express()
 
@@ -58,7 +59,8 @@ app.use(
   helmet({
     // Strict CSP for an API that serves JSON, not pages — locks down any
     // response a browser might render directly (error pages, docs JSON).
-    // The interactive Swagger UI gets its own relaxed policy below.
+    // The interactive Swagger UI gets its own relaxed policy below. Proxied
+    // pages (/r/) replace these headers in lib/proxySecurityHeaders.ts.
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'none'"],
@@ -166,7 +168,9 @@ if (config.swaggerEnabled) {
       frameAncestors: ["'none'"],
     },
   })
-  app.get('/api/docs.json', authenticate, (_req, res) => {
+  // The Swagger UI page fetches the spec without the UI's client token; the
+  // spec documents the open-source API and holds no user data.
+  app.get('/api/docs.json', createAuthenticate({ skipClientToken: true }), (_req, res) => {
     res.setHeader('Content-Type', 'application/json')
     res.send(swaggerSpec)
   })
@@ -227,6 +231,10 @@ async function start() {
     // Test database connection
     await prisma.$connect()
     logger.info('Database connected')
+
+    // Seed the target denylist with the database's addresses so the proxy's
+    // connection-time guard knows them before the first route is validated
+    refreshDatabaseAddresses().catch(() => {})
 
     // Start HTTP server
     const server = app.listen(config.PORT, () => {

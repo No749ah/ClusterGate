@@ -57,6 +57,7 @@ When deploying ClusterGate in production, please follow these recommendations:
 - **Enable 2FA for all admin accounts** — ClusterGate supports TOTP-based 2FA with recovery codes. Admins can disable 2FA for users who lose their authenticator.
 - **Use the force-logout-all feature** after a suspected credential compromise to revoke all active sessions.
 - **CSRF protection** is built in — the frontend automatically sends the `X-CSRF-Token` header on state-changing requests.
+- **Same-origin isolation** is built in — apps exposed under `/r/` on the same host as the UI cannot use the admin session (see *Same-origin isolation* in the README). For apps you do not trust, also enable **Sandbox Pages** on the route.
 
 ---
 

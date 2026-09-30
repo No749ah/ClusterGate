@@ -1,5 +1,6 @@
 import { PrismaClient, ChangeRequestStatus, OrgRole } from '@prisma/client'
 import { AppError } from '../lib/errors'
+import { assertRouteTargetAllowed } from './targetPolicyService'
 
 const prisma = new PrismaClient()
 
@@ -87,6 +88,11 @@ export const changeRequestService = {
   },
 
   async approve(id: string, reviewerId: string, comment?: string) {
+    // Refuse before marking it approved, so a request whose target the org no
+    // longer allows stays pending instead of "approved but not applied".
+    const pending = await prisma.changeRequest.findUnique({ where: { id }, select: { routeId: true, payload: true } })
+    if (pending) await this.assertTargetAllowed(pending.routeId, pending.payload as any)
+
     const cr = await prisma.changeRequest.update({
       where: { id },
       data: {
@@ -127,6 +133,12 @@ export const changeRequestService = {
     })
   },
 
+  async assertTargetAllowed(routeId: string | null, payload: { targetUrl?: unknown } | null) {
+    if (!routeId || typeof payload?.targetUrl !== 'string') return
+    const route = await prisma.route.findUnique({ where: { id: routeId }, select: { organizationId: true } })
+    await assertRouteTargetAllowed(payload.targetUrl, route?.organizationId)
+  },
+
   async applyChange(cr: { id: string; type: string; routeId: string | null; payload: any }) {
     const payload = cr.payload as any
 
@@ -136,7 +148,11 @@ export const changeRequestService = {
               rateLimitEnabled, rateLimitMax, rateLimitWindow, stripPrefix, sslVerify,
               corsEnabled, corsOrigins, requireAuth, authType, authValue, tags,
               wsEnabled, circuitBreakerEnabled, cbFailureThreshold, cbRecoveryTimeout,
-              lbStrategy, maintenanceMode, maintenanceMessage } = payload
+              lbStrategy, maintenanceMode, maintenanceMessage, sandbox } = payload
+
+      // Change requests write the route directly, so re-check the target here:
+      // the org's allowlist may have changed since the request was filed.
+      await this.assertTargetAllowed(cr.routeId, payload)
 
       await prisma.route.update({
         where: { id: cr.routeId },
@@ -145,7 +161,7 @@ export const changeRequestService = {
           rateLimitEnabled, rateLimitMax, rateLimitWindow, stripPrefix, sslVerify,
           corsEnabled, corsOrigins, requireAuth, authType, authValue, tags,
           wsEnabled, circuitBreakerEnabled, cbFailureThreshold, cbRecoveryTimeout,
-          lbStrategy, maintenanceMode, maintenanceMessage,
+          lbStrategy, maintenanceMode, maintenanceMessage, sandbox,
         },
       })
     }

@@ -7,7 +7,7 @@ import { requireRouteView, requireRouteManage } from '../middleware/routeAccess'
 import * as lbService from '../services/loadBalancerService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
-import { validateTargetUrlSync } from '../lib/security'
+import { assertRouteTargetAllowed } from '../services/targetPolicyService'
 
 const router = Router()
 attachRouteParamResolver(router, 'routeId')
@@ -53,10 +53,14 @@ const targetSchema = z.object({
 })
 
 // Targets receive the route's injected upstream credentials, so a target URL
-// is as sensitive as the route's own target: SSRF-checked and only editable
-// by someone who may manage the route.
-function assertTargetUrl(url: string | undefined) {
-  if (url) validateTargetUrlSync(url)
+// is as sensitive as the route's own target: SSRF-checked, subject to the
+// route organization's target allowlist, and only editable by someone who may
+// manage the route.
+async function assertTargetUrl(url: string | undefined, routeId: string) {
+  if (!url) return
+  const route = await prisma.route.findUnique({ where: { id: routeId }, select: { organizationId: true } })
+  if (!route) throw AppError.notFound('Route')
+  await assertRouteTargetAllowed(url, route.organizationId)
 }
 
 // A target id from the URL must belong to the route in the URL — otherwise a
@@ -80,7 +84,7 @@ router.get('/:routeId/targets', authenticate, requireRouteView('routeId'), async
 router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const data = targetSchema.parse(req.body)
-    assertTargetUrl(data.url)
+    await assertTargetUrl(data.url, req.params.routeId)
     const target = await lbService.addTarget(req.params.routeId, data)
 
     res.status(201).json({ success: true, data: target })
@@ -93,7 +97,7 @@ router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERA
 router.put('/:routeId/targets/:targetId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
     const data = targetSchema.partial().parse(req.body)
-    assertTargetUrl(data.url)
+    await assertTargetUrl(data.url, req.params.routeId)
     await assertTargetBelongsToRoute(req.params.targetId, req.params.routeId)
     const target = await lbService.updateTarget(req.params.targetId, data)
     res.json({ success: true, data: target })
