@@ -172,6 +172,18 @@ jobs:
             echo "__CHANGELOG_EOF__"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Read upgrade notes
+        id: notes
+        run: |
+          # Optional hand-written notes (breaking changes, upgrade steps) for
+          # this version, shown above the generated changelog.
+          NOTES_FILE="docs/release-notes/${{ steps.version.outputs.VERSION }}.md"
+          {
+            echo "NOTES<<__NOTES_EOF__"
+            if [ -f "$NOTES_FILE" ]; then cat "$NOTES_FILE"; echo ""; fi
+            echo "__NOTES_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Check if tag exists
         id: check_tag
         run: |
@@ -197,6 +209,8 @@ jobs:
             ## ClusterGate ${{ steps.version.outputs.VERSION }}
 
             Kubernetes Routing Gateway Platform — expose internal Kubernetes services over public domains.
+
+            ${{ steps.notes.outputs.NOTES }}
 
             ### What's Changed
 
