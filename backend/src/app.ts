@@ -47,6 +47,7 @@ import changeRequestsRouter from './routes/changeRequests.router'
 import achievementsRouter from './routes/achievements.router'
 import trafficRouter from './routes/traffic.router'
 import { handleWebSocketUpgrade } from './proxy/wsHandler'
+import { refreshDatabaseAddresses } from './lib/targetDenylist'
 
 const app = express()
 
@@ -227,6 +228,10 @@ async function start() {
     // Test database connection
     await prisma.$connect()
     logger.info('Database connected')
+
+    // Seed the target denylist with the database's addresses so the proxy's
+    // connection-time guard knows them before the first route is validated
+    refreshDatabaseAddresses().catch(() => {})
 
     // Start HTTP server
     const server = app.listen(config.PORT, () => {

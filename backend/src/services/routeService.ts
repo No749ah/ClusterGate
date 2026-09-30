@@ -2,7 +2,8 @@ import { Prisma, Route, RouteStatus } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { activeRoutesTotal } from '../lib/metrics'
-import { validateTargetUrl, isSafeRegex } from '../lib/security'
+import { isSafeRegex } from '../lib/security'
+import { assertRouteTargetAllowed } from './targetPolicyService'
 import { encryptSecret } from '../lib/crypto'
 import { slugify, looksLikeCuid } from '../lib/slug'
 
@@ -183,12 +184,9 @@ export async function createRoute(data: Prisma.RouteUncheckedCreateInput, userId
     data.targetUrl = data.targetUrl.replace(/\/\*$/, '').replace(/\/$/, '')
   }
 
-  // Validate target URL (format + SSRF protection)
-  try {
-    await validateTargetUrl(data.targetUrl as string)
-  } catch (err) {
-    throw AppError.badRequest((err as Error).message)
-  }
+  // Validate target URL: format, SSRF guard, global denylist and the
+  // organization's target allowlist
+  await assertRouteTargetAllowed(data.targetUrl as string, data.organizationId)
 
   await freeSoftDeletedPublicPath(data.publicPath as string)
 
@@ -251,16 +249,22 @@ export async function updateRoute(id: string, data: Partial<Prisma.RouteUnchecke
     (data as any).slug = await pickRouteSlug(data.name, id)
   }
 
-  // Validate target URL if changed (SSRF protection)
+  // Re-check the target policy when the target changes, and when the route
+  // moves to another organization (its allowlist may be stricter — that also
+  // covers the route's load-balancing targets).
+  const orgChanged = 'organizationId' in data && (data.organizationId ?? null) !== existing.organizationId
+  const effectiveOrgId = orgChanged ? (data.organizationId as string | null) : existing.organizationId
   if (data.targetUrl) {
     if (typeof data.targetUrl === 'string') {
       data.targetUrl = data.targetUrl.replace(/\/\*$/, '').replace(/\/$/, '')
     }
-    try {
-      await validateTargetUrl(data.targetUrl as string)
-    } catch (err) {
-      throw AppError.badRequest((err as Error).message)
-    }
+    await assertRouteTargetAllowed(data.targetUrl as string, effectiveOrgId)
+  } else if (orgChanged) {
+    await assertRouteTargetAllowed(existing.targetUrl, effectiveOrgId)
+  }
+  if (orgChanged) {
+    const targets = await prisma.routeTarget.findMany({ where: { routeId: id }, select: { url: true } })
+    for (const t of targets) await assertRouteTargetAllowed(t.url, effectiveOrgId)
   }
 
   // Don't overwrite secrets with the masked placeholder returned by GET;

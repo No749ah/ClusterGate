@@ -229,6 +229,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         upstreamAuthType: upstreamType,
         upstreamAuthValue: upstreamValue,
         upstreamAuthHeader: form.getValues('upstreamAuthHeader'),
+        organizationId: form.getValues('organizationId') || undefined,
       })
       setConnResult(res.data)
     } catch (err) {

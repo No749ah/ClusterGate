@@ -273,6 +273,9 @@ Public Request
 | `OTEL_ENABLED`          | No       | `false`   | Enable OpenTelemetry distributed tracing |
 | `OTEL_SERVICE_NAME`     | No       | `clustergate-backend` | Service name reported in traces |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | No | `http://localhost:4318` | OTLP/HTTP collector base URL (SDK appends `/v1/traces`) |
+| `TARGET_DENY_DEFAULTS`  | No       | `true`    | Block route targets on loopback, the Kubernetes API and ClusterGate's own database |
+| `TARGET_DENY_EXTRA`     | No       | —         | Extra blocked route targets (comma-sep hosts, `*.suffix`, IPs, CIDRs) |
+| `CLUSTER_DOMAIN`        | No       | `cluster.local` | Cluster DNS domain used to recognise `svc.namespace.svc.<domain>` targets |
 
 > Per-route rate limiting is backed by Postgres so limits are correct across replicas (HA). Route secrets (auth values, upstream credentials, webhook secrets) are encrypted at rest.
 
@@ -632,6 +635,13 @@ ClusterGate supports TOTP-based two-factor authentication:
 ### Webhook Signature Verification
 
 Routes can require an HMAC-SHA256 signature on incoming requests. Set a **Webhook Secret** on the route (a "Generate" button creates a strong one), and ClusterGate validates the `X-Hub-Signature-256` (GitHub-style `sha256=<hmac>`) or `X-Webhook-Signature` header against the raw request body using a timing-safe comparison before proxying. Requests with a missing or invalid signature are rejected with `401`.
+
+### Route Target Restrictions
+
+Every route target (and every load-balancing target) is checked when a route is created or edited, when a change request is filed and applied, and on connection tests:
+
+- **Always blocked:** cloud metadata endpoints, loopback (`localhost`, `127.0.0.0/8`, `::1`, `0.0.0.0`), the Kubernetes API (`kubernetes.default.svc…` and `KUBERNETES_SERVICE_HOST`) and ClusterGate's own database (the `DATABASE_URL` host and its addresses). Hostnames are resolved and every address is checked, and the proxy re-checks resolved IPs on every connection (HTTP and WebSocket), so DNS rebinding can't get around it. Add more with `TARGET_DENY_EXTRA` (for example your API server's node IPs or `10.0.0.0/8`); `TARGET_DENY_DEFAULTS=false` turns the built-in rules off.
+- **Per organization:** a system admin can switch on *Allowed route targets* on an organization's page. Routes in that org may then only point at Kubernetes services in the listed namespaces (`svc.namespace.svc` or `svc.namespace.svc.cluster.local`) or at listed hosts (exact host, `*.example.com`, IP or CIDR; a hostname matches a CIDR only if all of its addresses are inside it). Moving a route into a restricted org re-checks its targets. Org owners can see the list but not change it. Existing routes keep running when the list is tightened; they are re-checked the next time their target is edited.
 
 ### Secrets at Rest
 

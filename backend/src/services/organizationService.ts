@@ -82,7 +82,17 @@ export async function createOrganization(data: { name: string; slug: string; des
   })
 }
 
-export async function updateOrganization(id: string, data: { name?: string; description?: string | null; isActive?: boolean }) {
+export async function updateOrganization(
+  id: string,
+  data: {
+    name?: string
+    description?: string | null
+    isActive?: boolean
+    restrictTargets?: boolean
+    allowedTargetNamespaces?: string[]
+    allowedTargetHosts?: string[]
+  }
+) {
   const org = await prisma.organization.findUnique({ where: { id } })
   if (!org) throw AppError.notFound('Organization')
   return prisma.organization.update({ where: { id }, data })
