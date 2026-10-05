@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from 'express'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { proxyRequest } from '../services/proxyService'
+import { classifyRequestSource } from '../lib/requestSource'
 
 /**
  * Proxy handler — mounted at /r in the Express app.
@@ -106,6 +107,7 @@ export async function proxyHandler(req: Request, res: Response, next: NextFuncti
           duration: 0,
           ip: req.ip,
           userAgent: req.get('user-agent'),
+          source: classifyRequestSource(req.get('user-agent')),
           targetUrl: route.targetUrl,
           queryParams: req.query as any,
           requestHeaders: {},

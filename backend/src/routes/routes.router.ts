@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express'
 import { z } from 'zod'
-import { Role } from '@prisma/client'
+import { Role, RequestSource } from '@prisma/client'
 import { authenticate, authorize } from '../middleware/authenticate'
 import * as routeService from '../services/routeService'
 import * as healthService from '../services/healthService'
@@ -1455,7 +1455,7 @@ router.post('/:id/test', authenticate, requireRouteManage('id'), async (req, res
     // instead of buffering the whole NDJSON body.
     if ((route as any).streamResponse) {
       try {
-        await proxyRequest(route, mockReq, res)
+        await proxyRequest(route, mockReq, res, undefined, { source: RequestSource.TEST })
       } catch (proxyErr) {
         if (!res.headersSent) {
           res.status(503).json({
@@ -1493,7 +1493,7 @@ router.post('/:id/test', authenticate, requireRouteManage('id'), async (req, res
     } as any
 
     try {
-      await proxyRequest(route, mockReq, mockRes)
+      await proxyRequest(route, mockReq, mockRes, undefined, { source: RequestSource.TEST })
     } catch (proxyErr) {
       const duration = Date.now() - start
       return res.json({
@@ -1736,11 +1736,12 @@ router.post('/:id/versions/:versionId/restore', authenticate, authorize([Role.AD
  */
 router.get('/:id/logs', authenticate, requireRouteView, async (req, res, next) => {
   try {
-    const { page = '1', pageSize = '50', method, statusType, dateFrom, dateTo } = req.query
+    const { page = '1', pageSize = '50', method, statusType, dateFrom, dateTo, source } = req.query
 
     const result = await logService.getRouteLogs(
       {
         routeId: req.params.id,
+        source: logService.parseSourceFilter(source),
         method: method as string,
         statusType: statusType as 'success' | 'error' | 'client',
         dateFrom: dateFrom ? new Date(String(dateFrom)) : undefined,

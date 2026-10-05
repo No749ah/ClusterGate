@@ -20,6 +20,8 @@ import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { usePageSize } from '@/hooks/usePageSize'
 import { Pagination } from '@/components/ui/pagination'
+import { LogBody } from '@/components/common/LogBody'
+import { LogSourceBadge } from '@/components/common/LogSourceBadge'
 
 export default function LogsPage() {
   const queryClient = useQueryClient()
@@ -37,6 +39,8 @@ export default function LogsPage() {
   const [dateFrom, setDateFrom] = useState<string>(params?.get('dateFrom') ?? '')
   const [dateTo, setDateTo] = useState<string>(params?.get('dateTo') ?? '')
   const [liveTail, setLiveTail] = useState<boolean>(params?.get('live') === '1')
+  // '' = real traffic only (default); tests and health checks are opt-in
+  const [source, setSource] = useState<string>(params?.get('source') ?? '')
   // Debounce free-text search to avoid hammering the API on every keystroke.
   const [debouncedSearch, setDebouncedSearch] = useState(search)
   useEffect(() => {
@@ -55,13 +59,14 @@ export default function LogsPage() {
     if (dateFrom) next.set('dateFrom', dateFrom)
     if (dateTo) next.set('dateTo', dateTo)
     if (liveTail) next.set('live', '1')
+    if (source) next.set('source', source)
     const qs = next.toString()
     const current = params?.toString() ?? ''
     if (qs !== current) {
       router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [routeId, method, statusType, debouncedSearch, dateFrom, dateTo, liveTail])
+  }, [routeId, method, statusType, debouncedSearch, dateFrom, dateTo, liveTail, source])
 
   // External navigations (e.g. dashboard deep-links) overwrite local state.
   useEffect(() => {
@@ -72,6 +77,7 @@ export default function LogsPage() {
     const df = params?.get('dateFrom') ?? ''
     const dt = params?.get('dateTo') ?? ''
     const lt = params?.get('live') === '1'
+    const src = params?.get('source') ?? ''
     if (r !== routeId) setRouteId(r)
     if (m !== method) setMethod(m)
     if (s !== statusType) setStatusType(s)
@@ -79,6 +85,7 @@ export default function LogsPage() {
     if (df !== dateFrom) setDateFrom(df)
     if (dt !== dateTo) setDateTo(dt)
     if (lt !== liveTail) setLiveTail(lt)
+    if (src !== source) setSource(src)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params?.toString()])
   const [page, setPage] = useState(1)
@@ -93,6 +100,7 @@ export default function LogsPage() {
     search: debouncedSearch || undefined,
     dateFrom: dateFrom || undefined,
     dateTo: dateTo || undefined,
+    source: (source as 'all' | 'test' | 'health') || undefined,
     page,
     pageSize,
   }, { refetchInterval: liveTail ? 2000 : undefined })
@@ -263,6 +271,18 @@ export default function LogsPage() {
             <SelectItem value="error">Server error / gateway failure</SelectItem>
           </SelectContent>
         </Select>
+
+        <Select value={source || 'traffic'} onValueChange={(v) => { setSource(v === 'traffic' ? '' : v); setPage(1) }}>
+          <SelectTrigger className="w-44" title="Route test runs and health checks are hidden by default">
+            <SelectValue placeholder="Source" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="traffic">Traffic only</SelectItem>
+            <SelectItem value="all">Incl. tests &amp; health checks</SelectItem>
+            <SelectItem value="test">Tests only</SelectItem>
+            <SelectItem value="health">Health checks only</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       </div>
 
@@ -332,7 +352,8 @@ export default function LogsPage() {
                         {log.method}
                       </button>
                     </td>
-                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={log.path}>
+                    <td className="px-4 py-2.5 font-mono text-xs text-muted-foreground max-w-[240px] truncate" title={log.path}>
+                      <LogSourceBadge source={log.source} className="mr-1.5 align-middle" />
                       {log.path}
                     </td>
                     <td className="px-4 py-2.5">
@@ -395,6 +416,7 @@ export default function LogsPage() {
                 'shrink-0 text-sm font-mono font-semibold tabular-nums px-1.5 py-0.5 rounded border',
                 statusTone(selectedLog?.responseStatus, selectedLog?.error)
               )}>{selectedLog?.responseStatus ?? 'ERR'}</span>
+              <LogSourceBadge source={selectedLog?.source} />
             </DialogTitle>
             {selectedLog && (
               <DialogDescription className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
@@ -414,8 +436,9 @@ export default function LogsPage() {
                 <RequestPanel
                   title="Response"
                   headers={resHeaders}
-                  body={selectedLog.responseBody?.slice(0, 5000)}
+                  body={selectedLog.responseBody}
                   error={selectedLog.error}
+                  formatted
                 />
               </div>
             )
@@ -450,11 +473,15 @@ function statusTone(status: number | null | undefined, error: string | null | un
 // Pretty pane for one side (Request or Response) of the detail modal.
 // Renders headers as a key:value list (much easier to scan than the old
 // JSON.stringify dump) plus an optional body block.
-function RequestPanel({ title, headers, body, error }: {
+const BODY_PRE_CLASS = 'font-mono text-[11px] text-foreground whitespace-pre-wrap break-all max-h-72 overflow-auto rounded border border-border/30 p-2 bg-background/40'
+
+function RequestPanel({ title, headers, body, error, formatted }: {
   title: string
   headers: Record<string, string>
   body?: string | null
   error?: string | null
+  /** Render through LogBody (streamed-body placeholders, SSE text view) */
+  formatted?: boolean
 }) {
   const headerEntries = Object.entries(headers ?? {})
   return (
@@ -481,8 +508,10 @@ function RequestPanel({ title, headers, body, error }: {
       )}
       <div className="px-3 py-2 border-t border-border/40 flex-1 min-h-0">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Body</p>
-        {body ? (
-          <pre className="font-mono text-[11px] text-foreground whitespace-pre-wrap break-all max-h-72 overflow-auto rounded border border-border/30 p-2 bg-background/40">{body}</pre>
+        {body && formatted ? (
+          <LogBody body={body} headers={headers} className={BODY_PRE_CLASS} />
+        ) : body ? (
+          <pre className={BODY_PRE_CLASS}>{body}</pre>
         ) : (
           <p className="text-xs text-muted-foreground italic">— no body</p>
         )}

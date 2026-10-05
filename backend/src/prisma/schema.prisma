@@ -490,6 +490,8 @@ model RequestLog {
   error           String?
   ip              String?
   userAgent       String?
+  // TEST = route test panel, HEALTH_CHECK = uptime monitor / probe user agent
+  source          RequestSource @default(TRAFFIC)
 
   // GeoIP
   geoCountry      String?
@@ -504,7 +506,14 @@ model RequestLog {
   @@index([createdAt, responseStatus])
   @@index([routeId, createdAt, responseStatus])
   @@index([geoCountry, createdAt])
+  @@index([source, createdAt])
   @@map("request_logs")
+}
+
+enum RequestSource {
+  TRAFFIC
+  TEST
+  HEALTH_CHECK
 }
 
 model ApiKey {
