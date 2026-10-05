@@ -6,7 +6,7 @@ import { createHmac, timingSafeEqual } from 'crypto'
 import { validateWebhookSignature, isSafeRegex, safeLookup, isTlsProtocolMismatch } from '../lib/security'
 import { verifyApiKey } from './apiKeyService'
 import { decryptSecret } from '../lib/crypto'
-import { Route, RouteTarget, TransformRule } from '@prisma/client'
+import { Route, RouteTarget, TransformRule, RequestSource } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { AppError } from '../lib/errors'
@@ -23,6 +23,7 @@ import { v4 as uuid } from 'uuid'
 import { hardenProxyResponseHeaders, clearApiSecurityHeaders } from '../lib/proxySecurityHeaders'
 import { stripClusterGateCookies } from '../lib/cookies'
 import { StreamCapture, CaptureEndState } from '../lib/streamCapture'
+import { classifyRequestSource } from '../lib/requestSource'
 
 // Max characters of a response body kept in the request log (buffered and streamed)
 const LOGGED_BODY_LIMIT = 5000
@@ -96,10 +97,12 @@ export async function proxyRequest(
   route: RouteWithRelations | Route,
   req: Request,
   res: Response,
-  overridePath?: string
+  overridePath?: string,
+  opts: { source?: RequestSource } = {}
 ): Promise<void> {
   const start = Date.now()
   const requestId = uuid()
+  const source = classifyRequestSource(req.get('user-agent'), opts.source)
   const routeExt = route as RouteWithRelations
   // Express's req.path is a getter-only property and cannot be mutated, so the
   // handler passes the full (/r-prefixed) public path explicitly for matching.
@@ -412,7 +415,7 @@ export async function proxyRequest(
         requestHeaders: sanitizeHeaders(forwardHeaders),
         requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
         responseStatus, responseHeaders: sanitizeHeaders(streamHeaders), responseBody: STREAMING_PLACEHOLDER,
-        duration, targetUrl: resolvedUrl, ip: req.ip, userAgent: req.get('user-agent'),
+        duration, targetUrl: resolvedUrl, ip: req.ip, userAgent: req.get('user-agent'), source,
       })
 
       const capture = new StreamCapture({
@@ -586,6 +589,7 @@ export async function proxyRequest(
       targetUrl: resolvedUrl,
       ip: req.ip,
       userAgent: req.get('user-agent'),
+      source,
     })
 
     res.status(responseStatus || 502).send(responseBuffer)
@@ -634,6 +638,7 @@ export async function proxyRequest(
       error: error,
       ip: req.ip,
       userAgent: req.get('user-agent'),
+      source,
     })
 
     throw AppError.serviceUnavailable(
@@ -796,6 +801,7 @@ async function logRequest(data: {
   error?: string
   ip?: string
   userAgent?: string
+  source: RequestSource
 }): Promise<string | null> {
   try {
     // GeoIP lookup
@@ -818,6 +824,7 @@ async function logRequest(data: {
         error: data.error,
         ip: data.ip,
         userAgent: data.userAgent,
+        source: data.source,
         geoCountry: geo.country,
         geoCity: geo.city,
         geoLatitude: geo.latitude,

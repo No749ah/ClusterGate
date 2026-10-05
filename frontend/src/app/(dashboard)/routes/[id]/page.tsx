@@ -20,6 +20,7 @@ import { Pin } from 'lucide-react'
 import { useLogs } from '@/hooks/useLogs'
 import { RouteTestPanel } from '@/components/routes/RouteTestPanel'
 import { LogBody } from '@/components/common/LogBody'
+import { LogSourceBadge } from '@/components/common/LogSourceBadge'
 import { ApiKeysPanel } from '@/components/routes/ApiKeysPanel'
 import { RouteStatusBadge } from '@/components/routes/RouteStatusBadge'
 import { HealthIndicator } from '@/components/routes/HealthIndicator'
@@ -62,7 +63,8 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
   const id = routeCuid
   const { data: statsData } = useRouteStats(id)
   const { data: uptimeData } = useRouteUptime(id)
-  const { data: logsData } = useLogs({ routeId: id, pageSize: 20 })
+  const [showSyntheticLogs, setShowSyntheticLogs] = useState(false)
+  const { data: logsData } = useLogs({ routeId: id, pageSize: 20, source: showSyntheticLogs ? 'all' : undefined })
   const { data: versionsData } = useRouteVersions(id)
   const proxyOrigin = useProxyOrigin()
 
@@ -433,7 +435,13 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
 
         <TabsContent value="logs" className="mt-4">
           <Card>
-            <CardHeader><CardTitle>Request Logs</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 gap-3">
+              <CardTitle>Request Logs</CardTitle>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground cursor-pointer select-none">
+                <Switch checked={showSyntheticLogs} onCheckedChange={setShowSyntheticLogs} />
+                Show tests &amp; health checks
+              </label>
+            </CardHeader>
             <CardContent>
               {logs.length === 0 ? (
                 <div className="text-center py-8 text-muted-foreground">
@@ -460,7 +468,8 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
                           <td className="py-2 pr-4">
                             <span className="font-mono text-xs bg-muted px-1.5 py-0.5 rounded">{log.method}</span>
                           </td>
-                          <td className="py-2 pr-4 font-mono text-xs text-muted-foreground max-w-[200px] truncate" title={log.path}>
+                          <td className="py-2 pr-4 font-mono text-xs text-muted-foreground max-w-[240px] truncate" title={log.path}>
+                            <LogSourceBadge source={log.source} className="mr-1.5 align-middle" />
                             {log.path}
                           </td>
                           <td className="py-2 pr-4">
@@ -626,7 +635,7 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
     <Dialog open={!!log} onOpenChange={() => onClose()}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Request Detail</DialogTitle>
+          <DialogTitle className="flex items-center gap-2">Request Detail <LogSourceBadge source={log.source} /></DialogTitle>
           <DialogDescription>
             {log.method} {log.path} - {log.responseStatus ?? 'ERR'}
           </DialogDescription>

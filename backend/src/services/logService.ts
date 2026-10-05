@@ -1,4 +1,4 @@
-import { Prisma, Role } from '@prisma/client'
+import { Prisma, Role, RequestSource } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 
@@ -37,6 +37,30 @@ export interface LogFilters {
   search?: string
   /** Restrict to logs of routes in these organizations (org scoping for non-admins). */
   organizationIds?: string[]
+  /**
+   * Which request sources to include. Defaults to real traffic only, so
+   * test-panel runs and health-check probes stay out of the log unless asked for.
+   */
+  source?: SourceFilter
+}
+
+export type SourceFilter = 'traffic' | 'all' | 'test' | 'health'
+
+const SOURCE_FILTERS: Record<SourceFilter, RequestSource[] | null> = {
+  traffic: [RequestSource.TRAFFIC],
+  all: null,
+  test: [RequestSource.TEST],
+  health: [RequestSource.HEALTH_CHECK],
+}
+
+export function parseSourceFilter(value: unknown): SourceFilter {
+  const v = typeof value === 'string' ? value.toLowerCase() : ''
+  return v in SOURCE_FILTERS ? (v as SourceFilter) : 'traffic'
+}
+
+export function sourceWhere(filter: SourceFilter = 'traffic'): Prisma.RequestLogWhereInput {
+  const sources = SOURCE_FILTERS[filter]
+  return sources ? { source: { in: sources } } : {}
 }
 
 // Free-text markers stored in the RequestLog.error column. The Prisma `contains`
@@ -123,6 +147,9 @@ export async function getRouteLogs(filters: LogFilters, pagination = { page: 1, 
         }
       : {}),
   }
+  // Appended to AND so it can't collide with the OR / AND clauses above
+  const existingAnd = where.AND ? (Array.isArray(where.AND) ? where.AND : [where.AND]) : []
+  where.AND = [...existingAnd, sourceWhere(filters.source)]
 
   const [data, total] = await prisma.$transaction([
     prisma.requestLog.findMany({

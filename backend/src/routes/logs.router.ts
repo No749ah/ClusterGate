@@ -100,7 +100,7 @@ async function orgScopeFor(req: Request): Promise<string[] | undefined> {
  */
 router.get('/', authenticate, async (req, res, next) => {
   try {
-    const { page = '1', pageSize = '50', routeId, method, statusType, dateFrom, dateTo, search } = req.query
+    const { page = '1', pageSize = '50', routeId, method, statusType, dateFrom, dateTo, search, source } = req.query
 
     // Validate date params
     const parsedDateFrom = dateFrom ? new Date(String(dateFrom)) : undefined
@@ -120,6 +120,7 @@ router.get('/', authenticate, async (req, res, next) => {
         dateFrom: parsedDateFrom,
         dateTo: parsedDateTo,
         search: search ? String(search) : undefined,
+        source: logService.parseSourceFilter(source),
         organizationIds: await orgScopeFor(req),
       },
       { page: parseInt(String(page)) || 1, pageSize: safePageSize(pageSize as string) }

@@ -89,6 +89,7 @@ describe('proxyRequest — streamed response logging', () => {
     expect(res.body()).toBe(frames.join(''))
     const created = prismaMock.requestLog.create.mock.calls[0][0].data
     expect(created.responseBody).toBe('[streaming…]')
+    expect(created.source).toBe('TRAFFIC')
     expect(created.responseHeaders['content-type']).toBe('text/event-stream')
 
     await waitFor(() => expect(prismaMock.requestLog.update).toHaveBeenCalledTimes(1))
@@ -140,5 +141,18 @@ describe('proxyRequest — streamed response logging', () => {
     await proxyRequest(route, makeReq(), res)
     await waitFor(() => expect(prismaMock.requestLog.update).toHaveBeenCalled())
     expect(prismaMock.requestLog.update.mock.calls[0][0].data.responseBody).toBe('[binary stream: 4 bytes, audio/mpeg]')
+  })
+
+  it('tags test-panel runs and health-check probes', async () => {
+    const stream = () => ({ status: 200, headers: { 'content-type': 'text/plain' }, data: Readable.from([Buffer.from('ok')]) })
+    axiosMock.mockResolvedValueOnce(stream())
+    await proxyRequest(route, makeReq(), makeRes(), undefined, { source: 'TEST' })
+    expect(prismaMock.requestLog.create.mock.calls[0][0].data.source).toBe('TEST')
+
+    axiosMock.mockResolvedValueOnce(stream())
+    const probe = makeReq()
+    probe.headers['user-agent'] = 'kube-probe/1.30'
+    await proxyRequest(route, probe, makeRes())
+    expect(prismaMock.requestLog.create.mock.calls[1][0].data.source).toBe('HEALTH_CHECK')
   })
 })

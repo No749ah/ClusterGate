@@ -174,6 +174,8 @@ export interface RequestLog {
   error: string | null
   ip: string | null
   userAgent: string | null
+  /** TRAFFIC = real request, TEST = route test panel, HEALTH_CHECK = probe / uptime monitor */
+  source?: 'TRAFFIC' | 'TEST' | 'HEALTH_CHECK'
   createdAt: string
 }
 
@@ -322,6 +324,8 @@ export interface LogFilters {
   dateFrom?: string
   dateTo?: string
   search?: string
+  /** Defaults to 'traffic' server-side: test runs and health checks hidden */
+  source?: 'traffic' | 'all' | 'test' | 'health'
   page?: number
   pageSize?: number
 }
