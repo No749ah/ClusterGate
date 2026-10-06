@@ -29,19 +29,45 @@ function project(lat: number, lng: number, width: number, height: number): [numb
   return [x, Math.max(0, Math.min(height, y))]
 }
 
-interface LiveDot {
-  x: number
-  y: number
-  age: number
-  status: number | null
-  country: string
+interface LiveEvent {
+  id: string
+  geoLatitude: number | null
+  geoLongitude: number | null
+  geoCountry: string | null
+  responseStatus: number | null
 }
+
+interface LiveDot {
+  lat: number
+  lng: number
+  born: number
+  status: number | null
+}
+
+type LiveState = 'connecting' | 'live' | 'offline'
+
+const LIVE_STATE: Record<LiveState, { label: string; text: string; dot: string }> = {
+  live: { label: 'Live', text: 'text-green-400', dot: 'bg-green-400 animate-pulse' },
+  connecting: { label: 'Connecting…', text: 'text-amber-400', dot: 'bg-amber-400' },
+  offline: { label: 'Offline', text: 'text-red-400', dot: 'bg-red-400' },
+}
+
+// How long a live request pulses on the map.
+const DOT_LIFETIME_MS = 2000
+const MAX_LIVE_DOTS = 300
+// The live stream re-sends a short window on every tick; ids already shown are skipped.
+const SEEN_IDS_LIMIT = 1000
+const RECONNECT_DELAY_MS = 5000
+const MAP_HEIGHT = 450
 
 export default function TrafficMapPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [hours, setHours] = useState('24')
-  const [liveDots, setLiveDots] = useState<LiveDot[]>([])
-  const animFrameRef = useRef<number>(0)
+  const [liveState, setLiveState] = useState<LiveState>('connecting')
+  // Live dots and canvas size live in refs: the animation loop reads and
+  // updates them every frame without re-rendering the page.
+  const liveDotsRef = useRef<LiveDot[]>([])
+  const sizeRef = useRef({ width: 0, height: 0 })
 
   const { data: mapData } = useQuery({
     queryKey: ['traffic-map', hours],
@@ -53,56 +79,87 @@ export default function TrafficMapPage() {
 
   // SSE live traffic connection
   useEffect(() => {
-    const url = api.traffic.liveUrl()
-    const es = new EventSource(url, { withCredentials: true })
+    let es: EventSource | null = null
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined
+    let disposed = false
+    const seen = new Set<string>()
 
-    es.onmessage = (event) => {
-      try {
-        const logs = JSON.parse(event.data) as any[]
-        const canvas = canvasRef.current
-        if (!canvas) return
-        const { width, height } = canvas
+    const connect = () => {
+      if (disposed) return
+      setLiveState('connecting')
+      // Built per connection so a reconnect picks up a refreshed client token.
+      es = new EventSource(api.traffic.liveUrl(), { withCredentials: true })
 
-        const newDots = logs
-          .filter((l) => l.geoLatitude && l.geoLongitude)
-          .map((l) => {
-            const [x, y] = project(l.geoLatitude, l.geoLongitude, width, height)
-            return {
-              x, y,
-              age: 0,
-              status: l.responseStatus,
-              country: l.geoCountry || '??',
-            }
-          })
+      es.onopen = () => setLiveState('live')
 
-        if (newDots.length > 0) {
-          setLiveDots((prev) => [...prev.slice(-200), ...newDots])
+      es.onmessage = (event) => {
+        let logs: LiveEvent[]
+        try {
+          logs = JSON.parse(event.data)
+        } catch {
+          return
         }
-      } catch {}
+        const now = performance.now()
+        for (const l of logs) {
+          if (seen.has(l.id)) continue
+          seen.add(l.id)
+          if (l.geoLatitude == null || l.geoLongitude == null) continue
+          liveDotsRef.current.push({ lat: l.geoLatitude, lng: l.geoLongitude, born: now, status: l.responseStatus })
+        }
+        if (liveDotsRef.current.length > MAX_LIVE_DOTS) {
+          liveDotsRef.current = liveDotsRef.current.slice(-MAX_LIVE_DOTS)
+        }
+        if (seen.size > SEEN_IDS_LIMIT) {
+          // Sets iterate in insertion order: drop the oldest ids.
+          const drop = seen.size - SEEN_IDS_LIMIT
+          let i = 0
+          for (const id of seen) {
+            if (i++ >= drop) break
+            seen.delete(id)
+          }
+        }
+      }
+
+      es.onerror = () => {
+        // EventSource retries network errors itself, but gives up for good on
+        // an HTTP error (e.g. an expired client token). Reconnect in that case.
+        if (es?.readyState === EventSource.CLOSED) {
+          setLiveState('offline')
+          es.close()
+          reconnectTimer = setTimeout(connect, RECONNECT_DELAY_MS)
+        } else {
+          setLiveState('connecting')
+        }
+      }
     }
 
-    return () => es.close()
+    connect()
+    return () => {
+      disposed = true
+      clearTimeout(reconnectTimer)
+      es?.close()
+    }
   }, [])
 
   // Store traffic in a ref so the animation loop always sees current data
   const trafficRef = useRef(traffic)
   trafficRef.current = traffic
-  const liveDotsRef = useRef(liveDots)
-  liveDotsRef.current = liveDots
 
   // Canvas animation loop
   useEffect(() => {
     let running = true
+    let frame = 0
 
     const drawMap = () => {
       if (!running) return
+      frame = requestAnimationFrame(drawMap)
       const canvas = canvasRef.current
-      if (!canvas) { animFrameRef.current = requestAnimationFrame(drawMap); return }
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
+      const ctx = canvas?.getContext('2d')
+      const { width, height } = sizeRef.current
+      if (!canvas || !ctx || width === 0 || height === 0) return
 
-      const { width, height } = canvas
-      if (width === 0 || height === 0) { animFrameRef.current = requestAnimationFrame(drawMap); return }
+      const dpr = canvas.width / width
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
       // Dark background
       ctx.fillStyle = '#0a0f1a'
@@ -126,11 +183,7 @@ export default function TrafficMapPage() {
         ctx.stroke()
       }
 
-      // Draw continent outlines (simplified landmass indicators)
-      ctx.fillStyle = 'rgba(59, 130, 246, 0.03)'
-      ctx.strokeStyle = 'rgba(59, 130, 246, 0.08)'
-      ctx.lineWidth = 0.5
-      // Draw simple continent-shaped regions for visual reference
+      // Simple region markers for visual reference
       const landmarks = [
         { lat: 48, lng: 10, label: 'EU' }, { lat: 40, lng: -100, label: 'US' },
         { lat: 35, lng: 105, label: 'CN' }, { lat: -25, lng: 135, label: 'AU' },
@@ -175,31 +228,31 @@ export default function TrafficMapPage() {
       }
 
       // Draw live dots with pulse animation
-      setLiveDots((prev) => {
-        const updated = prev.map((d) => ({ ...d, age: d.age + 1 })).filter((d) => d.age < 60)
-        for (const dot of updated) {
-          const progress = dot.age / 60
-          const alpha = 1 - progress
-          const size = 3 + progress * 12
+      const now = performance.now()
+      const dots = liveDotsRef.current.filter((d) => now - d.born < DOT_LIFETIME_MS)
+      liveDotsRef.current = dots
+      for (const dot of dots) {
+        const progress = Math.max(0, (now - dot.born) / DOT_LIFETIME_MS)
+        const alpha = 1 - progress
+        const size = 3 + progress * 12
+        const [x, y] = project(dot.lat, dot.lng, width, height)
 
-          const isError = dot.status && dot.status >= 400
-          const color = isError ? `rgba(239, 68, 68, ${alpha})` : `rgba(34, 197, 94, ${alpha})`
+        const isError = dot.status != null && dot.status >= 400
+        const color = isError ? `rgba(239, 68, 68, ${alpha})` : `rgba(34, 197, 94, ${alpha})`
 
-          ctx.strokeStyle = color
-          ctx.lineWidth = 2 * alpha
+        ctx.strokeStyle = color
+        ctx.lineWidth = 2 * alpha
+        ctx.beginPath()
+        ctx.arc(x, y, size, 0, Math.PI * 2)
+        ctx.stroke()
+
+        if (progress < 0.5) {
+          ctx.fillStyle = color
           ctx.beginPath()
-          ctx.arc(dot.x, dot.y, size, 0, Math.PI * 2)
-          ctx.stroke()
-
-          if (progress < 0.5) {
-            ctx.fillStyle = color
-            ctx.beginPath()
-            ctx.arc(dot.x, dot.y, 2, 0, Math.PI * 2)
-            ctx.fill()
-          }
+          ctx.arc(x, y, 2, 0, Math.PI * 2)
+          ctx.fill()
         }
-        return updated
-      })
+      }
 
       // Show "no geo data" message on canvas when there are requests but no countries
       if (currentTraffic && currentTraffic.total > 0 && (!currentTraffic.countries || currentTraffic.countries.length === 0)) {
@@ -212,28 +265,33 @@ export default function TrafficMapPage() {
         ctx.fillText('Requests from private/internal IPs cannot be geolocated', width / 2, height / 2 + 12)
         ctx.textAlign = 'start'
       }
-
-      animFrameRef.current = requestAnimationFrame(drawMap)
     }
 
-    animFrameRef.current = requestAnimationFrame(drawMap)
-    return () => { running = false; cancelAnimationFrame(animFrameRef.current) }
+    frame = requestAnimationFrame(drawMap)
+    return () => { running = false; cancelAnimationFrame(frame) }
   }, [])
 
-  // Resize canvas to container
+  // Size the canvas to its container. A ResizeObserver also catches layout
+  // changes without a window resize (e.g. collapsing the sidebar).
   useEffect(() => {
-    const handleResize = () => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const rect = canvas.parentElement?.getBoundingClientRect()
-      if (rect) {
-        canvas.width = Math.floor(rect.width)
-        canvas.height = Math.max(400, Math.floor(rect.height))
-      }
+    const canvas = canvasRef.current
+    const container = canvas?.parentElement
+    if (!canvas || !container) return
+    const resize = () => {
+      // Height stays fixed: deriving it from the container would feed the
+      // canvas size back into the observed element and grow without bound.
+      const width = container.clientWidth
+      const height = MAP_HEIGHT
+      const dpr = window.devicePixelRatio || 1
+      sizeRef.current = { width, height }
+      canvas.width = Math.floor(width * dpr)
+      canvas.height = Math.floor(height * dpr)
+      canvas.style.height = `${height}px`
     }
-    handleResize()
-    window.addEventListener('resize', handleResize)
-    return () => window.removeEventListener('resize', handleResize)
+    resize()
+    const observer = new ResizeObserver(resize)
+    observer.observe(container)
+    return () => observer.disconnect()
   }, [])
 
   const topCountries = (traffic?.countries || []).slice(0, 10)
@@ -251,9 +309,9 @@ export default function TrafficMapPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs text-green-400">
-            <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
-            Live
+          <div className={`flex items-center gap-1.5 text-xs ${LIVE_STATE[liveState].text}`}>
+            <span className={`w-2 h-2 rounded-full ${LIVE_STATE[liveState].dot}`} />
+            {LIVE_STATE[liveState].label}
           </div>
           <Select value={hours} onValueChange={setHours}>
             <SelectTrigger className="w-32">
