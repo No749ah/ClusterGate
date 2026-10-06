@@ -367,7 +367,7 @@ export default function RouteGroupDetailPage({ params }: { params: Promise<{ id:
               <p className="text-sm">No routes in this group yet.</p>
             </div>
           ) : (
-            <div className="rounded-lg border border-border overflow-hidden">
+            <div className="rounded-lg border border-border overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-border text-xs font-medium text-muted-foreground uppercase tracking-wider">

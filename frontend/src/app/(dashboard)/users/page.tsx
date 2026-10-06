@@ -143,19 +143,19 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex items-center justify-between gap-3">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Users</h1>
           <p className="text-sm text-muted-foreground mt-1">{users.length} users</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
             <Input
               placeholder="Search name / email"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-8 h-9 w-56"
+              className="pl-8 h-9 w-56 max-w-full"
             />
           </div>
           <Button onClick={() => { setInviteDialogOpen(true); setInviteLink(null); setCopiedLink(false) }}>
@@ -199,7 +199,7 @@ export default function UsersPage() {
       )}
 
       {/* Users Table */}
-      <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
+      <div className="rounded-lg border border-border/50 bg-card overflow-x-auto">
         <table className="w-full text-sm">
           <thead className="bg-muted/30 border-b border-border/50">
             <tr>
