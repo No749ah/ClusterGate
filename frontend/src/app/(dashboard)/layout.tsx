@@ -70,10 +70,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       </a>
       <PageTitle />
       <Sidebar />
-      <div className={`flex-1 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
+      <div className={`flex-1 min-w-0 flex flex-col transition-all duration-200 ${sidebarCollapsed ? 'md:pl-16' : 'md:pl-64'}`}>
         <UpdateBanner />
         <Header />
-        <main id="main-content" tabIndex={-1} className="flex-1 p-4 md:p-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 p-4 md:p-6">
           <Breadcrumbs />
           <Suspense fallback={<PageFallback />}>
             {children}

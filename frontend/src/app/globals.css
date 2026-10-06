@@ -34,7 +34,13 @@
     --sidebar-border: 219 11% 14%;
   }
 
+  /* Native controls (date pickers, scrollbars) follow the theme. */
+  :root {
+    color-scheme: light;
+  }
+
   .dark {
+    color-scheme: dark;
     --background: 220 12% 6.5%;
     --foreground: 214 12% 92%;
     --card: 219 11% 9%;

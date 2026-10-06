@@ -134,7 +134,7 @@ export default function RoutesPage() {
   const tagFilter = searchParams.get('tag') ?? 'ALL'
   const envFilter = (searchParams.get('env') ?? 'ALL') as Environment | 'ALL'
   const page = Math.max(1, parseInt(searchParams.get('page') ?? '1', 10) || 1)
-  const [pageSize, setPageSize] = usePageSize('routes', 20)
+  const [pageSize, setPageSize] = usePageSize('routes', 25)
 
   const updateParams = (patch: Record<string, string | null>, opts?: { resetPage?: boolean }) => {
     const next = new URLSearchParams(searchParams.toString())
@@ -300,10 +300,6 @@ export default function RoutesPage() {
     }
     function onKey(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey
-      // Ctrl/Cmd+K opens the shortcuts cheat-sheet (works from anywhere)
-      if (mod && e.key.toLowerCase() === 'k') {
-        e.preventDefault(); setShortcutsOpen((v) => !v); return
-      }
       // Ctrl/Cmd combos work even from inputs (except they're native there)
       if (mod && e.key.toLowerCase() === 'c' && someSelected && !isTyping(e.target)) {
         e.preventDefault(); copySelectedConfigs(); return
@@ -315,6 +311,9 @@ export default function RoutesPage() {
         e.preventDefault(); setSelectedIds(new Set(routes.map((r) => r.id))); return
       }
       if (isTyping(e.target)) return
+      // "?" opens the shortcuts cheat-sheet. Ctrl/Cmd+K belongs to the global
+      // command palette in the header, so it must not be claimed here too.
+      if (e.key === '?') { e.preventDefault(); setShortcutsOpen((v) => !v); return }
       if (e.key === '/') { e.preventDefault(); searchRef.current?.focus(); return }
       if (e.key === 'n') { e.preventDefault(); router.push('/routes/new'); return }
       if (e.key === 'Escape' && someSelected) { e.preventDefault(); setSelectedIds(new Set()); return }
@@ -564,14 +563,14 @@ export default function RoutesPage() {
   return (
     <div className="space-y-6">
       {/* Header — sticks to the top of the viewport while scrolling long lists */}
-      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="sticky top-0 z-20 -mx-4 px-4 md:-mx-6 md:px-6 -mt-4 md:-mt-6 pt-4 md:pt-6 pb-3 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border/40 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Routes</h1>
           <p className="text-sm text-muted-foreground mt-1">
             {total} route{total !== 1 ? 's' : ''} configured
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <input
             ref={fileInputRef}
             type="file"
@@ -879,7 +878,7 @@ export default function RoutesPage() {
             placeholder="Search routes..."
             value={search}
             onChange={(e) => { setSearch(e.target.value) }}
-            className="pl-9 pr-16"
+            className="pl-9 pr-10"
           />
           <button
             type="button"
@@ -887,7 +886,7 @@ export default function RoutesPage() {
             title="Keyboard shortcuts"
             className="absolute right-1.5 top-1/2 -translate-y-1/2 inline-flex items-center gap-0.5 rounded border border-border/50 bg-muted/50 px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            <kbd>⌘</kbd><kbd>K</kbd>
+            <kbd>?</kbd>
           </button>
         </div>
         <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v) }}>
@@ -956,7 +955,7 @@ export default function RoutesPage() {
                     aria-label="Select all"
                   />
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
+                <th className="min-w-[240px] px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
                   Route
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-medium text-muted-foreground uppercase tracking-wider">
@@ -1120,7 +1119,7 @@ export default function RoutesPage() {
         />
       </div>
 
-      {/* Keyboard shortcuts cheat-sheet — opened by Ctrl/Cmd+K or the badge in the search field */}
+      {/* Keyboard shortcuts cheat-sheet — opened by "?" or the badge in the search field */}
       <Dialog open={shortcutsOpen} onOpenChange={setShortcutsOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1134,7 +1133,7 @@ export default function RoutesPage() {
               ['Ctrl/⌘ A', 'Select all'],
               ['Ctrl/⌘ C', 'Copy selected configs'],
               ['Ctrl/⌘ V', 'Paste configs as new routes'],
-              ['Ctrl/⌘ K', 'Show this dialog'],
+              ['?', 'Show this dialog'],
               ['Delete', 'Delete selected'],
               ['Esc', 'Clear selection / close dialog'],
               ['Drag', 'Drop rows onto a folder to move them (selection moves together)'],

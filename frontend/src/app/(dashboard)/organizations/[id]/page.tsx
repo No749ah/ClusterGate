@@ -469,7 +469,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
               <p className="text-xs mt-1">Add members to this organization.</p>
             </div>
           ) : (
-            <div className="rounded-lg border border-border bg-card overflow-hidden">
+            <div className="rounded-lg border border-border bg-card overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50">

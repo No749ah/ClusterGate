@@ -63,7 +63,7 @@ export default function ArchivedRoutesPage() {
           <p className="text-xs mt-1">Deleted routes show up here so they can be restored.</p>
         </div>
       ) : (
-        <div className="rounded-lg border border-border/50 bg-card overflow-hidden">
+        <div className="rounded-lg border border-border/50 bg-card overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="bg-muted/30 border-b border-border/50">
               <tr>
