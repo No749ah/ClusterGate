@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useTheme } from 'next-themes'
 import { Moon, Sun, LogOut, User, Settings, KeyRound, Search, Menu } from 'lucide-react'
 import { useAuth, useLogout } from '@/hooks/useAuth'
@@ -24,6 +25,9 @@ export function Header({ title }: HeaderProps) {
   const { theme, setTheme } = useTheme()
   const { user } = useAuth()
   const logout = useLogout()
+  // Set after mount so the server render and first client render agree.
+  const [isMac, setIsMac] = useState(false)
+  useEffect(() => { setIsMac(/Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent)) }, [])
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-border/50 bg-background backdrop-blur-sm border-border px-4 md:px-6">
@@ -49,7 +53,7 @@ export function Header({ title }: HeaderProps) {
           <Search className="w-3.5 h-3.5" />
           <span className="flex-1 text-left text-xs">Search...</span>
           <kbd className="hidden sm:inline-flex h-5 items-center gap-0.5 rounded border border-border/50 bg-muted px-1.5 font-mono text-[10px]">
-            Ctrl K
+            {isMac ? '⌘K' : 'Ctrl K'}
           </kbd>
         </button>
       </div>

@@ -8,14 +8,15 @@ import { useEffect, useState } from 'react'
  * the value is read on mount (which happens before paint via useEffect's
  * first run; the initial render briefly uses the default).
  */
-export function usePageSize(key: string, defaultSize = 20): [number, (n: number) => void] {
+export function usePageSize(key: string, defaultSize = 25): [number, (n: number) => void] {
   const [size, setSize] = useState(defaultSize)
 
   useEffect(() => {
     try {
       const stored = localStorage.getItem(`cg-pagesize-${key}`)
       const n = stored ? parseInt(stored, 10) : NaN
-      if (!Number.isNaN(n) && n > 0) setSize(n)
+      // Only accept sizes the pagination select can show, else it renders empty.
+      if (PAGE_SIZE_OPTIONS.includes(n)) setSize(n)
     } catch { /* localStorage unavailable */ }
   }, [key])
 
