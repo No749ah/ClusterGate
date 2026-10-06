@@ -145,19 +145,15 @@ export default function LogsPage() {
           />
         </div>
         {/* Date range — datetime-local inputs translate to ISO strings */}
-        <Input
-          type="datetime-local"
+        <DateTimeField
+          label="From"
           value={dateFrom}
-          onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
-          className="h-9 w-44"
-          title="From"
+          onChange={(v) => { setDateFrom(v); setPage(1) }}
         />
-        <Input
-          type="datetime-local"
+        <DateTimeField
+          label="To"
           value={dateTo}
-          onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
-          className="h-9 w-44"
-          title="To"
+          onChange={(v) => { setDateTo(v); setPage(1) }}
         />
         {/* Live tail — switch refetch interval to 2s and reset to page 1 */}
         <Button
@@ -190,15 +186,15 @@ export default function LogsPage() {
           return (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="w-52 justify-between h-9 font-normal">
+                <Button variant="outline" className="w-52 justify-between h-9 font-normal" title={label}>
                   <span className="flex items-center gap-2 min-w-0">
-                    <Filter className="w-3 h-3 text-muted-foreground" />
+                    <Filter className="w-3 h-3 shrink-0 text-muted-foreground" />
                     <span className="truncate">{label}</span>
                   </span>
-                  <ChevronDown className="w-3 h-3 opacity-60" />
+                  <ChevronDown className="w-3 h-3 shrink-0 opacity-60" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-64 max-h-72 overflow-y-auto p-1">
+              <DropdownMenuContent align="start" className="w-80 max-w-[calc(100vw-2rem)] max-h-80 overflow-y-auto p-1">
                 <div className="flex items-center justify-between px-2 pt-1 pb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
                   <span>{selected.size === 0 ? 'All routes' : `${selected.size} selected`}</span>
                   {selected.size > 0 && (
@@ -212,15 +208,16 @@ export default function LogsPage() {
                       key={r.id}
                       type="button"
                       onClick={() => toggle(r.id)}
+                      title={r.name}
                       className={cn(
                         'flex items-center gap-2 w-full px-2 py-1.5 rounded text-sm text-left hover:bg-muted/50',
                         on ? 'text-foreground' : 'text-muted-foreground'
                       )}
                     >
-                      <span className={cn('inline-flex items-center justify-center w-4 h-4 rounded border', on ? 'bg-primary border-primary text-primary-foreground' : 'border-border')}>
+                      <span className={cn('inline-flex shrink-0 items-center justify-center w-4 h-4 rounded border', on ? 'bg-primary border-primary text-primary-foreground' : 'border-border')}>
                         {on && <Check className="w-3 h-3" />}
                       </span>
-                      <span className="truncate">{r.name}</span>
+                      <span className="min-w-0 truncate">{r.name}</span>
                     </button>
                   )
                 })}
@@ -230,7 +227,7 @@ export default function LogsPage() {
         })()}
 
         {/* Multi-select method chips: click toggles, no selection = all */}
-        <div className="flex items-center gap-1 rounded-md border border-input bg-transparent px-1 h-9">
+        <div className="flex flex-wrap items-center gap-1 rounded-md border border-input bg-transparent px-1 min-h-9">
           {(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const).map((m) => {
             const selected = method.split(',').map(s => s.trim()).filter(Boolean)
             const on = selected.includes(m)
@@ -517,5 +514,29 @@ function RequestPanel({ title, headers, body, error, formatted }: {
         )}
       </div>
     </section>
+  )
+}
+
+/* datetime-local renders its locale mask ("tt.mm.jjjj --:--") when empty,
+   which reads like garbage next to the other filters. Keep the native picker
+   but show a plain label until the field is focused or has a value. */
+function DateTimeField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative">
+      <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+        {label}
+      </span>
+      <Input
+        type="datetime-local"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        aria-label={label}
+        title={label}
+        className={cn(
+          'block h-9 w-60 pl-12 pr-2',
+          !value && 'text-transparent focus:text-foreground'
+        )}
+      />
+    </div>
   )
 }
