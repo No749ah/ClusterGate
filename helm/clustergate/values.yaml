@@ -39,6 +39,9 @@ backend:
     LOG_LEVEL: info
     METRICS_ENABLED: "true"
     LOG_RETENTION_DAYS: "90"
+    # Characters of each request/response body kept in the request log
+    LOG_BODY_LIMIT: "65536"
+    LOG_STREAM_BODY_LIMIT: "262144"
     ALLOWED_ORIGINS: "https://clustergate.example.com"
   secrets:
     jwtSecret: "CHANGE_ME_JWT_SECRET"

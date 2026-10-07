@@ -13,6 +13,7 @@ vi.mock('../../lib/prisma', () => ({ prisma: prismaMock }))
 vi.mock('../geoipService', () => ({ lookupIp: () => ({}) }))
 
 import { proxyRequest } from '../proxyService'
+import { config } from '../../config'
 
 function makeReq() {
   const headers: Record<string, string> = { 'user-agent': 'vitest' }
@@ -118,15 +119,16 @@ describe('proxyRequest — streamed response logging', () => {
     const done = proxyRequest(route, makeReq(), res)
     await waitFor(() => expect(prismaMock.requestLog.create).toHaveBeenCalled())
 
-    upstream.write(Buffer.from('y'.repeat(6000)))
+    const limit = config.LOG_STREAM_BODY_LIMIT
+    upstream.write(Buffer.from('y'.repeat(limit + 1000)))
     await waitFor(() => expect(prismaMock.requestLog.update).toHaveBeenCalledTimes(1))
     const body = prismaMock.requestLog.update.mock.calls[0][0].data.responseBody as string
-    expect(body.startsWith('y'.repeat(5000))).toBe(true)
+    expect(body.startsWith('y'.repeat(limit))).toBe(true)
     expect(body).toContain('stream still open')
 
     upstream.end(Buffer.from('tail'))
     await done
-    expect(res.body()).toBe('y'.repeat(6000) + 'tail')
+    expect(res.body()).toBe('y'.repeat(limit + 1000) + 'tail')
     // no second write after the early flush
     expect(prismaMock.requestLog.update).toHaveBeenCalledTimes(1)
   })

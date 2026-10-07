@@ -692,7 +692,7 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
           {log.error && (
             <div>
               <h4 className="text-sm font-medium text-red-500 mb-1">Error</h4>
-              <pre className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-xs text-red-400 whitespace-pre-wrap break-all">
+              <pre className="bg-red-500/10 border border-red-500/20 rounded-md p-3 text-xs text-red-400 whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {log.error}
               </pre>
             </div>
@@ -702,7 +702,7 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
           {log.requestHeaders && Object.keys(log.requestHeaders).length > 0 && (
             <div>
               <h4 className="text-sm font-medium mb-1">Request Headers</h4>
-              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">
+              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {JSON.stringify(log.requestHeaders, null, 2)}
               </pre>
             </div>
@@ -712,9 +712,11 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
           {log.requestBody && (
             <div>
               <h4 className="text-sm font-medium mb-1">Request Body</h4>
-              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">
-                {formatJsonSafe(log.requestBody)}
-              </pre>
+              <LogBody
+                body={log.requestBody}
+                headers={log.requestHeaders as Record<string, unknown> | null}
+                className="bg-muted rounded-md p-3"
+              />
             </div>
           )}
 
@@ -722,7 +724,7 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
           {log.responseHeaders && Object.keys(log.responseHeaders).length > 0 && (
             <div>
               <h4 className="text-sm font-medium mb-1">Response Headers</h4>
-              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap break-all">
+              <pre className="bg-muted rounded-md p-3 text-xs overflow-x-auto whitespace-pre-wrap [overflow-wrap:anywhere]">
                 {JSON.stringify(log.responseHeaders, null, 2)}
               </pre>
             </div>
@@ -735,7 +737,7 @@ function LogDetailDialog({ log, onClose }: { log: RequestLog | null; onClose: ()
               <LogBody
                 body={log.responseBody}
                 headers={log.responseHeaders as Record<string, unknown> | null}
-                className="bg-muted rounded-md p-3 text-xs overflow-auto whitespace-pre-wrap break-all max-h-[300px]"
+                className="bg-muted rounded-md p-3"
               />
             </div>
           )}
@@ -781,14 +783,6 @@ function generateCurl(log: RequestLog): string {
   }
 
   return parts.join(' \\\n  ')
-}
-
-function formatJsonSafe(str: string): string {
-  try {
-    return JSON.stringify(JSON.parse(str), null, 2)
-  } catch {
-    return str
-  }
 }
 
 const DIFF_FIELDS = [

@@ -15,5 +15,7 @@ data:
   LOG_LEVEL: "info"
   METRICS_ENABLED: "true"
   LOG_RETENTION_DAYS: "90"
+  LOG_BODY_LIMIT: "65536"
+  LOG_STREAM_BODY_LIMIT: "262144"
   NEXT_PUBLIC_API_URL: "https://clustergate.example.com/api-backend"
   NEXT_PUBLIC_APP_NAME: "ClusterGate"

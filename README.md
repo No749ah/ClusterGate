@@ -268,6 +268,8 @@ Public Request
 | `RATE_LIMIT_MAX`        | No       | `100`     | Global API requests per window       |
 | `AUTH_RATE_LIMIT_MAX`   | No       | `10`      | Auth endpoint requests per window    |
 | `LOG_RETENTION_DAYS`    | No       | `90`      | Days to keep request logs            |
+| `LOG_BODY_LIMIT`        | No       | `65536`   | Max characters of a request/response body kept per log entry |
+| `LOG_STREAM_BODY_LIMIT` | No       | `262144`  | Same for streamed responses (SSE/NDJSON frames carry protocol overhead) |
 | `BACKUP_CRON_ENABLED`   | No       | `false`   | Enable scheduled DB backups          |
 | `BACKUP_CRON_SCHEDULE`  | No       | `0 3 * * *` | Backup cron schedule               |
 | `BACKUP_RETENTION_COUNT`| No       | `10`      | Backups to retain                    |
