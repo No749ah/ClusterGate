@@ -35,8 +35,10 @@ export interface StreamCaptureOptions {
   contentType?: string
   /** Upstream Content-Encoding header, if any (the stream path does not decompress) */
   contentEncoding?: string
-  /** Max characters of body to keep — matches the buffered path's log cap */
+  /** Max characters of body to keep */
   limit: number
+  /** Wording for placeholders: a streamed response or a buffered body */
+  kind?: 'stream' | 'body'
 }
 
 const TEXT_TYPES = [
@@ -163,7 +165,7 @@ export class StreamCapture {
 
     if (decoded === null) {
       return {
-        body: `[stream: ${total} bytes, ${this.opts.contentEncoding} encoded — not decodable for preview]`,
+        body: `[${this.opts.kind ?? 'stream'}: ${total} bytes, ${this.opts.contentEncoding} encoded — not decodable for preview]`,
         truncated: rawTruncated,
         totalBytes: total,
         binary: true,
@@ -173,7 +175,7 @@ export class StreamCapture {
     const binary = typeIsText === false || (typeIsText === undefined && !looksLikeText(decoded))
     if (binary) {
       return {
-        body: `[binary stream: ${complete ? `${total} bytes` : `${total}+ bytes, ${END_STATE_TEXT[state]}`}${this.opts.contentType ? `, ${this.opts.contentType}` : ''}]`,
+        body: `[binary ${this.opts.kind ?? 'stream'}: ${complete ? `${total} bytes` : `${total}+ bytes, ${END_STATE_TEXT[state]}`}${this.opts.contentType ? `, ${this.opts.contentType}` : ''}]`,
         truncated: false,
         totalBytes: total,
         binary: true,

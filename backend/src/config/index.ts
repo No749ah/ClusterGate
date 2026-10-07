@@ -38,6 +38,11 @@ const envSchema = z.object({
   RATE_LIMIT_MAX: z.coerce.number().default(100),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().default(10),
   LOG_RETENTION_DAYS: z.coerce.number().default(90),
+  // Max characters of a request/response body kept in the request log.
+  // Streams get a larger budget: SSE/NDJSON frames carry a lot of protocol
+  // overhead per word of text (Postgres compresses the repetition on disk).
+  LOG_BODY_LIMIT: z.coerce.number().int().min(1000).default(65536),
+  LOG_STREAM_BODY_LIMIT: z.coerce.number().int().min(1000).default(262144),
   BACKUP_CRON_ENABLED: z.coerce.boolean().default(false),
   BACKUP_CRON_SCHEDULE: z.string().default('0 3 * * *'),
   BACKUP_RETENTION_COUNT: z.coerce.number().default(10),

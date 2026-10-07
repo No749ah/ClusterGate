@@ -23,10 +23,13 @@ import { v4 as uuid } from 'uuid'
 import { hardenProxyResponseHeaders, clearApiSecurityHeaders } from '../lib/proxySecurityHeaders'
 import { stripClusterGateCookies } from '../lib/cookies'
 import { StreamCapture, CaptureEndState } from '../lib/streamCapture'
+import { config } from '../config'
+import { Transform } from 'stream'
 import { classifyRequestSource } from '../lib/requestSource'
 
 // Max characters of a response body kept in the request log (buffered and streamed)
-const LOGGED_BODY_LIMIT = 5000
+const LOGGED_BODY_LIMIT = config.LOG_BODY_LIMIT
+const LOGGED_STREAM_BODY_LIMIT = config.LOG_STREAM_BODY_LIMIT
 // Shown in the log while a streamed response is still being captured
 const STREAMING_PLACEHOLDER = '[streaming…]'
 
@@ -321,6 +324,30 @@ export async function proxyRequest(
     if (cl) forwardHeaders['Content-Length'] = cl
   }
 
+  // The log keeps a bounded copy of the request body. A streamed body is
+  // teed on its way to the upstream (backpressure unchanged); a buffered or
+  // transformed one is decoded once when the log is written.
+  let requestCapture: StreamCapture | undefined
+  if (requestStream) {
+    const capture = new StreamCapture({
+      contentType: req.get('content-type'),
+      contentEncoding: req.get('content-encoding'),
+      limit: LOGGED_BODY_LIMIT,
+      kind: 'body',
+    })
+    requestCapture = capture
+    const tee = new Transform({
+      transform(chunk: Buffer, _enc, cb) { capture.push(chunk); cb(null, chunk) },
+    })
+    const incoming = requestStream
+    incoming.on('error', (e: Error) => tee.destroy(e))
+    requestStream = incoming.pipe(tee)
+  }
+  const bodyForLog = requestBody
+  const loggedRequestBody = (): Promise<string | undefined> => requestCapture
+    ? requestCapture.finish(req.readableEnded ? 'complete' : 'open').then((r) => r.body || undefined)
+    : captureBody(bodyForLog, req.get('content-type'), req.get('content-encoding'))
+
   const axiosConfig: AxiosRequestConfig = {
     method: req.method as AxiosRequestConfig['method'],
     url: resolvedUrl,
@@ -338,7 +365,7 @@ export async function proxyRequest(
   }
 
   let responseStatus: number | undefined
-  let responseBody: string | undefined
+  let responseBody: Promise<string | undefined> | undefined
   let duration: number | undefined
   let error: string | undefined
 
@@ -413,7 +440,7 @@ export async function proxyRequest(
         routeId: route.id, requestId, method: req.method, path: proxyPath,
         queryParams: req.query as Record<string, string>,
         requestHeaders: sanitizeHeaders(forwardHeaders),
-        requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
+        requestBody: loggedRequestBody(),
         responseStatus, responseHeaders: sanitizeHeaders(streamHeaders), responseBody: STREAMING_PLACEHOLDER,
         duration, targetUrl: resolvedUrl, ip: req.ip, userAgent: req.get('user-agent'), source,
       })
@@ -421,7 +448,7 @@ export async function proxyRequest(
       const capture = new StreamCapture({
         contentType: headerValue(resp.headers, 'content-type'),
         contentEncoding: headerValue(resp.headers, 'content-encoding'),
-        limit: LOGGED_BODY_LIMIT,
+        limit: LOGGED_STREAM_BODY_LIMIT,
       })
       let captureFlushed = false
       const flushCapture = (state: CaptureEndState) => {
@@ -547,7 +574,8 @@ export async function proxyRequest(
     res.setHeader('X-Request-ID', requestId)
     res.setHeader('X-ClusterGate-Duration', String(duration))
 
-    responseBody = responseBuffer.toString('utf8').slice(0, LOGGED_BODY_LIMIT) // Cap logged body
+    // axios already decompressed the body, so no content-encoding here
+    responseBody = captureBody(responseBuffer, headerValue(respHeaders, 'content-type'))
 
     proxyRequestsTotal.inc({
       route_id: route.id,
@@ -581,7 +609,7 @@ export async function proxyRequest(
       path: proxyPath,
       queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
-      requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
+      requestBody: loggedRequestBody(),
       responseStatus,
       responseHeaders: sanitizeHeaders(respHeaders),
       responseBody,
@@ -630,7 +658,7 @@ export async function proxyRequest(
       path: proxyPath,
       queryParams: req.query as Record<string, string>,
       requestHeaders: sanitizeHeaders(forwardHeaders),
-      requestBody: (typeof requestBody === 'string' ? requestBody : '')?.slice(0, 5000),
+      requestBody: loggedRequestBody(),
       responseStatus,
       responseHeaders: {},
       duration,
@@ -792,10 +820,10 @@ async function logRequest(data: {
   path: string
   queryParams: Record<string, string>
   requestHeaders: Record<string, string>
-  requestBody?: string
+  requestBody?: string | Promise<string | undefined>
   responseStatus?: number
   responseHeaders: Record<string, string>
-  responseBody?: string
+  responseBody?: string | Promise<string | undefined>
   duration?: number
   targetUrl: string
   error?: string
@@ -806,6 +834,8 @@ async function logRequest(data: {
   try {
     // GeoIP lookup
     const geo = lookupIp(data.ip)
+    const requestBody = await data.requestBody
+    const responseBody = await data.responseBody
 
     const created = await prisma.requestLog.create({
       data: {
@@ -815,10 +845,10 @@ async function logRequest(data: {
         path: data.path,
         queryParams: data.queryParams,
         requestHeaders: data.requestHeaders,
-        requestBody: sanitizeText(data.requestBody) ?? data.requestBody,
+        requestBody: sanitizeText(requestBody) ?? requestBody,
         responseStatus: data.responseStatus,
         responseHeaders: data.responseHeaders,
-        responseBody: sanitizeText(data.responseBody) ?? data.responseBody,
+        responseBody: sanitizeText(responseBody) ?? responseBody,
         duration: data.duration,
         targetUrl: data.targetUrl,
         error: data.error,
@@ -846,6 +876,20 @@ async function updateLoggedResponseBody(logId: string, body: string): Promise<vo
     where: { id: logId },
     data: { responseBody: sanitizeText(body) ?? body },
   })
+}
+
+// Bounded, log-ready text of a buffered body: binary content becomes a
+// placeholder and a cut body ends with a visible truncation marker.
+async function captureBody(
+  body: Buffer | string | undefined | null,
+  contentType?: string,
+  contentEncoding?: string,
+): Promise<string | undefined> {
+  if (body === undefined || body === null || body.length === 0) return undefined
+  const capture = new StreamCapture({ contentType, contentEncoding, limit: LOGGED_BODY_LIMIT, kind: 'body' })
+  capture.push(body)
+  const result = await capture.finish('complete')
+  return result.body || undefined
 }
 
 function headerValue(headers: Record<string, unknown> | undefined, name: string): string | undefined {

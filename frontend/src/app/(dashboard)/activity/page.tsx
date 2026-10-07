@@ -401,7 +401,7 @@ export default function LogsPage() {
           dedicated body block on each side. Much easier to scan than a
           single JSON.stringify dump. */}
       <Dialog open={!!selectedLog} onOpenChange={(open) => { if (!open) setSelectedLog(null) }}>
-        <DialogContent className="max-w-4xl">
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
           <DialogHeader className="space-y-1">
             <DialogTitle className="flex items-center gap-2 text-base pr-8">
               <span className={cn(
@@ -435,7 +435,6 @@ export default function LogsPage() {
                   headers={resHeaders}
                   body={selectedLog.responseBody}
                   error={selectedLog.error}
-                  formatted
                 />
               </div>
             )
@@ -470,15 +469,14 @@ function statusTone(status: number | null | undefined, error: string | null | un
 // Pretty pane for one side (Request or Response) of the detail modal.
 // Renders headers as a key:value list (much easier to scan than the old
 // JSON.stringify dump) plus an optional body block.
-const BODY_PRE_CLASS = 'font-mono text-[11px] text-foreground whitespace-pre-wrap break-all max-h-72 overflow-auto rounded border border-border/30 p-2 bg-background/40'
+// Box style only — LogBody handles wrapping, font and height
+const BODY_PRE_CLASS = 'text-foreground rounded border border-border/30 p-2.5 bg-background/40'
 
-function RequestPanel({ title, headers, body, error, formatted }: {
+function RequestPanel({ title, headers, body, error }: {
   title: string
   headers: Record<string, string>
   body?: string | null
   error?: string | null
-  /** Render through LogBody (streamed-body placeholders, SSE text view) */
-  formatted?: boolean
 }) {
   const headerEntries = Object.entries(headers ?? {})
   return (
@@ -490,25 +488,23 @@ function RequestPanel({ title, headers, body, error, formatted }: {
       {error && (
         <div className="px-3 py-2 border-b border-border/40 bg-red-500/5 text-xs">
           <p className="text-red-500 font-medium mb-0.5">Error</p>
-          <p className="font-mono text-red-500/90 break-all">{error}</p>
+          <p className="font-mono text-red-500/90 whitespace-pre-wrap [overflow-wrap:anywhere]">{error}</p>
         </div>
       )}
       {headerEntries.length > 0 && (
-        <dl className="px-3 py-2 text-[11px] font-mono divide-y divide-border/20 max-h-56 overflow-auto">
+        <dl className="px-3 py-2 text-[11px] font-mono divide-y divide-border/20 max-h-64 overflow-auto">
           {headerEntries.map(([k, v]) => (
-            <div key={k} className="grid grid-cols-[minmax(0,140px),1fr] gap-3 py-1">
-              <dt className="text-muted-foreground truncate" title={k}>{k}</dt>
-              <dd className="text-foreground break-all whitespace-pre-wrap">{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
+            <div key={k} className="grid grid-cols-[minmax(0,180px),minmax(0,1fr)] gap-3 py-1">
+              <dt className="text-muted-foreground [overflow-wrap:anywhere]">{k}</dt>
+              <dd className="text-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">{Array.isArray(v) ? v.join(', ') : String(v)}</dd>
             </div>
           ))}
         </dl>
       )}
       <div className="px-3 py-2 border-t border-border/40 flex-1 min-h-0">
         <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Body</p>
-        {body && formatted ? (
+        {body ? (
           <LogBody body={body} headers={headers} className={BODY_PRE_CLASS} />
-        ) : body ? (
-          <pre className={BODY_PRE_CLASS}>{body}</pre>
         ) : (
           <p className="text-xs text-muted-foreground italic">— no body</p>
         )}

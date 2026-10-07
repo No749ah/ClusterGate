@@ -35,8 +35,44 @@ const patterns = {
   email: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g,
   creditCard: /\b(?:\d[ -]*?){13,19}\b/g,
   ssn: /\b\d{3}[-\s]?\d{2}[-\s]?\d{4}\b/g,
-  phone: /(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
+  // Must not start or end inside a longer token: without the guards the last
+  // 10 digits of any long digit run (13-digit timestamps, UUID tails) matched
+  phone: /(?<![\w.+-])(?:\+\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}(?![\w-])/g,
   iban: /\b[A-Z]{2}\d{2}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{4}[\s]?[\dA-Z]{0,4}\b/g,
+}
+
+/**
+ * A bare JSON number (`"created":1759830000`) is left alone: masking its
+ * digits with '*' turns the logged JSON / NDJSON / SSE frame into invalid
+ * JSON, and these are numeric ids and timestamps in practice. Phone, card and
+ * social security numbers in JSON are strings and are still masked.
+ */
+function isBareJsonNumber(text: string, offset: number, match: string): boolean {
+  if (!/^\d+$/.test(match)) return false
+  let i = offset - 1
+  while (i >= 0 && (text[i] === ' ' || text[i] === '\t')) i--
+  let j = offset + match.length
+  while (j < text.length && (text[j] === ' ' || text[j] === '\t')) j++
+  const before = i >= 0 ? text[i] : ''
+  const after = j < text.length ? text[j] : ''
+  if (!(after === '' || /[,}\]\r\n]/.test(after))) return false
+  if (before === '[') return true
+  if (before !== ':' && before !== ',') return false
+  // Prose like "SSN: 123456789" is not JSON: a value follows `"key":`, and an
+  // array element follows another value
+  let k = i - 1
+  while (k >= 0 && /\s/.test(text[k])) k--
+  const prev = k >= 0 ? text[k] : ''
+  return before === ':' ? prev === '"' : /["\d}\]el]/.test(prev)
+}
+
+// Wrap a masker so bare JSON numbers pass through unchanged
+function unlessJsonNumber(mask: (match: string) => string) {
+  return (match: string, ...rest: unknown[]): string => {
+    const offset = rest[rest.length - 2] as number
+    const text = rest[rest.length - 1] as string
+    return isBareJsonNumber(text, offset, match) ? match : mask(match)
+  }
 }
 
 function maskEmail(match: string): string {
@@ -94,19 +130,19 @@ export function sanitizeText(text: string | null | undefined): string | null | u
     result = result.replace(patterns.email, maskEmail)
   }
   if (cfg.maskCreditCards) {
-    result = result.replace(patterns.creditCard, (match) => {
+    result = result.replace(patterns.creditCard, unlessJsonNumber((match) => {
       const digits = match.replace(/\D/g, '')
       if (digits.length >= 13 && digits.length <= 19 && luhnCheck(digits)) {
         return maskCreditCard(match)
       }
       return match
-    })
+    }))
   }
   if (cfg.maskSSNs) {
-    result = result.replace(patterns.ssn, maskSSN)
+    result = result.replace(patterns.ssn, unlessJsonNumber(maskSSN))
   }
   if (cfg.maskPhoneNumbers) {
-    result = result.replace(patterns.phone, maskPhone)
+    result = result.replace(patterns.phone, unlessJsonNumber(maskPhone))
   }
   if (cfg.maskIBANs) {
     result = result.replace(patterns.iban, maskIBAN)

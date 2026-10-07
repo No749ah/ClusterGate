@@ -78,7 +78,10 @@ app.use(
     origin: config.allowedOrigins,
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Webhook-Signature', 'X-Hub-Signature-256', 'X-CSRF-Token'],
+    // X-CG-Client-Token: the UI sends it on every cookie-authenticated call;
+    // without it here, split-origin setups (docker-compose: UI :3000, API
+    // :3001) fail every API request at the CORS preflight
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Webhook-Signature', 'X-Hub-Signature-256', 'X-CSRF-Token', 'X-CG-Client-Token'],
     exposedHeaders: ['X-ClusterGate-Stream', 'X-Request-ID', 'X-ClusterGate-Duration'],
   })
 )

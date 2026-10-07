@@ -238,4 +238,43 @@ describe('sanitizerService', () => {
       expect(sanitizeText('')).toBe('')
     })
   })
+
+  describe('sanitizeText — keeps logged JSON parseable', () => {
+    const meta = '"metadata":{"nodeId":"68b8719b-0732-45c7-b424-000000000001","itemIndex":0,"timestamp":1759830000123}'
+
+    it('leaves n8n NDJSON frames (UUID tails, ms timestamps) valid JSON', () => {
+      const frame = `{"type":"item","content":"Hallo ",${meta}}`
+      const out = sanitizeText(`${frame}\n${frame}\n`) as string
+      for (const line of out.trim().split('\n')) {
+        expect(JSON.parse(line).content).toBe('Hallo ')
+      }
+      expect(out).toContain('1759830000123')
+      expect(out).toContain('b424-000000000001')
+    })
+
+    it('leaves OpenAI SSE frames with a seconds timestamp valid JSON', () => {
+      const frame = 'data: {"id":"chatcmpl-1","created":1759830000,"choices":[{"delta":{"content":"Hi"}}]}'
+      const out = sanitizeText(frame) as string
+      expect(JSON.parse(out.slice(6)).created).toBe(1759830000)
+    })
+
+    it('does not mask bare JSON numbers that look like an SSN or card', () => {
+      const body = '{"orderId":123456789,"ref":4111111111111111,"list":[5551234567]}'
+      expect(JSON.parse(sanitizeText(body) as string)).toEqual(JSON.parse(body))
+    })
+
+    it('still masks phone, card and SSN values inside JSON strings', () => {
+      const body = '{"phone":"(555) 123-4567","mobile":"+1 555 123 4567","card":"4111111111111111","ssn":"123-45-6789"}'
+      const out = sanitizeText(body) as string
+      const parsed = JSON.parse(out)
+      expect(parsed.phone).not.toContain('123-4567')
+      expect(parsed.mobile).not.toContain('123 4567')
+      expect(parsed.card).not.toBe('4111111111111111')
+      expect(parsed.ssn).toBe('***-**-6789')
+    })
+
+    it('still masks a plain phone number in free text', () => {
+      expect(sanitizeText('Call 555-123-4567 today')).toBe('Call 555-***-**** today')
+    })
+  })
 })
