@@ -1,6 +1,6 @@
 {
   "name": "clustergate-backend",
-  "version": "1.12.5",
+  "version": "1.12.6",
   "description": "ClusterGate - Kubernetes Routing Gateway Backend",
   "main": "dist/app.js",
   "scripts": {
