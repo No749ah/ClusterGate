@@ -27,6 +27,7 @@ const router = Router()
 // If the URL value is a slug, look up the real id and rewrite req.params.id
 // so existing handlers (which assume cuid) keep working unchanged.
 import { looksLikeCuid } from '../lib/slug'
+import { partialUpdate } from '../lib/zodPartial'
 router.param('id', async (req, _res, next, value) => {
   try {
     if (typeof value === 'string' && value && !looksLikeCuid(value)) {
@@ -91,7 +92,7 @@ const routeBodySchema = z.object({
   rewriteRedirects: z.boolean().default(true),
   sandbox: z.boolean().default(false),
   requestBodyLimit: z.string().default('10mb'),
-  addHeaders: z.record(z.string()).default({}),
+  addHeaders: z.record(z.string(), z.string()).default({}),
   removeHeaders: z.array(z.string()).default([]),
   rewriteRules: z
     .array(z.object({ from: z.string(), to: z.string() }))
@@ -1037,7 +1038,7 @@ router.put('/:id', authenticate, async (req, res, next) => {
   try {
     // Encode before change-request diffing so stored payloads never carry
     // structured plaintext credentials.
-    const data = encodeBasicAuthInputs(routeBodySchema.partial().parse(req.body))
+    const data = encodeBasicAuthInputs(partialUpdate(routeBodySchema).parse(req.body))
 
     // Check org-based write access
     if (req.user!.role !== 'ADMIN') {

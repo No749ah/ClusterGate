@@ -43,6 +43,7 @@ attachRouteParamResolver(router, 'routeId')
 
 // Accept either a cuid id or a URL slug as :id on every handler below.
 import { looksLikeCuid } from '../lib/slug'
+import { partialUpdate } from '../lib/zodPartial'
 router.param('id', async (req, _res, next, value) => {
   try {
     if (typeof value === 'string' && value && !looksLikeCuid(value)) {
@@ -109,7 +110,7 @@ const routeGroupSchema = z.object({
   defaultRateLimitWindow: z.number().int().min(1000).optional(),
   defaultAuthType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).optional(),
   defaultAuthValue: z.string().optional(),
-  defaultAddHeaders: z.record(z.string()).optional(),
+  defaultAddHeaders: z.record(z.string(), z.string()).optional(),
   defaultRemoveHeaders: z.array(z.string()).optional(),
   defaultCorsEnabled: z.boolean().optional(),
   defaultCorsOrigins: z.array(z.string()).optional(),
@@ -162,7 +163,7 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
 router.put('/:id', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (req, res, next) => {
   try {
     await assertGroupAccess(req, req.params.id, true)
-    const data = routeGroupSchema.partial().parse(req.body)
+    const data = partialUpdate(routeGroupSchema).parse(req.body)
     // Re-homing a group to another team must not escape the caller's orgs
     if (data.teamId !== undefined) await assertTeamManageable(req, data.teamId)
     const group = await routeGroupService.updateRouteGroup(req.params.id, data as any)

@@ -7,6 +7,7 @@ import { requireRouteView, requireRouteManage } from '../middleware/routeAccess'
 import * as transformService from '../services/transformService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
+import { partialUpdate } from '../lib/zodPartial'
 
 const router = Router()
 attachRouteParamResolver(router, 'routeId')
@@ -48,10 +49,10 @@ const transformRuleSchema = z.object({
   phase: z.enum(['REQUEST', 'RESPONSE']),
   type: z.enum(['SET_HEADER', 'REMOVE_HEADER', 'REWRITE_BODY_JSON', 'SET_QUERY_PARAM', 'REMOVE_QUERY_PARAM', 'MAP_STATUS_CODE']),
   name: z.string().min(1).max(100),
-  config: z.record(z.any()),
+  config: z.record(z.string(), z.any()),
   order: z.number().int().min(0).default(0),
   isActive: z.boolean().default(true),
-  condition: z.record(z.any()).nullable().optional(),
+  condition: z.record(z.string(), z.any()).nullable().optional(),
 })
 
 // A rule id from the URL must belong to the route in the URL — otherwise a
@@ -85,7 +86,7 @@ router.post('/:routeId/transforms', authenticate, authorize([Role.ADMIN, Role.OP
 // PUT /api/routes/:routeId/transforms/:ruleId
 router.put('/:routeId/transforms/:ruleId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
-    const data = transformRuleSchema.partial().parse(req.body)
+    const data = partialUpdate(transformRuleSchema).parse(req.body)
     await assertRuleBelongsToRoute(req.params.ruleId, req.params.routeId)
     const rule = await transformService.updateTransformRule(req.params.ruleId, data as any)
     res.json({ success: true, data: rule })

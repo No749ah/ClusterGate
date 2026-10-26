@@ -242,7 +242,7 @@ router.post('/:id/events', authenticate, authorize([Role.ADMIN, Role.OPERATOR]),
       type: z.string().min(1).max(50),
       title: z.string().min(1).max(200),
       description: z.string().max(2000).optional(),
-      metadata: z.record(z.any()).optional(),
+      metadata: z.record(z.string(), z.any()).optional(),
     }).parse(req.body)
 
     await assertIncidentManage(req, req.params.id)
