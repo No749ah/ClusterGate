@@ -163,8 +163,8 @@ router.post('/', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), async (re
       type: z.enum(['create', 'update', 'delete']),
       title: z.string().min(1).max(200),
       description: z.string().max(2000).optional(),
-      payload: z.record(z.any()),
-      diff: z.record(z.any()).optional(),
+      payload: z.record(z.string(), z.any()),
+      diff: z.record(z.string(), z.any()).optional(),
     }).parse(req.body)
 
     // Proposals must target a route the caller can see, or (for new routes)

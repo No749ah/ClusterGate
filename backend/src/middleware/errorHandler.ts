@@ -39,7 +39,7 @@ export function errorHandler(
       error: {
         code: 'VALIDATION_ERROR',
         message: 'Invalid input data',
-        details: err.errors.map((e) => ({
+        details: err.issues.map((e) => ({
           field: e.path.join('.'),
           message: e.message,
         })),

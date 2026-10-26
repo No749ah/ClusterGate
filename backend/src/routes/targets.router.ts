@@ -8,6 +8,7 @@ import * as lbService from '../services/loadBalancerService'
 import { prisma } from '../lib/prisma'
 import { AppError } from '../lib/errors'
 import { assertRouteTargetAllowed } from '../services/targetPolicyService'
+import { partialUpdate } from '../lib/zodPartial'
 
 const router = Router()
 attachRouteParamResolver(router, 'routeId')
@@ -96,7 +97,7 @@ router.post('/:routeId/targets', authenticate, authorize([Role.ADMIN, Role.OPERA
 // PUT /api/routes/:routeId/targets/:targetId
 router.put('/:routeId/targets/:targetId', authenticate, authorize([Role.ADMIN, Role.OPERATOR]), requireRouteManage('routeId'), async (req, res, next) => {
   try {
-    const data = targetSchema.partial().parse(req.body)
+    const data = partialUpdate(targetSchema).parse(req.body)
     await assertTargetUrl(data.url, req.params.routeId)
     await assertTargetBelongsToRoute(req.params.targetId, req.params.routeId)
     const target = await lbService.updateTarget(req.params.targetId, data)

@@ -9,6 +9,7 @@ import { isOrgMember, canManageOrgRoutes } from '../services/orgAccessService'
 import { AppError } from '../lib/errors'
 import { isValidNamespace, isValidHostEntry } from '../lib/targetPolicy'
 import { normalizeHost } from '../lib/targetDenylist'
+import { partialUpdate } from '../lib/zodPartial'
 
 const router = Router()
 
@@ -203,7 +204,7 @@ const hostListSchema = z
 // Update organization
 router.put('/:id', authenticate, authorize([Role.ADMIN]), async (req, res, next) => {
   try {
-    const data = orgSchema.partial().extend({
+    const data = partialUpdate(orgSchema).extend({
       changeRequestsEnabled: z.boolean().optional(),
       crBypassRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
       crApproverRoles: z.array(z.enum(['OWNER', 'ADMIN', 'MEMBER'])).optional(),
