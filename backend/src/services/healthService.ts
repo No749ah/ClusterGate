@@ -1,6 +1,6 @@
 import axios from 'axios'
 import https from 'https'
-import { Route, HealthStatus } from '@prisma/client'
+import { Route, HealthStatus, RequestSource } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { logger } from '../lib/logger'
 import { healthCheckStatus } from '../lib/metrics'
@@ -8,6 +8,46 @@ import { notifyHealthDown } from './notificationService'
 import { incidentService } from './incidentService'
 import { validateTargetUrlSync, isTlsProtocolMismatch } from '../lib/security'
 import { isN8nTarget } from '../lib/targetDetect'
+import { getVersion } from '../lib/version'
+
+// Matches the ClusterGate entry in lib/requestSource, so a probe is recognised
+// as a health check wherever it shows up.
+const HEALTH_CHECK_USER_AGENT = `ClusterGate-HealthCheck/${getVersion()}`
+
+/**
+ * Write the probe to the request log as a HEALTH_CHECK entry. The log hides
+ * these unless the health-check filter is on. Best effort: a failed write
+ * never changes the health result.
+ */
+async function logHealthProbe(data: {
+  route: Route
+  method: string
+  url: string
+  responseStatus?: number
+  duration: number
+  error?: string
+}): Promise<void> {
+  try {
+    const { pathname } = new URL(data.url)
+    await prisma.requestLog.create({
+      data: {
+        routeId: data.route.id,
+        method: data.method,
+        path: pathname || '/',
+        targetUrl: data.url,
+        responseStatus: data.responseStatus,
+        duration: data.duration,
+        error: data.error,
+        userAgent: HEALTH_CHECK_USER_AGENT,
+        source: RequestSource.HEALTH_CHECK,
+        requestHeaders: { 'user-agent': HEALTH_CHECK_USER_AGENT },
+        responseHeaders: {},
+      },
+    })
+  } catch (err) {
+    logger.warn('Failed to log health check', { routeId: data.route.id, error: (err as Error).message })
+  }
+}
 
 export async function checkRouteHealth(route: Route): Promise<{
   status: HealthStatus
@@ -15,6 +55,9 @@ export async function checkRouteHealth(route: Route): Promise<{
   error?: string
 }> {
   const start = Date.now()
+  // What was actually sent, for the request log entry
+  let probeUrl = route.targetUrl
+  let probeMethod = 'HEAD'
 
   // SSRF protection — skip health check for private/blocked URLs
   try {
@@ -45,14 +88,18 @@ export async function checkRouteHealth(route: Route): Promise<{
       method = 'POST'
       hcBody = JSON.stringify({ chatInput: 'Hello World', sessionId: 'clustergate-healthcheck' })
     }
-    const headers = hcBody ? { 'content-type': 'application/json' } : undefined
+    const headers: Record<string, string> = { 'user-agent': HEALTH_CHECK_USER_AGENT }
+    if (hcBody) headers['content-type'] = 'application/json'
 
     const probe = async (base: string) => {
       const url = `${base.replace(/\/$/, '')}${hcPath}`
+      probeUrl = url
+      probeMethod = method
       let res = await axios({ method, url, data: hcBody, headers, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
       // Fall back to GET only when HEAD isn't supported
       if (method === 'HEAD' && (res.status === 405 || res.status === 501)) {
-        res = await axios({ method: 'GET', url, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
+        probeMethod = 'GET'
+        res = await axios({ method: 'GET', url, headers: { 'user-agent': HEALTH_CHECK_USER_AGENT }, timeout: 10000, maxRedirects: 3, validateStatus: () => true, httpsAgent })
       }
       return res
     }
@@ -76,6 +123,8 @@ export async function checkRouteHealth(route: Route): Promise<{
     const status = response.status < 500 ? HealthStatus.HEALTHY : HealthStatus.UNHEALTHY
     const error = status === HealthStatus.UNHEALTHY ? `HTTP ${response.status} ${response.statusText || 'Server Error'}` : undefined
 
+    await logHealthProbe({ route, method: probeMethod, url: probeUrl, responseStatus: response.status, duration: responseTime, error })
+
     await prisma.healthCheck.create({
       data: {
         routeId: route.id,
@@ -95,6 +144,8 @@ export async function checkRouteHealth(route: Route): Promise<{
   } catch (err) {
     const error = (err as Error).message
     const responseTime = Date.now() - start
+
+    await logHealthProbe({ route, method: probeMethod, url: probeUrl, duration: responseTime, error })
 
     await prisma.healthCheck.create({
       data: {

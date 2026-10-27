@@ -4,17 +4,19 @@ import { Role } from '@prisma/client'
 import { prisma } from '../lib/prisma'
 import { getConfig, updateConfig, sanitizeText } from '../services/sanitizerService'
 import { getUserOrgIds } from '../services/orgAccessService'
+import { NOT_HEALTH_CHECK } from '../services/logService'
 import { z } from 'zod'
 import type { Request } from 'express'
 
 const router = Router()
 
 // Request logs carry client IPs, paths and geo data — non-admins only get
-// the traffic of routes in their own organizations.
+// the traffic of routes in their own organizations. Health-check probes are
+// not client traffic and never show on the map.
 async function trafficScope(req: Request) {
-  if (req.user!.role === 'ADMIN') return {}
+  if (req.user!.role === 'ADMIN') return { ...NOT_HEALTH_CHECK }
   const orgIds = await getUserOrgIds(req.user!.userId)
-  return { route: { organizationId: { in: orgIds } } }
+  return { ...NOT_HEALTH_CHECK, route: { organizationId: { in: orgIds } } }
 }
 
 // ============================================================================

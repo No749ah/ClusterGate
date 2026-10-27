@@ -58,6 +58,9 @@ export function parseSourceFilter(value: unknown): SourceFilter {
   return v in SOURCE_FILTERS ? (v as SourceFilter) : 'traffic'
 }
 
+/** Stats and charts count everything except health-check probes. */
+export const NOT_HEALTH_CHECK: Prisma.RequestLogWhereInput = { source: { not: RequestSource.HEALTH_CHECK } }
+
 export function sourceWhere(filter: SourceFilter = 'traffic'): Prisma.RequestLogWhereInput {
   const sources = SOURCE_FILTERS[filter]
   return sources ? { source: { in: sources } } : {}
@@ -175,22 +178,22 @@ export async function getRouteLogs(filters: LogFilters, pagination = { page: 1, 
 
 export async function getRouteStats(routeId: string) {
   const [total, errors, avgDuration] = await prisma.$transaction([
-    prisma.requestLog.count({ where: { routeId } }),
+    prisma.requestLog.count({ where: { routeId, ...NOT_HEALTH_CHECK } }),
     prisma.requestLog.count({
       // Errors = strictly upstream 5xx + proxy/SSL/network failures.
       // Maintenance / circuit-breaker / rate-limit are intentional gates
       // and stay out of the route's error count.
-      where: { AND: [{ routeId }, statusTypeWhere('error')] },
+      where: { AND: [{ routeId }, NOT_HEALTH_CHECK, statusTypeWhere('error')] },
     }),
     prisma.requestLog.aggregate({
-      where: { routeId },
+      where: { routeId, ...NOT_HEALTH_CHECK },
       _avg: { duration: true },
     }),
   ])
 
   // P95 duration (approximate)
   const logs = await prisma.requestLog.findMany({
-    where: { routeId, duration: { not: null } },
+    where: { routeId, duration: { not: null }, ...NOT_HEALTH_CHECK },
     select: { duration: true },
     orderBy: { duration: 'asc' },
     take: 1000,
@@ -215,6 +218,7 @@ export async function getRecentErrors(routeId?: string, limit = 10, organization
       AND: [
         ...(routeId ? [{ routeId }] : []),
         ...(organizationIds ? [{ route: { organizationId: { in: organizationIds } } }] : []),
+        NOT_HEALTH_CHECK,
         statusTypeWhere('error'),
       ],
     },
@@ -247,6 +251,7 @@ export async function getDailyRequestCounts(routeId?: string, days = 7, organiza
       ...(routeId && { routeId }),
       ...(organizationIds && { route: { organizationId: { in: organizationIds } } }),
       createdAt: { gte: since },
+      ...NOT_HEALTH_CHECK,
     },
     select: { createdAt: true, responseStatus: true, error: true },
     orderBy: { createdAt: 'asc' },

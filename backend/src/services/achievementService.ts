@@ -146,6 +146,7 @@ export const achievementService = {
       AND EXISTS (
         SELECT 1 FROM request_logs rl
         WHERE rl."routeId" = r.id AND rl."duration" IS NOT NULL
+          AND rl."source" <> 'HEALTH_CHECK'
         GROUP BY rl."routeId"
         HAVING COUNT(*) >= 5 AND AVG(rl."duration") < 10
       )
