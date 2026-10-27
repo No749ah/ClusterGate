@@ -59,11 +59,15 @@ function buildDateFilter(days: number): Date {
   return since
 }
 
+// Scheduled health-check probes land in request_logs too (source HEALTH_CHECK),
+// but they are not traffic and would skew counts and latency.
+const EXCLUDE_HEALTH_CHECKS = `"source" <> 'HEALTH_CHECK'`
+
 // Combined route filter: a specific routeId and/or an org-scope allowlist.
 // scopeRouteIds is undefined for admins (no scoping) and an array for org-scoped
-// users (empty array → no accessible routes → no data).
+// users (empty array → no accessible routes → no data). Always drops health checks.
 function buildRouteFilter(routeId?: string, scopeRouteIds?: string[]): Prisma.Sql {
-  const clauses: Prisma.Sql[] = []
+  const clauses: Prisma.Sql[] = [Prisma.raw(`AND ${EXCLUDE_HEALTH_CHECKS}`)]
   if (routeId) clauses.push(Prisma.sql`AND "routeId" = ${routeId}`)
   if (scopeRouteIds) clauses.push(Prisma.sql`AND "routeId" = ANY(${scopeRouteIds})`)
   return clauses.length ? Prisma.join(clauses, ' ') : Prisma.empty
@@ -266,6 +270,7 @@ export async function getSlowestRoutes(limit = 10, scopeRouteIds?: string[]): Pr
     WHERE l."createdAt" >= ${since}
       AND l.duration IS NOT NULL
       AND r."deletedAt" IS NULL
+      AND l."source" <> 'HEALTH_CHECK'
       ${scopeClause}
     GROUP BY r.id, r.name, r."publicPath"
     ORDER BY avg_duration DESC
@@ -294,7 +299,7 @@ export async function getDashboardSummary(days = 7, scopeRouteIds?: string[]) {
       AVG(duration)::float as "avgResponseTime",
       (COUNT(*) FILTER (WHERE (("responseStatus" >= 500 AND (error IS NULL OR (error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%'))) OR (error IS NOT NULL AND error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%' AND error NOT LIKE '%Rate limit%')) AND "responseStatus" <> 429)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
     FROM request_logs
-    WHERE "createdAt" >= $1${scoped ? ' AND "routeId" = ANY($2::text[])' : ''}
+    WHERE "createdAt" >= $1 AND ${EXCLUDE_HEALTH_CHECKS}${scoped ? ' AND "routeId" = ANY($2::text[])' : ''}
   `, ...(scoped ? [since, scopeRouteIds] : [since]))
 
   // Previous period
@@ -304,7 +309,7 @@ export async function getDashboardSummary(days = 7, scopeRouteIds?: string[]) {
       AVG(duration)::float as "avgResponseTime",
       (COUNT(*) FILTER (WHERE (("responseStatus" >= 500 AND (error IS NULL OR (error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%'))) OR (error IS NOT NULL AND error <> 'MAINTENANCE_MODE' AND error NOT LIKE '%Circuit breaker%' AND error NOT LIKE '%Rate limit%')) AND "responseStatus" <> 429)::float / NULLIF(COUNT(*), 0) * 100) as "errorRate"
     FROM request_logs
-    WHERE "createdAt" >= $1 AND "createdAt" < $2${scoped ? ' AND "routeId" = ANY($3::text[])' : ''}
+    WHERE "createdAt" >= $1 AND "createdAt" < $2 AND ${EXCLUDE_HEALTH_CHECKS}${scoped ? ' AND "routeId" = ANY($3::text[])' : ''}
   `, ...(scoped ? [prevSince, since, scopeRouteIds] : [prevSince, since]))
 
   const c = current[0] || { totalRequests: 0, avgResponseTime: 0, errorRate: 0 }
