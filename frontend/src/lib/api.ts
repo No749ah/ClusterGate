@@ -13,6 +13,7 @@ import {
   AuditLog,
   ApiKey,
   RouteFolder,
+  PathTemplate,
   Notification,
   RouteTarget,
   TransformRule,
@@ -539,6 +540,24 @@ class ApiClient {
 
     removeRoute: (id: string, routeId: string) =>
       this.delete<ApiResponse<null>>(`/api/folders/${id}/routes/${routeId}`),
+  }
+
+  // ============================================================================
+  // Path allowlist templates
+  // ============================================================================
+
+  pathTemplates = {
+    list: () =>
+      this.get<ApiResponse<PathTemplate[]>>('/api/path-templates'),
+
+    create: (data: { name: string; description?: string; paths: string[]; organizationId?: string | null }) =>
+      this.post<ApiResponse<PathTemplate>>('/api/path-templates', data),
+
+    update: (id: string, data: { name?: string; description?: string | null; paths?: string[] }) =>
+      this.put<ApiResponse<PathTemplate>>(`/api/path-templates/${id}`, data),
+
+    delete: (id: string) =>
+      this.delete<ApiResponse<null>>(`/api/path-templates/${id}`),
   }
 
   // ============================================================================

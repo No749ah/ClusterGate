@@ -188,6 +188,7 @@ model Organization {
   memberships  OrgMembership[]
   routes       Route[]
   routeFolders RouteFolder[]
+  pathTemplates PathTemplate[]
 
   @@map("organizations")
 }
@@ -196,6 +197,24 @@ model Organization {
 // inherited config (that's what RouteGroup is for). API keys can be bound to
 // a folder and are then valid for every route in it, including routes moved
 // in later.
+// Reusable path allowlist (Route.pathAllowlist). Built-in templates live in
+// code (lib/pathTemplates.ts); these are the user-defined ones. Without an
+// organization a template is global (admin-managed, visible to everyone).
+model PathTemplate {
+  id             String        @id @default(cuid())
+  name           String
+  description    String?
+  paths          String[]      @default([])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdById    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId])
+  @@map("path_templates")
+}
+
 model RouteFolder {
   id             String        @id @default(cuid())
   name           String

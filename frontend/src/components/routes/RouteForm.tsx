@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 import { api } from '@/lib/api'
 import { RouteFormData, Organization } from '@/types'
 import { useAuth } from '@/hooks/useAuth'
+import { PathTemplatePicker } from './PathTemplatePicker'
 
 const routeSchema = z.object({
   name: z.string().min(1, 'Name is required').max(100),
@@ -1033,6 +1034,12 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
             </Section>
 
             <Section title="Exposed paths" description="Limit a wildcard route to specific sub-paths. Unlisted paths get a 404 and never reach the target.">
+              <PathTemplatePicker
+                value={pathAllowlist ?? ''}
+                onChange={(next) => setValue('pathAllowlist', next, { shouldDirty: true })}
+                organizationId={watch('organizationId')}
+                isAdmin={isAdmin}
+              />
               <Field label="Path allowlist" hint="One path per line, relative to the public path. A trailing /* allows a whole subtree, * in the middle matches one segment. Leave empty to forward everything.">
                 <Textarea {...register('pathAllowlist')} placeholder={"/foo1\n/foo2\n/v1/models/*"} rows={4} className="font-mono text-xs" />
               </Field>

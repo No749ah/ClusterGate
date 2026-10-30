@@ -40,6 +40,16 @@ export interface RewriteRule {
   to: string
 }
 
+export interface PathTemplate {
+  id: string
+  name: string
+  description?: string | null
+  category?: string
+  paths: string[]
+  organizationId: string | null
+  builtin: boolean
+}
+
 export interface RouteFolder {
   id: string
   name: string
