@@ -119,6 +119,7 @@ const options: swaggerJsdoc.Options = {
             corsEnabled: { type: 'boolean', default: false },
             corsOrigins: { type: 'array', items: { type: 'string' } },
             ipAllowlist: { type: 'array', items: { type: 'string' } },
+            pathAllowlist: { type: 'array', items: { type: 'string' }, description: 'Sub-paths (relative to the public base) the route forwards, e.g. /v1/chat/completions or /v1/models/*. Empty = all.' },
             requireAuth: { type: 'boolean', default: false },
             authType: { type: 'string', enum: ['NONE', 'API_KEY', 'BASIC', 'BEARER'], default: 'NONE' },
             authValue: {

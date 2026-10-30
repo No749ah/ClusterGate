@@ -146,7 +146,7 @@ export const changeRequestService = {
       // Extract only allowed fields from payload
       const { name, description, targetUrl, methods, publicPath, timeout, retryCount, retryDelay,
               rateLimitEnabled, rateLimitMax, rateLimitWindow, stripPrefix, sslVerify,
-              corsEnabled, corsOrigins, requireAuth, authType, authValue, tags,
+              corsEnabled, corsOrigins, pathAllowlist, requireAuth, authType, authValue, tags,
               wsEnabled, circuitBreakerEnabled, cbFailureThreshold, cbRecoveryTimeout,
               lbStrategy, maintenanceMode, maintenanceMessage, sandbox } = payload
 
@@ -159,7 +159,7 @@ export const changeRequestService = {
         data: {
           name, description, targetUrl, methods, publicPath, timeout, retryCount, retryDelay,
           rateLimitEnabled, rateLimitMax, rateLimitWindow, stripPrefix, sslVerify,
-          corsEnabled, corsOrigins, requireAuth, authType, authValue, tags,
+          corsEnabled, corsOrigins, pathAllowlist, requireAuth, authType, authValue, tags,
           wsEnabled, circuitBreakerEnabled, cbFailureThreshold, cbRecoveryTimeout,
           lbStrategy, maintenanceMode, maintenanceMessage, sandbox,
         },

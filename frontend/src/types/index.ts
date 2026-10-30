@@ -96,6 +96,7 @@ export interface Route {
 
   // Security
   ipAllowlist: string[]
+  pathAllowlist?: string[]
   requireAuth: boolean
   authType: AuthType
   authValue: string | null
@@ -281,6 +282,7 @@ export interface RouteFormData {
   corsEnabled: boolean
   corsOrigins: string[]
   ipAllowlist: string[]
+  pathAllowlist?: string[]
   requireAuth: boolean
   authType: AuthType
   authValue?: string | BasicAuthCredentials

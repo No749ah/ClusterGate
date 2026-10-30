@@ -26,6 +26,7 @@ import { StreamCapture, CaptureEndState } from '../lib/streamCapture'
 import { config } from '../config'
 import { Transform } from 'stream'
 import { classifyRequestSource } from '../lib/requestSource'
+import { isPathAllowed, routeSubPath } from '../lib/pathAllowlist'
 
 // Max characters of a response body kept in the request log (buffered and streamed)
 const LOGGED_BODY_LIMIT = config.LOG_BODY_LIMIT
@@ -127,6 +128,12 @@ export async function proxyRequest(
     if (!isIpAllowed(clientIp, route.ipAllowlist)) {
       throw AppError.forbidden('Your IP address is not allowed to access this route')
     }
+  }
+
+  // Path allowlist: only the listed sub-paths of a wildcard route are forwarded.
+  // 404 rather than 403 so a caller can't map which paths exist upstream.
+  if (route.pathAllowlist?.length && !isPathAllowed(routeSubPath(route.publicPath, proxyPath), route.pathAllowlist)) {
+    throw new AppError(404, 'PATH_NOT_ALLOWED', 'This path is not exposed by the route')
   }
 
   // Rate limit check

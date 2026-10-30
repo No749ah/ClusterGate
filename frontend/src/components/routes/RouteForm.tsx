@@ -38,6 +38,7 @@ const routeSchema = z.object({
   corsEnabled: z.boolean().default(false),
   corsOrigins: z.string().default(''),
   ipAllowlist: z.string().default(''),
+  pathAllowlist: z.string().default(''),
   requireAuth: z.boolean().default(false),
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   authValue: z.string().optional(),
@@ -138,6 +139,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
       corsEnabled: defaultValues?.corsEnabled ?? false,
       corsOrigins: defaultValues?.corsOrigins?.join('\n') ?? '',
       ipAllowlist: defaultValues?.ipAllowlist?.join('\n') ?? '',
+      pathAllowlist: defaultValues?.pathAllowlist?.join('\n') ?? '',
       requireAuth: defaultValues?.requireAuth ?? false,
       authType: defaultValues?.authType ?? 'NONE',
       // Stored values arrive masked (or encoded) — the string fields keep
@@ -203,6 +205,7 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
   const authType = watch('authType')
   const upstreamAuthType = watch('upstreamAuthType')
   const publicPath = watch('publicPath')
+  const pathAllowlist = watch('pathAllowlist')
   const [wildcardEnabled, setWildcardEnabled] = useState(
     defaultValues?.publicPath?.endsWith('/*') ?? false
   )
@@ -365,6 +368,9 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
         : [],
       ipAllowlist: data.ipAllowlist
         ? data.ipAllowlist.split('\n').map((s) => s.trim()).filter(Boolean)
+        : [],
+      pathAllowlist: data.pathAllowlist
+        ? data.pathAllowlist.split('\n').map((s) => s.trim()).filter(Boolean)
         : [],
     }
     // BASIC auth: send structured {username, password} — the server encodes
@@ -1024,6 +1030,28 @@ export function RouteForm({ defaultValues, onSubmit, isSubmitting, submitLabel =
                   </Button>
                 </div>
               </Field>
+            </Section>
+
+            <Section title="Exposed paths" description="Limit a wildcard route to specific sub-paths. Unlisted paths get a 404 and never reach the target.">
+              <Field label="Path allowlist" hint="One path per line, relative to the public path. A trailing /* allows a whole subtree, * in the middle matches one segment. Leave empty to forward everything.">
+                <Textarea {...register('pathAllowlist')} placeholder={"/foo1\n/foo2\n/v1/models/*"} rows={4} className="font-mono text-xs" />
+              </Field>
+              {(() => {
+                const entries = (pathAllowlist ?? '').split('\n').map((s) => s.trim()).filter(Boolean)
+                const base = (publicPath ?? '').replace(/\/\*$/, '').replace(/\/$/, '')
+                if (entries.length === 0) {
+                  return <p className="text-xs text-muted-foreground">All paths under <code>{base || '/r/…'}</code> are forwarded.</p>
+                }
+                return (
+                  <div className="text-xs text-muted-foreground space-y-0.5">
+                    <p>Only these are forwarded:</p>
+                    {entries.slice(0, 8).map((e) => (
+                      <p key={e} className="font-mono">{base}{e.startsWith('/') ? e : `/${e}`}</p>
+                    ))}
+                    {entries.length > 8 && <p>…and {entries.length - 8} more</p>}
+                  </div>
+                )
+              })()}
             </Section>
 
             <Section title="Network access" description="Restrict where requests can come from and which origins can call this route.">

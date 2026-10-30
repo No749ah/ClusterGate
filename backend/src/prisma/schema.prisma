@@ -349,6 +349,9 @@ model Route {
 
   // Security
   ipAllowlist  String[]     @default([])
+  // Sub-paths (relative to the public base) a wildcard route forwards;
+  // empty = everything. See lib/pathAllowlist.ts for the pattern syntax.
+  pathAllowlist String[]    @default([])
   requireAuth  Boolean      @default(false)
   authType     AuthType     @default(NONE)
   authValue    String?
