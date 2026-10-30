@@ -582,6 +582,7 @@ export async function exportRoutes(organizationIds?: string[]) {
       corsEnabled: true,
       corsOrigins: true,
       ipAllowlist: true,
+      pathAllowlist: true,
       requireAuth: true,
       authType: true,
       upstreamAuthType: true,

@@ -8,6 +8,7 @@ import * as logService from '../services/logService'
 import { proxyRequest } from '../services/proxyService'
 import { createAuditLog } from '../services/auditService'
 import { prisma } from '../lib/prisma'
+import { normalizePathPattern, validatePathPattern, PATH_ALLOWLIST_MAX_ENTRIES } from '../lib/pathAllowlist'
 import { AppError } from '../lib/errors'
 import { stripSensitiveRouteFields, safePageSize, isTlsProtocolMismatch, safeLookup, testPathAllowed } from '../lib/security'
 import { requireRouteManage } from '../middleware/routeAccess'
@@ -100,6 +101,17 @@ const routeBodySchema = z.object({
   corsEnabled: z.boolean().default(false),
   corsOrigins: z.array(z.string()).default([]),
   ipAllowlist: z.array(z.string()).default([]),
+  // Only these sub-paths (relative to the public base) are forwarded; empty = all
+  pathAllowlist: z
+    .array(
+      z.string().trim().min(1).superRefine((v, ctx) => {
+        const err = validatePathPattern(v)
+        if (err) ctx.addIssue({ code: 'custom', message: `${v}: ${err}` })
+      }).transform(normalizePathPattern)
+    )
+    .max(PATH_ALLOWLIST_MAX_ENTRIES)
+    .transform((list) => Array.from(new Set(list)))
+    .default([]),
   requireAuth: z.boolean().default(false),
   authType: z.enum(['NONE', 'API_KEY', 'BASIC', 'BEARER']).default('NONE'),
   authValue: authValueInputSchema,

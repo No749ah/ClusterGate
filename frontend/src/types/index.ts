@@ -40,6 +40,16 @@ export interface RewriteRule {
   to: string
 }
 
+export interface PathTemplate {
+  id: string
+  name: string
+  description?: string | null
+  category?: string
+  paths: string[]
+  organizationId: string | null
+  builtin: boolean
+}
+
 export interface RouteFolder {
   id: string
   name: string
@@ -96,6 +106,7 @@ export interface Route {
 
   // Security
   ipAllowlist: string[]
+  pathAllowlist?: string[]
   requireAuth: boolean
   authType: AuthType
   authValue: string | null
@@ -281,6 +292,7 @@ export interface RouteFormData {
   corsEnabled: boolean
   corsOrigins: string[]
   ipAllowlist: string[]
+  pathAllowlist?: string[]
   requireAuth: boolean
   authType: AuthType
   authValue?: string | BasicAuthCredentials

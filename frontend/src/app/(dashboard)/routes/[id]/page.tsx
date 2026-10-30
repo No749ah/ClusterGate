@@ -393,6 +393,7 @@ export default function RouteDetailPage({ params }: { params: Promise<{ id: stri
                     ? <span className="text-foreground">{route.upstreamAuthType}{route.upstreamAuthType === 'API_KEY' && route.upstreamAuthHeader ? ` (${route.upstreamAuthHeader})` : ''}</span>
                     : <span className="text-muted-foreground">None</span>
                 } />
+                <InfoRow label="Exposed paths" value={route.pathAllowlist?.length ? `${route.pathAllowlist.length} ${route.pathAllowlist.length === 1 ? 'path' : 'paths'}` : <span className="text-muted-foreground">All</span>} />
                 <InfoRow label="IP Allowlist" value={route.ipAllowlist.length > 0 ? `${route.ipAllowlist.length} ${route.ipAllowlist.length === 1 ? 'entry' : 'entries'}` : <span className="text-muted-foreground">Allow all</span>} />
                 <InfoRow label="Webhook Secret" value={route.webhookSecret ? <span className="text-green-500">Configured</span> : <span className="text-muted-foreground">None</span>} />
                 <InfoRow label="CORS" value={route.corsEnabled ? `Enabled (${route.corsOrigins.length} ${route.corsOrigins.length === 1 ? 'origin' : 'origins'})` : <span className="text-muted-foreground">Disabled</span>} />
@@ -789,7 +790,7 @@ const DIFF_FIELDS = [
   'name', 'description', 'publicPath', 'targetUrl', 'methods', 'tags', 'environment',
   'timeout', 'retryCount', 'retryDelay', 'stripPrefix', 'sslVerify',
   'requestBodyLimit', 'addHeaders', 'removeHeaders', 'rewriteRules',
-  'corsEnabled', 'corsOrigins', 'ipAllowlist', 'requireAuth', 'authType',
+  'corsEnabled', 'corsOrigins', 'ipAllowlist', 'pathAllowlist', 'requireAuth', 'authType',
   'maintenanceMode', 'maintenanceMessage',
   'wsEnabled', 'circuitBreakerEnabled', 'cbFailureThreshold', 'cbRecoveryTimeout',
   'lbStrategy', 'webhookSecret', 'organizationId', 'routeGroupId',
@@ -881,6 +882,7 @@ function PipelineStrip({ route }: { route: any }) {
   if (route.requireAuth) middlewares.push({ label: route.authType === 'API_KEY' ? 'API Key' : route.authType, tone: 'amber' })
   if (route.webhookSecret) middlewares.push({ label: 'HMAC', tone: 'amber' })
   if (route.ipAllowlist?.length > 0) middlewares.push({ label: 'IP filter', tone: 'amber' })
+  if (route.pathAllowlist?.length) middlewares.push({ label: 'Path filter', tone: 'amber' })
   if (route.rateLimitEnabled) middlewares.push({ label: 'Rate limit', tone: 'blue' })
   if (route.circuitBreakerEnabled) middlewares.push({ label: 'Circuit breaker', tone: 'blue' })
   if (route.transformRules?.length > 0) middlewares.push({ label: `${route.transformRules.length} transforms`, tone: 'purple' })

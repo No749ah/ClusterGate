@@ -8,6 +8,7 @@ import { logger } from '../lib/logger'
 import { isIpAllowed } from '../services/proxyService'
 import { timingSafeCompare, safeLookup } from '../lib/security'
 import { stripClusterGateCookies } from '../lib/cookies'
+import { isPathAllowed, routeSubPath } from '../lib/pathAllowlist'
 
 const proxy = createProxyServer({
   ws: true,
@@ -84,6 +85,12 @@ export async function handleWebSocketUpgrade(req: IncomingMessage, socket: Socke
         socket.destroy()
         return
       }
+    }
+
+    if (route.pathAllowlist?.length && !isPathAllowed(routeSubPath(route.publicPath, `/r${path}`), route.pathAllowlist)) {
+      logger.warn('WS upgrade blocked by path allowlist', { route: route.name, path })
+      socket.destroy()
+      return
     }
 
     if ((route as any).requireAuth && (route as any).authType !== 'NONE') {
