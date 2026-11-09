@@ -1,6 +1,6 @@
 {
   "name": "clustergate-backend",
-  "version": "1.12.9",
+  "version": "1.12.10",
   "description": "ClusterGate - Kubernetes Routing Gateway Backend",
   "main": "dist/app.js",
   "scripts": {
@@ -70,6 +70,6 @@
   },
   "overrides": {
     "esbuild": ">=0.28.1",
-    "qs": ">=6.15.4"
+    "qs": ">=6.16.2"
   }
 }
