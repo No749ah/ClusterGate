@@ -11,6 +11,7 @@ import { prisma } from '../lib/prisma'
 import { normalizePathPattern, validatePathPattern, PATH_ALLOWLIST_MAX_ENTRIES } from '../lib/pathAllowlist'
 import { AppError } from '../lib/errors'
 import { stripSensitiveRouteFields, safePageSize, isTlsProtocolMismatch, safeLookup, testPathAllowed } from '../lib/security'
+import { createCaptureResponse } from '../lib/captureResponse'
 import { requireRouteManage } from '../middleware/routeAccess'
 import axios, { AxiosError } from 'axios'
 import https from 'https'
@@ -1483,30 +1484,10 @@ router.post('/:id/test', authenticate, requireRouteManage('id'), async (req, res
     }
 
     const start = Date.now()
-    let responseStatus: number | undefined
-    let responseBody: string | undefined
-    let responseHeaders: Record<string, string> = {}
-
-    const mockRes = {
-      statusCode: 200,
-      setHeader: (key: string, value: string) => { responseHeaders[key] = value },
-      status: (code: number) => {
-        mockRes.statusCode = code
-        responseStatus = code
-        return mockRes
-      },
-      send: (data: Buffer | string) => {
-        responseBody = typeof data === 'string' ? data : data.toString('utf8').slice(0, 10000)
-        return mockRes
-      },
-      json: (data: unknown) => {
-        responseBody = JSON.stringify(data).slice(0, 10000)
-        return mockRes
-      },
-    } as any
+    const { res: captureRes, captured } = createCaptureResponse()
 
     try {
-      await proxyRequest(route, mockReq, mockRes, undefined, { source: RequestSource.TEST })
+      await proxyRequest(route, mockReq, captureRes as any, undefined, { source: RequestSource.TEST })
     } catch (proxyErr) {
       const duration = Date.now() - start
       return res.json({
@@ -1515,7 +1496,7 @@ router.post('/:id/test', authenticate, requireRouteManage('id'), async (req, res
           status: 503,
           duration,
           error: (proxyErr as Error).message,
-          headers: responseHeaders,
+          headers: captured.headers,
         },
       })
     }
@@ -1525,10 +1506,10 @@ router.post('/:id/test', authenticate, requireRouteManage('id'), async (req, res
     res.json({
       success: true,
       data: {
-        status: responseStatus || mockRes.statusCode,
+        status: captured.status || captureRes.statusCode,
         duration,
-        headers: responseHeaders,
-        body: responseBody,
+        headers: captured.headers,
+        body: captured.body,
       },
     })
   } catch (err) {
